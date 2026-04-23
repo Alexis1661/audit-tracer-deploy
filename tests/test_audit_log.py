@@ -3,7 +3,7 @@ import os
 import sqlite3
 from audit_tracer.db import get_connection
 from audit_tracer.models.audit_log import insert_event, get_events
-from audit_tracer.utils.hashing import verify_integrity, hash_event
+from audit_tracer.utils.hashing import hash_event
 
 @pytest.fixture
 def db_conn():
@@ -42,18 +42,6 @@ def test_get_events_filters(db_conn):
     assert len(get_events(db_conn, nivel_alerta='NORMAL')) == 1
     assert len(get_events(db_conn, usuario_id='u3')) == 0
 
-def test_verify_integrity(db_conn):
-    """verify_integrity() retorna lista vacía si no hay alteraciones y detecta alteraciones."""
-    insert_event(db_conn, {'usuario_id': 'u1', 'sesion_id': 's1', 'tipo_accion': 'CARGA', 'nivel_alerta': 'NORMAL'})
-    
-    # Should be empty
-    assert len(verify_integrity(db_conn)) == 0
-    
-    # Manual alteration
-    cursor = db_conn.cursor()
-    cursor.execute("UPDATE audit_log SET tipo_accion = 'ALTERADO' WHERE usuario_id = 'u1'")
-    db_conn.commit()
-    
-    # Should detect the alteration
-    altered = verify_integrity(db_conn)
-    assert len(altered) == 1
+# TODO: HU-3.3 — Juan Pablo Ordoñez
+# Implementar: verify_integrity(conn) -> list
+# Ver criterios de aceptación en Jira: PDGTRAZDSA

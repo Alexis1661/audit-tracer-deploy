@@ -47,30 +47,6 @@ def hash_event(event_data: dict) -> str:
     encoded_data = json.dumps(data_to_hash, sort_keys=True).encode('utf-8')
     return hashlib.sha256(encoded_data).hexdigest()
 
-def verify_integrity(conn: sqlite3.Connection) -> List[int]:
-    """
-    Recalculates hashes for all events in the audit_log table and
-    returns a list of event_ids that have been altered.
-
-    Args:
-        conn (sqlite3.Connection): Database connection.
-
-    Returns:
-        List[int]: List of altered event IDs.
-    """
-    altered_ids = []
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM audit_log")
-    rows = cursor.fetchall()
-    
-    for row in rows:
-        event_dict = dict(row)
-        stored_hash = event_dict.get('hash_integridad')
-        # Recalculate hash excluding hash_integridad and event_id
-        calculated_hash = hash_event(event_dict)
-        
-        if stored_hash != calculated_hash:
-            altered_ids.append(event_dict['event_id'])
-            
-    return altered_ids
+# TODO: HU-3.3 — Juan Pablo Ordoñez
+# Implementar: verify_integrity(conn) -> list
+# Ver criterios de aceptación en Jira: PDGTRAZDSA

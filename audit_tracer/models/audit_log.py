@@ -99,3 +99,7 @@ def get_events(
     rows = cursor.fetchall()
     
     return [dict(row) for row in rows]
+
+# TODO: HU-3.3 — Juan Pablo Ordoñez
+# Implementar: verify_integrity(conn) -> list
+# Ver criterios de aceptación en Jira: PDGTRAZDSA
