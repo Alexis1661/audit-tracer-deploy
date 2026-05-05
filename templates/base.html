@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{% block meta_description %}Sistema de Auditoría de Trazabilidad de Datos Clínicos — HIPAA · Ley 1581 · ISO/IEC 27001{% endblock %}">
+    <title>{% block title %}Audit Tracer{% endblock %} — Sistema de Auditoría</title>
+
+    {# ── Estilos globales ─────────────────────────────────── #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    {% block extra_css %}{% endblock %}
+
+    {# Favicon inline SVG #}
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%231F3864'/><path d='M50 20a16 16 0 0 1 16 16v4h4a4 4 0 0 1 4 4v28a4 4 0 0 1-4 4H30a4 4 0 0 1-4-4V44a4 4 0 0 1 4-4h4v-4a16 16 0 0 1 16-16zm0 40a6 6 0 1 0 0-12 6 6 0 0 0 0 12zm8-28v-4a8 8 0 1 0-16 0v4h16z' fill='%231A8C8C'/></svg>">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+
+    {% block body %}{% endblock %}
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
