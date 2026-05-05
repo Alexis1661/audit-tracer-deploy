@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Inicio{% endblock %}
+{% block meta_description %}Audit Tracer — Registro automatizado de operaciones sobre datos clínicos sensibles. Cumplimiento HIPAA, Ley 1581 e ISO/IEC 27001.{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+{% endblock %}
+
+{% block body %}
+
+{# ══════════════════════════════════════════════════════════════
+   NAVBAR
+══════════════════════════════════════════════════════════════ #}
+<nav class="landing-nav" role="navigation" aria-label="Navegación principal">
+    <a href="{{ url_for('landing') }}" class="landing-nav__brand" aria-label="Audit Tracer — Inicio">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+             fill="none" stroke="#1A8C8C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            <line x1="12" y1="15" x2="12" y2="17"></line>
+        </svg>
+        Audit Tracer
+    </a>
+    <div class="landing-nav__actions">
+        <a href="#features" class="landing-nav__link">Características</a>
+        <a href="{{ url_for('registro') }}" class="landing-nav__link">Registrarse</a>
+        <a href="{{ url_for('login') }}" class="btn btn-primary" id="nav-login-btn">Iniciar Sesión</a>
+    </div>
+</nav>
+
+{# ══════════════════════════════════════════════════════════════
+   HERO
+══════════════════════════════════════════════════════════════ #}
+<main>
+<section class="hero" aria-labelledby="hero-title">
+    <div class="hero__content">
+        <div class="hero__badge" aria-label="Sistema certificado">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Sistema Certificado de Auditoría
+        </div>
+
+        <h1 class="hero__title" id="hero-title">
+            Sistema de Auditoría de<br>
+            <span>Trazabilidad</span>
+        </h1>
+
+        <p class="hero__subtitle">
+            Registro automatizado de operaciones sobre datos clínicos sensibles
+            en entornos de ciencia de datos.
+        </p>
+
+        <div class="hero__compliance" aria-label="Normativas que cumple el sistema">
+            <span>HIPAA §164.312(b)</span>
+            <span class="hero__compliance-dot"></span>
+            <span>Ley 1581 de 2012</span>
+            <span class="hero__compliance-dot"></span>
+            <span>ISO/IEC 27001:2022</span>
+        </div>
+
+        <div class="hero__actions">
+            <a href="{{ url_for('login') }}" class="btn btn-primary" id="hero-login-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                    <polyline points="10 17 15 12 10 7"></polyline>
+                    <line x1="15" y1="12" x2="3" y2="12"></line>
+                </svg>
+                Iniciar Sesión
+            </a>
+            <a href="#features" class="btn btn-secondary" id="hero-features-btn">
+                Conocer más
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </a>
+        </div>
+    </div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════
+   FEATURES
+══════════════════════════════════════════════════════════════ #}
+<section class="features" id="features" aria-labelledby="features-title">
+    <div class="features__container">
+        <div class="section-header">
+            <span class="section-label">Capacidades del sistema</span>
+            <h2 class="section-title" id="features-title">Trazabilidad completa en cada operación</h2>
+            <p class="section-desc">
+                Cada acción sobre datos clínicos queda registrada, firmada con hash SHA-256
+                y disponible para auditoría en tiempo real.
+            </p>
+        </div>
+
+        <div class="features__grid" role="list">
+
+            {# Tarjeta 1 #}
+            <article class="feature-card" role="listitem" id="feature-trazabilidad">
+                <div class="feature-card__icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
+                </div>
+                <h3 class="feature-card__title">Trazabilidad completa</h3>
+                <p class="feature-card__desc">
+                    Registra quién accedió, qué transformó y qué exportó. Captura
+                    carga de datos, consultas, transformaciones y exportaciones
+                    desde notebooks y scripts Python.
+                </p>
+            </article>
+
+            {# Tarjeta 2 #}
+            <article class="feature-card" role="listitem" id="feature-integridad">
+                <div class="feature-card__icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                </div>
+                <h3 class="feature-card__title">Integridad garantizada</h3>
+                <p class="feature-card__desc">
+                    Hash SHA-256 en cada evento de auditoría. Cualquier alteración
+                    posterior al registro es detectable y reportable
+                    cumpliendo HIPAA §164.312(c)(1).
+                </p>
+            </article>
+
+            {# Tarjeta 3 #}
+            <article class="feature-card" role="listitem" id="feature-cumplimiento">
+                <div class="feature-card__icon" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                </div>
+                <h3 class="feature-card__title">Cumplimiento normativo</h3>
+                <p class="feature-card__desc">
+                    Diseñado para cumplir con HIPAA §164.312(b), Ley 1581 de 2012
+                    (Colombia) e ISO/IEC 27001:2022 en entornos hospitalarios
+                    y de investigación clínica.
+                </p>
+            </article>
+
+        </div>
+    </div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════
+   CTA BANNER
+══════════════════════════════════════════════════════════════ #}
+<section class="cta-banner" aria-label="Llamado a la acción">
+    <div class="cta-banner__container">
+        <h2 class="cta-banner__title">¿Listo para comenzar?</h2>
+        <p class="cta-banner__desc">
+            Accede al sistema con tus credenciales o solicita una cuenta
+            a tu administrador.
+        </p>
+        <div class="hero__actions">
+            <a href="{{ url_for('login') }}" class="btn btn-primary" id="cta-login-btn">
+                Iniciar Sesión
+            </a>
+            <a href="{{ url_for('registro') }}" class="btn btn-secondary" id="cta-registro-btn">
+                Crear Cuenta
+            </a>
+        </div>
+    </div>
+</section>
+</main>
+
+{# ══════════════════════════════════════════════════════════════
+   FOOTER
+══════════════════════════════════════════════════════════════ #}
+<footer class="landing-footer" role="contentinfo">
+    <div class="landing-footer__content">
+        <p class="landing-footer__brand">Sistema de Auditoría de Trazabilidad</p>
+        <p class="landing-footer__copy">Universidad ICESI · 2026 · Todos los derechos reservados</p>
+        <div class="landing-footer__compliance" aria-label="Normativas de cumplimiento">
+            <span>HIPAA §164.312</span>
+            <span>Ley 1581 / 2012</span>
+            <span>ISO/IEC 27001</span>
+        </div>
+    </div>
+</footer>
+
+{% endblock %}

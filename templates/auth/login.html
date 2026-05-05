@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Acceso al Sistema{% endblock %}
+{% block meta_description %}Inicia sesión en el Sistema de Auditoría de Trazabilidad de Datos Clínicos.{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
+{% endblock %}
+
+{% block body %}
+<div class="auth-page">
+
+    {# ══════════════════════════════════════════════════════════
+       PANEL IZQUIERDO — Decorativo / Institucional
+    ══════════════════════════════════════════════════════════ #}
+    <aside class="auth-panel" aria-hidden="true">
+        <a href="{{ url_for('landing') }}" class="auth-panel__brand">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
+                 fill="none" stroke="#1A8C8C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                <line x1="12" y1="15" x2="12" y2="17"></line>
+            </svg>
+            Audit Tracer
+        </a>
+
+        <div class="auth-panel__content">
+            <h2 class="auth-panel__title">Acceso seguro a<br>datos clínicos</h2>
+            <p class="auth-panel__desc">
+                Cada sesión queda registrada en el log de auditoría
+                con marca de tiempo, ID de sesión y hash de integridad SHA-256.
+            </p>
+
+            <div class="auth-panel__badges">
+                <div class="norm-badge">
+                    <div class="norm-badge__icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </div>
+                    <div class="norm-badge__text">
+                        <strong>HIPAA §164.312(b)</strong>
+                        Control de acceso y auditoría de actividad
+                    </div>
+                </div>
+                <div class="norm-badge">
+                    <div class="norm-badge__icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </div>
+                    <div class="norm-badge__text">
+                        <strong>Ley 1581 de 2012</strong>
+                        Protección de datos personales sensibles
+                    </div>
+                </div>
+                <div class="norm-badge">
+                    <div class="norm-badge__icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </div>
+                    <div class="norm-badge__text">
+                        <strong>ISO/IEC 27001:2022</strong>
+                        Sistema de gestión de seguridad de la información
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p class="auth-panel__footer">Universidad ICESI · 2026</p>
+    </aside>
+
+    {# ══════════════════════════════════════════════════════════
+       PANEL DERECHO — Formulario de Login
+    ══════════════════════════════════════════════════════════ #}
+    <div class="auth-form-container">
+        <div class="auth-form-box">
+
+            {# Ícono candado #}
+            <div class="auth-form-box__icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    <line x1="12" y1="15" x2="12" y2="17"></line>
+                </svg>
+            </div>
+
+            <h1 class="auth-form-box__title">Acceso al Sistema</h1>
+            <p class="auth-form-box__subtitle">Ingresa tus credenciales para continuar.</p>
+
+            {# ── Alertas del servidor ─────────────────────────── #}
+            <div class="server-alert-area" role="alert" aria-live="polite">
+                {% if error %}
+                <div class="alert alert-error" id="server-error">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                         fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    {{ error }}
+                </div>
+                {% endif %}
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ 'success' if category == 'success' else 'info' if category == 'info' else 'warning' }}" id="flash-{{ loop.index }}">
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                {% endwith %}
+            </div>
+
+            {# ── Formulario ───────────────────────────────────── #}
+            <form id="login-form" class="auth-form" method="POST" action="{{ url_for('login_post') }}" novalidate>
+
+                {# Email #}
+                <div class="form-group">
+                    <label class="form-label" for="email">
+                        Correo electrónico <span class="required" aria-label="campo requerido">*</span>
+                    </label>
+                    <input
+                        id="email"
+                        name="email"
+                        type="email"
+                        class="form-input"
+                        placeholder="usuario@ejemplo.com"
+                        autocomplete="email"
+                        required
+                        aria-describedby="email-error"
+                        value="{{ request.form.get('email', '') }}"
+                    >
+                    <span id="email-error" class="field-error" role="alert"></span>
+                </div>
+
+                {# Contraseña #}
+                <div class="form-group">
+                    <label class="form-label" for="password">
+                        Contraseña <span class="required" aria-label="campo requerido">*</span>
+                    </label>
+                    <div class="input-password-wrapper">
+                        <input
+                            id="password"
+                            name="password"
+                            type="password"
+                            class="form-input"
+                            placeholder="Tu contraseña"
+                            autocomplete="current-password"
+                            required
+                            aria-describedby="password-error"
+                        >
+                        <button
+                            type="button"
+                            id="toggle-password"
+                            class="btn-toggle-password"
+                            aria-label="Mostrar u ocultar contraseña"
+                            title="Mostrar / ocultar contraseña"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                 aria-hidden="true">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </button>
+                    </div>
+                    <span id="password-error" class="field-error" role="alert"></span>
+                </div>
+
+                {# Botón submit #}
+                <button
+                    type="submit"
+                    id="submit-btn"
+                    class="btn btn-primary btn-full"
+                >
+                    Ingresar
+                </button>
+            </form>
+
+            {# Link a registro #}
+            <p class="auth-form-footer">
+                ¿No tienes cuenta?
+                <a href="{{ url_for('registro') }}" id="link-registro">Regístrate aquí</a>
+            </p>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/login.js') }}"></script>
+{% endblock %}
