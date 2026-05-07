@@ -6,17 +6,34 @@
     <meta name="description" content="{% block meta_description %}Sistema de Auditoría de Trazabilidad de Datos Clínicos — HIPAA · Ley 1581 · ISO/IEC 27001{% endblock %}">
     <title>{% block title %}Audit Tracer{% endblock %} — Sistema de Auditoría</title>
 
+    {# ── Tipografía Moderna ─────────────────────────────────── #}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+
     {# ── Estilos globales ─────────────────────────────────── #}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
     {% block extra_css %}{% endblock %}
 
     {# Favicon inline SVG #}
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%231F3864'/><path d='M50 20a16 16 0 0 1 16 16v4h4a4 4 0 0 1 4 4v28a4 4 0 0 1-4 4H30a4 4 0 0 1-4-4V44a4 4 0 0 1 4-4h4v-4a16 16 0 0 1 16-16zm0 40a6 6 0 1 0 0-12 6 6 0 0 0 0 12zm8-28v-4a8 8 0 1 0-16 0v4h16z' fill='%231A8C8C'/></svg>">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%230F172A'/><path d='M50 20a16 16 0 0 1 16 16v4h4a4 4 0 0 1 4 4v28a4 4 0 0 1-4 4H30a4 4 0 0 1-4-4V44a4 4 0 0 1 4-4h4v-4a16 16 0 0 1 16-16zm0 40a6 6 0 1 0 0-12 6 6 0 0 0 0 12zm8-28v-4a8 8 0 1 0-16 0v4h16z' fill='%230EA5E9'/></svg>">
+    
+    {# ── Librerías de Animación ────────────────────────────── #}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
 
-    {% block body %}{% endblock %}
+    <div id="app-wrapper">
+        {% block body %}{% endblock %}
+    </div>
 
+    {# ── Scripts Globales ─────────────────────────────────── #}
+    <script src="{{ url_for('static', filename='js/CardNav.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/DecryptedText.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ScrollReveal.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/animations.js') }}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>
