@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Usuario{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+    .edit-form-container {
+        background-color: var(--color-white);
+        border: 1px solid var(--color-gray-border);
+        border-radius: var(--border-radius-lg);
+        padding: 40px;
+        max-width: 500px;
+        margin: 0 auto;
+    }
+    .user-summary {
+        background-color: #F8FAFC;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 24px;
+        border-left: 4px solid var(--color-navy);
+    }
+    .user-summary p { margin: 4px 0; font-size: 14px; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-layout">
+    {# SIDEBAR (Simplificado) #}
+    <nav class="sidebar">
+        <div class="sidebar__header"><div class="sidebar__brand"><div class="sidebar__brand-text">Audit Tracer</div></div></div>
+        <div class="sidebar__nav">
+            <a href="{{ url_for('dashboard') }}" class="sidebar__nav-item">Dashboard</a>
+            <a href="{{ url_for('lista_usuarios') }}" class="sidebar__nav-item active">Usuarios</a>
+        </div>
+    </nav>
+
+    <div class="dashboard-main">
+        <header class="dashboard-topbar">
+            <div>
+                <h2 class="topbar__title">Modificar Rol</h2>
+                <p class="topbar__breadcrumb">Usuarios › Editar › {{ usuario.email }}</p>
+            </div>
+        </header>
+
+        <main class="dashboard-content">
+            <div class="edit-form-container">
+                <div class="user-summary">
+                    <p><strong>Email:</strong> {{ usuario.email }}</p>
+                    <p><strong>Rol Actual:</strong> {{ usuario.rol }}</p>
+                    <p><strong>ID:</strong> <small style="font-family: monospace;">{{ usuario.usuario_id }}</small></p>
+                </div>
+
+                {# Alertas #}
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ 'error' if category == 'error' else 'success' }}" style="margin-bottom: 20px;">
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                {% endwith %}
+
+                <form method="POST">
+                    <div class="form-group">
+                        <label class="form-label" for="rol">Nuevo Rol Asignado</label>
+                        <select id="rol" name="rol" class="form-select" required>
+                            <option value="ANALISTA" {% if usuario.rol == 'ANALISTA' %}selected{% endif %}>Analista</option>
+                            <option value="AUDITOR" {% if usuario.rol == 'AUDITOR' %}selected{% endif %}>Auditor</option>
+                            <option value="CIENTIFICO_DATOS" {% if usuario.rol == 'CIENTIFICO_DATOS' %}selected{% endif %}>Científico de Datos</option>
+                            <option value="ADMIN" {% if usuario.rol == 'ADMIN' %}selected{% endif %}>Administrador</option>
+                        </select>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; margin-top: 24px;">
+                        <button type="submit" class="btn btn-primary" style="flex: 1;">Guardar Cambios</button>
+                        <a href="{{ url_for('lista_usuarios') }}" class="btn btn-outline-navy" style="flex: 1; text-align: center;">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}
