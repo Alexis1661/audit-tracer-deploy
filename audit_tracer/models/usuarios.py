@@ -97,3 +97,31 @@ def block_user(conn: sqlite3.Connection, usuario_id: str):
     cursor = conn.cursor()
     cursor.execute("UPDATE usuarios SET activo = 0 WHERE usuario_id = ?", (usuario_id,))
     conn.commit()
+
+def get_all_users(conn: sqlite3.Connection) -> list:
+    """Retrieves all users from the database."""
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT usuario_id, email, rol, activo FROM usuarios")
+    rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+def get_user_by_id(conn: sqlite3.Connection, usuario_id: str) -> Optional[Dict]:
+    """Retrieves a user by ID."""
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM usuarios WHERE usuario_id = ?", (usuario_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+def update_user_role(conn: sqlite3.Connection, usuario_id: str, new_role: str):
+    """Updates the role of a user."""
+    cursor = conn.cursor()
+    cursor.execute("UPDATE usuarios SET rol = ? WHERE usuario_id = ?", (new_role, usuario_id))
+    conn.commit()
+
+def count_active_admins(conn: sqlite3.Connection) -> int:
+    """Counts the number of active administrators."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM usuarios WHERE rol = 'ADMIN' AND activo = 1")
+    return cursor.fetchone()[0]

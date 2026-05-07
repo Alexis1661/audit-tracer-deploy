@@ -100,6 +100,43 @@ def get_events(
     
     return [dict(row) for row in rows]
 
-# TODO: HU-3.3 — Juan Pablo Ordoñez
-# Implementar: verify_integrity(conn) -> list
-# Ver criterios de aceptación en Jira: PDGTRAZDSA
+def verify_integrity(conn: sqlite3.Connection) -> List[Dict]:
+    """
+    Verifies the integrity of all records in the audit_log table.
+    Recalculates the hash for each record and compares it with the stored hash.
+
+    Returns:
+        List[Dict]: A list of records that failed the integrity check.
+    """
+    query = "SELECT * FROM audit_log ORDER BY timestamp ASC"
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    
+    corrupted_records = []
+    
+    columns_to_hash = [
+        'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion', 
+        'dataset_nombre', 'columnas_afectadas', 'ruta_destino', 
+        'contexto_ejecucion', 'motivo_fallo', 'nivel_alerta', 
+        'motivo_alerta'
+    ]
+    
+    for row in rows:
+        stored_hash = row['hash_integridad']
+        # Create dictionary for hashing (same logic as insert_event)
+        event_data = {col: row[col] for col in columns_to_hash}
+        
+        calculated_hash = hash_event(event_data)
+        
+        if calculated_hash != stored_hash:
+            corrupted_records.append({
+                'event_id': row['event_id'],
+                'timestamp': row['timestamp'],
+                'tipo_accion': row['tipo_accion'],
+                'stored_hash': stored_hash,
+                'calculated_hash': calculated_hash
+            })
+            
+    return corrupted_records

@@ -53,14 +53,13 @@
 
             <p class="sidebar__nav-label">Auditoría</p>
 
-            <a href="#" class="sidebar__nav-item" id="nav-eventos" aria-label="Módulo de eventos — próximamente">
+            <a href="{{ url_for('eventos') }}" class="sidebar__nav-item" id="nav-eventos" aria-label="Módulo de eventos">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
                      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                      aria-hidden="true">
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                 </svg>
                 Eventos
-                <span class="nav-badge-soon">Sprint 2</span>
             </a>
 
             <a href="#" class="sidebar__nav-item" id="nav-reportes" aria-label="Módulo de reportes — próximamente">
@@ -78,7 +77,8 @@
 
             <p class="sidebar__nav-label">Administración</p>
 
-            <a href="#" class="sidebar__nav-item" id="nav-usuarios" aria-label="Módulo de usuarios — próximamente">
+            {% if session.rol == 'ADMIN' %}
+            <a href="{{ url_for('lista_usuarios') }}" class="sidebar__nav-item" id="nav-usuarios" aria-label="Gestión de usuarios">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
                      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                      aria-hidden="true">
@@ -88,8 +88,8 @@
                     <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                 </svg>
                 Usuarios
-                <span class="nav-badge-soon">Sprint 2</span>
             </a>
+            {% endif %}
         </div>
 
         {# Footer del sidebar — usuario y logout #}
@@ -182,10 +182,10 @@
                                 </svg>
                             </div>
                         </div>
-                        <div class="metric-card__value metric-card__value--placeholder" aria-label="Dato no disponible">
-                            --
+                        <div class="metric-card__value" aria-label="Total de eventos registrados">
+                            {{ total_eventos }}
                         </div>
-                        <div class="metric-card__footer">Disponible en Sprint 2</div>
+                        <div class="metric-card__footer">Desde el inicio del sistema</div>
                     </article>
 
                     <article class="metric-card" id="metric-eventos-hoy">
@@ -201,15 +201,15 @@
                                 </svg>
                             </div>
                         </div>
-                        <div class="metric-card__value metric-card__value--placeholder" aria-label="Dato no disponible">
-                            --
+                        <div class="metric-card__value" aria-label="Eventos registrados hoy">
+                            {{ eventos_hoy }}
                         </div>
-                        <div class="metric-card__footer">Disponible en Sprint 2</div>
+                        <div class="metric-card__footer">Fecha UTC: {{ now_date }}</div>
                     </article>
 
                     <article class="metric-card" id="metric-usuarios-activos">
                         <div class="metric-card__header">
-                            <span class="metric-card__label">Usuarios activos</span>
+                            <span class="metric-card__label">Usuarios con actividad</span>
                             <div class="metric-card__icon metric-card__icon--green" aria-hidden="true">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
                                      fill="none" stroke="currentColor" stroke-width="2">
@@ -220,10 +220,10 @@
                                 </svg>
                             </div>
                         </div>
-                        <div class="metric-card__value metric-card__value--placeholder" aria-label="Dato no disponible">
-                            --
+                        <div class="metric-card__value" aria-label="Usuarios con actividad registrada">
+                            {{ usuarios_activos }}
                         </div>
-                        <div class="metric-card__footer">Disponible en Sprint 2</div>
+                        <div class="metric-card__footer">Usuarios identificados en logs</div>
                     </article>
 
                     <article class="metric-card" id="metric-alertas-criticas">
@@ -238,10 +238,10 @@
                                 </svg>
                             </div>
                         </div>
-                        <div class="metric-card__value metric-card__value--placeholder" aria-label="Dato no disponible">
-                            --
+                        <div class="metric-card__value" aria-label="Total de alertas críticas">
+                            {{ alertas_criticas }}
                         </div>
-                        <div class="metric-card__footer">Disponible en Sprint 2</div>
+                        <div class="metric-card__footer">Requieren atención inmediata</div>
                     </article>
 
                 </div>

@@ -3,6 +3,7 @@ from typing import Dict
 from ..models.usuarios import get_user_by_email, increment_failed_attempts, reset_failed_attempts, block_user
 from ..models.audit_log import insert_event
 from ..utils.hashing import verify_password
+from ..utils.session import get_hostname, detect_environment
 from datetime import datetime
 
 def login(conn: sqlite3.Connection, email: str, password: str, sesion_id: str) -> Dict:
@@ -51,6 +52,7 @@ def login(conn: sqlite3.Connection, email: str, password: str, sesion_id: str) -
             'sesion_id': sesion_id,
             'timestamp': datetime.utcnow().isoformat(),
             'tipo_accion': 'INICIO_SESION',
+            'contexto_ejecucion': f"Env: {detect_environment()} | Host: {get_hostname()}",
             'nivel_alerta': 'NORMAL'
         })
         
@@ -90,3 +92,28 @@ def login(conn: sqlite3.Connection, email: str, password: str, sesion_id: str) -
         })
         
         return {'success': False, 'message': message}
+
+def logout(conn: sqlite3.Connection, usuario_id: str, sesion_id: str, start_time_iso: str = None):
+    """
+    Logs the logout event and calculates session duration.
+    """
+    now = datetime.utcnow()
+    duration_secs = 0
+    
+    if start_time_iso:
+        try:
+            start_time = datetime.fromisoformat(start_time_iso)
+            duration_secs = int((now - start_time).total_seconds())
+        except:
+            pass
+
+    insert_event(conn, {
+        'usuario_id': usuario_id,
+        'sesion_id': sesion_id,
+        'timestamp': now.isoformat(),
+        'tipo_accion': 'CIERRE_SESION',
+        'contexto_ejecucion': f"Duración: {duration_secs}s",
+        'nivel_alerta': 'NORMAL'
+    })
+    
+    return True
