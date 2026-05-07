@@ -13,7 +13,8 @@ from audit_tracer.auth.registro import register_user
 from audit_tracer.auth.gestion_roles import assign_role
 from audit_tracer.models.usuarios import get_all_users, get_user_by_id
 from audit_tracer.utils.session import generate_session_id
-from audit_tracer.models.audit_log import get_events, verify_integrity
+from audit_tracer.models.audit_log import get_events, verify_integrity, insert_event
+from audit_tracer.auth.control_acceso import has_permission  # HU-1.4
 from datetime import datetime, timedelta
 
 # ── Configuración Flask ──────────────────────────────────────────────────────
@@ -50,6 +51,55 @@ def admin_required(f):
             return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     return decorated
+
+
+def modulo_required(modulo: str):
+    """
+    HU-1.4 — Decorador Flask que valida permisos por módulo en tiempo de
+    ejecución usando la PERMISSION_MATRIX.
+    Si el rol de la sesión no tiene acceso:
+      - Registra ACCESO_DENEGADO en audit_log.
+      - Muestra la página de acceso denegado (403).
+    """
+    from functools import wraps
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            rol        = session.get('rol', '')
+            usuario_id = session.get('usuario_id', 'DESCONOCIDO')
+            sesion_id  = session.get('sesion_id', 'N/A')
+
+            if not has_permission(rol, modulo):
+                # Registrar el rechazo en audit_log
+                try:
+                    conn = get_db()
+                    insert_event(conn, {
+                        'usuario_id': usuario_id,
+                        'sesion_id': sesion_id,
+                        'timestamp': datetime.utcnow().isoformat(),
+                        'tipo_accion': 'ACCESO_DENEGADO',
+                        'contexto_ejecucion': (
+                            f"Rol: {rol} | Módulo: {modulo} | Ruta: {f.__name__}"
+                        ),
+                        'motivo_fallo': (
+                            f"Acceso denegado: rol '{rol}' no tiene permiso sobre '{modulo}'"
+                        ),
+                        'nivel_alerta': 'ADVERTENCIA',
+                    })
+                    conn.close()
+                except Exception:
+                    pass  # No bloquear la respuesta si falla el log
+
+                return render_template(
+                    'acceso_denegado.html',
+                    modulo=modulo,
+                    rol=rol,
+                    nombre=session.get('nombre', 'Usuario'),
+                ), 403
+
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -148,15 +198,15 @@ def nuevo_usuario_post():
 
 @app.route('/admin/usuarios')
 @login_required
-@admin_required
+@modulo_required('gestion_usuarios')  # HU-1.4
 def lista_usuarios():
     """Lista todos los usuarios del sistema."""
     conn = get_db()
     usuarios = get_all_users(conn)
     conn.close()
-    return render_template('admin/usuarios.html', 
+    return render_template('admin/usuarios.html',
                            usuarios=usuarios,
-                           nombre=session.get('nombre'), 
+                           nombre=session.get('nombre'),
                            rol=session.get('rol'))
 
 
@@ -238,6 +288,7 @@ def dashboard():
 
 @app.route('/eventos')
 @login_required
+@modulo_required('consulta_reportes')  # HU-1.4
 def eventos():
     """Vista de consulta de registros de auditoría con paginación."""
     usuario_id = request.args.get('usuario_id')
