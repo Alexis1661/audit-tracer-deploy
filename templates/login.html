@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Iniciar Sesión — Audit Tracer{% endblock %}
+{% block title %}Sign in — Audit Tracer{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
@@ -73,13 +73,6 @@
                 <h2 class="auth-form__title">Bienvenido</h2>
                 <p class="auth-form__subtitle">Ingresa a tu cuenta para continuar</p>
 
-                {% if error %}
-                <div style="background: #FEF2F2; color: #DC2626; padding: 12px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; margin-bottom: 24px; border: 1px solid #FCA5A5; display: flex; align-items: center; gap: 8px;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                    {{ error }}
-                </div>
-                {% endif %}
-
                 <form method="POST" action="{{ url_for('login') }}">
                     <div class="form-group">
                         <label>Correo electrónico</label>
@@ -119,8 +112,4 @@
 
     </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script src="{{ url_for('static', filename='js/login.js') }}"></script>
 {% endblock %}

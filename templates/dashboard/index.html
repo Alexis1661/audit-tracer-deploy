@@ -172,7 +172,7 @@
                 <p id="metrics-label" class="sr-only">Métricas del sistema</p>
                 <div class="metrics-grid">
 
-                    <article class="metric-card" id="metric-total-eventos">
+                    <article class="metric-card stagger-item" id="metric-total-eventos">
                         <div class="metric-card__header">
                             <span class="metric-card__label">Total de eventos</span>
                             <div class="metric-card__icon metric-card__icon--blue" aria-hidden="true">
@@ -188,7 +188,7 @@
                         <div class="metric-card__footer">Desde el inicio del sistema</div>
                     </article>
 
-                    <article class="metric-card" id="metric-eventos-hoy">
+                    <article class="metric-card stagger-item" id="metric-eventos-hoy">
                         <div class="metric-card__header">
                             <span class="metric-card__label">Eventos hoy</span>
                             <div class="metric-card__icon metric-card__icon--teal" aria-hidden="true">
@@ -207,7 +207,7 @@
                         <div class="metric-card__footer">Fecha UTC: {{ now_date }}</div>
                     </article>
 
-                    <article class="metric-card" id="metric-usuarios-activos">
+                    <article class="metric-card stagger-item" id="metric-usuarios-activos">
                         <div class="metric-card__header">
                             <span class="metric-card__label">Usuarios con actividad</span>
                             <div class="metric-card__icon metric-card__icon--green" aria-hidden="true">
@@ -226,7 +226,7 @@
                         <div class="metric-card__footer">Usuarios identificados en logs</div>
                     </article>
 
-                    <article class="metric-card" id="metric-alertas-criticas">
+                    <article class="metric-card stagger-item" id="metric-alertas-criticas">
                         <div class="metric-card__header">
                             <span class="metric-card__label">Alertas críticas</span>
                             <div class="metric-card__icon metric-card__icon--red" aria-hidden="true">
@@ -249,7 +249,7 @@
 
             {# Área de módulos futuros #}
             <section aria-label="Módulos en desarrollo">
-                <div class="modules-placeholder" id="modules-sprint2">
+                <div class="modules-placeholder stagger-item" id="modules-sprint2">
                     <div class="modules-placeholder__icon" aria-hidden="true">
                         <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
                              fill="none" stroke="currentColor" stroke-width="1.5">
