@@ -12,69 +12,69 @@
         
         {# ── PANEL IZQUIERDO (Visual & Características) ── #}
         <div class="auth-side-panel">
-            <div class="auth-side__header">
-                <div style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px;">
-                    <div style="width: 32px; height: 32px; background: var(--clr-primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            <div class="auth-side-top">
+                <div class="auth-side__header">
+                    <a href="{{ url_for('landing') }}" style="display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; text-decoration: none; color: var(--clr-primary);">
+                        <div style="width: 32px; height: 32px; background: var(--clr-primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                        </div>
+                        Audit Tracer
+                    </a>
+                </div>
+
+                <div class="status-badge">Seguro. Trazable. Confiable.</div>
+                
+                <h1 class="auth-side__headline">
+                    Potenciando la salud<br>
+                    con <span class="blue">datos seguros</span><br>
+                    y <span class="blue">trazabilidad total.</span>
+                </h1>
+                
+                <p class="auth-side__desc">
+                    Audit Tracer ayuda a las organizaciones de salud a gestionar datos sensibles con seguridad de nivel empresarial y cumplimiento normativo integrado.
+                </p>
+
+                <div class="feature-list">
+                    <div class="feature-item">
+                        <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
+                        <div class="feature-text">
+                            <h4>Seguridad Extremo a Extremo</h4>
+                            <p>Cifrado avanzado y control de acceso para proteger datos sensibles.</p>
+                        </div>
                     </div>
-                    Audit Tracer
+                    <div class="feature-item">
+                        <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></div>
+                        <div class="feature-text">
+                            <h4>Trazabilidad Completa</h4>
+                            <p>Rastrea cada movimiento y acción sobre los datos en tiempo real.</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></div>
+                        <div class="feature-text">
+                            <h4>Cumplimiento Garantizado</h4>
+                            <p>Diseñado para cumplir con estándares globales de salud (HIPAA, GDPR).</p>
+                        </div>
+                    </div>
                 </div>
             </div>
-
-            <div class="status-badge">Seguro. Trazable. Confiable.</div>
-            
-            <h1 class="auth-side__headline">
-                Potenciando la salud<br>
-                con <span class="blue">datos seguros</span><br>
-                y <span class="blue">trazabilidad total.</span>
-            </h1>
-            
-            <p class="auth-side__desc">
-                Audit Tracer ayuda a las organizaciones de salud a gestionar datos sensibles con seguridad de nivel empresarial y cumplimiento normativo integrado.
-            </p>
-
-            <div class="feature-list">
-                <div class="feature-item">
-                    <div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
-                    <div class="feature-text">
-                        <h4>Seguridad Extremo a Extremo</h4>
-                        <p>Cifrado avanzado y control de acceso para proteger datos sensibles.</p>
-                    </div>
-                </div>
-                <div class="feature-item">
-                    <div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></div>
-                    <div class="feature-text">
-                        <h4>Trazabilidad Completa</h4>
-                        <p>Rastrea cada movimiento y acción sobre los datos en tiempo real.</p>
-                    </div>
-                </div>
-                <div class="feature-item">
-                    <div class="feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></div>
-                    <div class="feature-text">
-                        <h4>Cumplimiento Garantizado</h4>
-                        <p>Diseñado para cumplir con estándares globales de salud (HIPAA, GDPR).</p>
-                    </div>
-                </div>
-            </div>
-
-            <img src="{{ url_for('static', filename='auth_illustration.png') }}" alt="Ilustración Técnica" class="auth-illustration">
         </div>
 
         {# ── PANEL DERECHO (Formulario) ── #}
         <div class="auth-form-panel">
-            <div class="auth-form-panel__top">
+            <div style="position: absolute; top: 40px; right: 40px;">
                 <select style="border: 1px solid var(--clr-border); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;">
                     <option>Español</option>
                     <option>English</option>
                 </select>
             </div>
 
-            <div style="max-width: 400px; width: 100%; margin: 0 auto;">
+            <div class="auth-form-wrapper">
                 <h2 class="auth-form__title">Bienvenido</h2>
                 <p class="auth-form__subtitle">Ingresa a tu cuenta para continuar</p>
 
                 {% if error %}
-                <div style="background: #FEF2F2; color: #DC2626; padding: 12px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; margin-bottom: 24px; border: 1px solid #FCA5A5; display: flex; align-items: center; gap: 8px;">
+                <div class="alert alert-error">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                     {{ error }}
                 </div>
@@ -116,6 +116,7 @@
                 </div>
             </div>
         </div>
+
 
     </div>
 </div>

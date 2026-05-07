@@ -239,25 +239,43 @@ def dashboard():
 @app.route('/eventos')
 @login_required
 def eventos():
-    """Vista de consulta de registros de auditoría."""
+    """Vista de consulta de registros de auditoría con paginación."""
     usuario_id = request.args.get('usuario_id')
     tipo_accion = request.args.get('tipo_accion')
     nivel_alerta = request.args.get('nivel_alerta')
     
+    # Paginación
+    page = request.args.get('page', 1, type=int)
+    per_page = 10
+    offset = (page - 1) * per_page
+    
     conn = get_db()
+    
+    # Obtener eventos filtrados
     eventos_list = get_events(
         conn, 
         usuario_id=usuario_id, 
         tipo_accion=tipo_accion, 
         nivel_alerta=nivel_alerta
     )
+    
+    # Invertir para ver lo más reciente primero si no se filtró por fecha
+    eventos_list = list(reversed(eventos_list))
+    
+    total = len(eventos_list)
+    paginated_eventos = eventos_list[offset : offset + per_page]
+    
     conn.close()
+    
+    total_pages = (total + per_page - 1) // per_page
     
     return render_template(
         'dashboard/eventos.html',
         nombre=session.get('nombre', 'Usuario'),
         rol=session.get('rol', 'N/A'),
-        eventos=eventos_list,
+        eventos=paginated_eventos,
+        page=page,
+        total_pages=total_pages,
         filtros={
             'usuario_id': usuario_id,
             'tipo_accion': tipo_accion,

@@ -1,154 +1,178 @@
 {% extends "base.html" %}
 
-{% block title %}Gestión de Usuarios{% endblock %}
-{% block meta_description %}Lista de usuarios registrados en el sistema.{% endblock %}
+{% block title %}Administración de Usuarios — Audit Tracer{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 <style>
     .users-table-container {
-        background-color: var(--color-white);
-        border: 1px solid var(--color-gray-border);
-        border-radius: var(--border-radius-lg);
+        background: white;
+        border-radius: 20px;
+        border: 1px solid var(--clr-border);
         overflow: hidden;
+        box-shadow: var(--shadow-sm);
     }
     .users-table {
         width: 100%;
         border-collapse: collapse;
-        text-align: left;
+        font-size: 14px;
     }
     .users-table th {
-        background-color: #F8FAFC;
-        color: var(--color-navy);
+        background: #F5F5F7;
         padding: 16px;
+        text-align: left;
         font-weight: 700;
-        border-bottom: 2px solid var(--color-gray-border);
+        color: var(--clr-text-muted);
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--clr-border);
     }
     .users-table td {
         padding: 16px;
-        border-bottom: 1px solid var(--color-gray-border);
+        border-bottom: 1px solid var(--clr-border);
+        color: var(--clr-text-main);
     }
+    .users-table tr:hover { background: #FAFAFA; }
+    
     .role-badge {
         padding: 4px 10px;
-        border-radius: 20px;
+        border-radius: 6px;
         font-size: 11px;
         font-weight: 700;
-        background-color: #E2E8F0;
-        color: #475569;
+        text-transform: uppercase;
+        background: #F5F5F7;
+        color: var(--clr-text-muted);
     }
-    .role-badge--admin { background-color: #DBEAFE; color: #1E40AF; }
-    .status-dot {
-        height: 8px;
-        width: 8px;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 6px;
+    .role-badge--admin { background: rgba(0, 122, 255, 0.1); color: var(--clr-accent-blue); }
+    
+    .status-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
     }
-    .status-dot--active { background-color: #10B981; }
-    .status-dot--inactive { background-color: #EF4444; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .status-dot--active { background: #34C759; }
+    .status-dot--inactive { background: #FF3B30; }
 </style>
 {% endblock %}
 
 {% block body %}
 <div class="dashboard-layout">
-
-    {# SIDEBAR #}
-    <nav class="sidebar">
-        <div class="sidebar__header">
-            <div class="sidebar__brand">
-                <div class="sidebar__brand-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                         fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                    </svg>
-                </div>
-                <div class="sidebar__brand-text">Audit Tracer</div>
+    
+    {# ── SIDEBAR ── #}
+    <aside class="sidebar">
+        <a href="{{ url_for('landing') }}" class="sidebar__brand">
+            <div class="sidebar__brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             </div>
+            Audit Tracer
+        </a>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Principal</div>
+            <a href="{{ url_for('dashboard') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                Dashboard
+            </a>
         </div>
 
-        <div class="sidebar__nav">
-            <p class="sidebar__nav-label">Principal</p>
-            <a href="{{ url_for('dashboard') }}" class="sidebar__nav-item">Dashboard</a>
-            
-            <p class="sidebar__nav-label">Auditoría</p>
-            <a href="{{ url_for('eventos') }}" class="sidebar__nav-item">Eventos</a>
-
-            <p class="sidebar__nav-label">Administración</p>
-            <a href="{{ url_for('lista_usuarios') }}" class="sidebar__nav-item active">Usuarios</a>
+        <div class="nav-section">
+            <div class="nav-section__title">Auditoría</div>
+            <a href="{{ url_for('eventos') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                Eventos
+            </a>
+            <a href="#" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2v16a2 2h12a2 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                Reportes
+            </a>
         </div>
+
+        {% if session.get('rol') == 'ADMIN' %}
+        <div class="nav-section">
+            <div class="nav-section__title">Administración</div>
+            <a href="{{ url_for('lista_usuarios') }}" class="nav-item active">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                Usuarios
+            </a>
+        </div>
+        {% endif %}
 
         <div class="sidebar__footer">
-            <div class="sidebar__user">
-                <div class="sidebar__user-avatar">{{ session.get('nombre', 'U')[0] | upper }}</div>
-                <div class="sidebar__user-info">
-                    <span class="sidebar__user-email">{{ session.get('nombre', 'Usuario') }}</span>
-                    <span class="sidebar__user-role">{{ session.get('rol', '') }}</span>
+            <div class="user-profile">
+                <div class="user-avatar">{{ session.get('nombre', 'U')[0] | upper }}</div>
+                <div style="flex: 1;">
+                    <div style="font-size: 13px; font-weight: 700;">{{ session.get('nombre', 'Usuario') }}</div>
+                    <div style="font-size: 11px; color: var(--clr-text-muted);">{{ session.get('rol', 'Personal') }}</div>
                 </div>
             </div>
-            <a href="{{ url_for('logout') }}" class="sidebar__logout">Cerrar sesión</a>
+            <a href="{{ url_for('logout') }}" class="logout-link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                Cerrar sesión
+            </a>
         </div>
-    </nav>
+    </aside>
 
-    {# CONTENIDO #}
-    <div class="dashboard-main">
-        <header class="dashboard-topbar">
-            <div>
-                <h2 class="topbar__title">Usuarios del Sistema</h2>
-                <p class="topbar__breadcrumb">Audit Tracer › Usuarios</p>
+    {# ── MAIN CONTENT ── #}
+    <main class="main-content">
+        <header class="header">
+            <div class="header__title">
+                <h1>Control de Usuarios</h1>
+                <p>Gestiona el acceso y los permisos de los miembros de la plataforma.</p>
             </div>
-            <div class="topbar__right">
-                <a href="{{ url_for('nuevo_usuario') }}" class="btn btn-primary">+ Nuevo Usuario</a>
-            </div>
+            <a href="{{ url_for('nuevo_usuario') }}" class="btn btn-primary">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Nuevo Usuario
+            </a>
         </header>
 
-        <main class="dashboard-content">
-
-            {# Flash messages #}
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% for category, message in messages %}
-                <div class="alert alert-{{ 'success' if category == 'success' else 'error' }}" role="alert" style="margin-bottom: 24px;">
-                    {{ message }}
-                </div>
-                {% endfor %}
-            {% endwith %}
-
-            <div class="users-table-container">
-                <table class="users-table">
-                    <thead>
-                        <tr>
-                            <th>Email</th>
-                            <th>ID Usuario</th>
-                            <th>Rol</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for u in usuarios %}
-                        <tr>
-                            <td><strong>{{ u.email }}</strong></td>
-                            <td style="font-family: monospace; font-size: 12px; color: #64748B;">{{ u.usuario_id }}</td>
-                            <td>
-                                <span class="role-badge {% if u.rol == 'ADMIN' %}role-badge--admin{% endif %}">
-                                    {{ u.rol }}
-                                </span>
-                            </td>
-                            <td>
+        {# ── USERS TABLE ── #}
+        <div class="users-table-container">
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>Identidad</th>
+                        <th>ID de Sistema</th>
+                        <th>Rol Asignado</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in usuarios %}
+                    <tr>
+                        <td>
+                            <div style="display: flex; flex-direction: column;">
+                                <span style="font-weight: 700;">{{ u.email }}</span>
+                                <span style="font-size: 11px; color: var(--clr-text-muted);">Registrado el {{ u.fecha_registro or 'N/A' }}</span>
+                            </div>
+                        </td>
+                        <td style="font-family: monospace; font-size: 12px; color: var(--clr-text-muted);">{{ u.usuario_id[:12] }}...</td>
+                        <td>
+                            <span class="role-badge {% if u.rol == 'ADMIN' %}role-badge--admin{% endif %}">
+                                {{ u.rol }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="status-indicator">
                                 <span class="status-dot {% if u.activo %}status-dot--active{% else %}status-dot--inactive{% endif %}"></span>
                                 {{ 'Activo' if u.activo else 'Bloqueado' }}
-                            </td>
-                            <td>
-                                <a href="{{ url_for('editar_usuario', usuario_id=u.usuario_id) }}" class="btn btn-outline-navy" style="padding: 4px 12px; font-size: 12px;">
-                                    Editar Rol
-                                </a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                            </div>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('editar_usuario', usuario_id=u.usuario_id) }}" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;">
+                                Gestionar
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
 
-        </main>
-    </div>
+    </main>
 </div>
 {% endblock %}

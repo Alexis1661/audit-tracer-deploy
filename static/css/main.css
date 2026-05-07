@@ -1,109 +1,110 @@
 /* ============================================================
-   main.css — Estilos Globales 'Clean Audit'
-   Diseño: Minimalista, Clínico y Profesional
+   main.css — Clean Audit Design System (Premium SaaS)
    ============================================================ */
 
 :root {
-    /* Paleta Principal */
-    --clr-bg:            #FFFFFF;
-    --clr-surface:       #F8FAFC;
-    --clr-surface-alt:   #F1F5F9;
-    --clr-border:        #E2E8F0;
+    /* ── Palette ── */
+    --clr-primary: #1D1D1F;
+    --clr-accent-blue: #007AFF;
+    --clr-accent-sky: #5AC8FA;
+    --clr-accent-teal: #30B0C7;
+    --clr-success: #34C759;
+    --clr-warning: #FF9500;
+    --clr-danger: #FF3B30;
     
-    --clr-primary:       #1F3864; /* Navy */
-    --clr-accent:        #1A8C8C; /* Teal */
-    --clr-accent-soft:   rgba(26, 140, 140, 0.1);
+    /* ── Neutrals ── */
+    --clr-white: #FFFFFF;
+    --clr-gray-light: #FBFBFD;
+    --clr-gray-mid: #86868B;
+    --clr-border: rgba(0,0,0,0.06);
     
-    /* Texto */
-    --clr-txt-main:      #1E293B;
-    --clr-txt-muted:     #64748B;
-    --clr-txt-light:     #94A3B8;
-    
-    /* Estados */
-    --clr-success:       #10B981;
-    --clr-danger:        #EF4444;
-    --clr-warning:       #F59E0B;
-    --clr-info:          #3B82F6;
-
-    /* Tipografía */
-    --font-main:         'Inter', sans-serif;
-    --font-heading:      'Outfit', sans-serif;
-
-    /* Elevación */
-    --shadow-sm:         0 1px 3px rgba(0,0,0,0.05);
-    --shadow-md:         0 4px 6px -1px rgba(0,0,0,0.1);
-    --shadow-lg:         0 10px 15px -3px rgba(0,0,0,0.1);
-
-    /* Otros */
-    --radius-sm:         6px;
-    --radius-md:         12px;
-    --radius-lg:         18px;
-    --transition:        0.2s ease;
-    
-    --nav-width:         260px;
-    --topbar-height:     72px;
+    /* ── Typography ── */
+    --font-main: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-heading: 'Outfit', sans-serif;
 }
 
-/* ── Reset base ──────────────────────────────────────────── */
-*, *::before, *::after {
-    box-sizing: border-box;
+* {
     margin: 0;
     padding: 0;
-}
-
-html {
-    scroll-behavior: smooth;
-    background-color: var(--clr-bg);
+    box-sizing: border-box;
 }
 
 body {
     font-family: var(--font-main);
-    color: var(--clr-txt-main);
-    background-color: var(--clr-bg);
-    line-height: 1.6;
+    background-color: var(--clr-gray-light);
+    color: var(--clr-primary);
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4, .heading {
+h1, h2, h3, h4 {
     font-family: var(--font-heading);
-    font-weight: 700;
-    color: var(--clr-primary);
+    letter-spacing: -0.02em;
 }
 
-a {
-    color: var(--clr-accent);
-    text-decoration: none;
-    transition: var(--transition);
-}
+a { text-decoration: none; transition: all 0.2s; }
 
-a:hover {
-    color: var(--clr-primary);
-}
-
-/* ── Botones ── */
 .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 12px 24px;
-    border-radius: var(--radius-md);
-    font-family: var(--font-main);
-    font-size: 15px;
-    font-weight: 600;
+    padding: 10px 20px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 14px;
     cursor: pointer;
-    transition: var(--transition);
-    border: 1px solid transparent;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: none;
+    gap: 8px;
 }
 
 .btn-primary {
-    background-color: var(--clr-primary);
+    background: var(--clr-accent-blue);
     color: white;
 }
 
 .btn-primary:hover {
-    background-color: #16294d;
-    transform: translateY(-1px);
+    background: #0066D6;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(0, 122, 255, 0.15);
 }
 
-.stagger-item { opacity: 0; }
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--clr-border);
+    color: var(--clr-primary);
+}
+
+.btn-outline:hover {
+    background: #F5F5F7;
+    border-color: var(--clr-gray-mid);
+}
+
+/* ── FORM ELEMENTS ── */
+.form-input, .form-select {
+    width: 100%;
+    padding: 12px 16px;
+    background: white;
+    border: 1px solid var(--clr-border);
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--clr-primary);
+    transition: all 0.2s;
+}
+
+.form-input:focus, .form-select:focus {
+    border-color: var(--clr-accent-blue);
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.05);
+    outline: none;
+}
+
+.form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--clr-text-muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}

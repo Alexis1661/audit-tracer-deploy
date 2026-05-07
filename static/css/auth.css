@@ -29,21 +29,16 @@ body {
     display: flex;
     flex: 1;
     min-height: 100vh;
-    padding: 40px;
+    padding: 0; /* Full screen */
     box-sizing: border-box;
-    align-items: center;
-    justify-content: center;
 }
 
 .auth-container {
     display: flex;
     width: 100%;
-    max-width: 1200px;
+    height: 100vh; /* Full height */
     background: white;
-    border-radius: 32px;
-    box-shadow: 0 40px 100px rgba(0,0,0,0.04);
     overflow: hidden;
-    border: 1px solid var(--clr-border);
 }
 
 /* ── PANEL IZQUIERDO (Visual/Content) ── */
@@ -54,7 +49,9 @@ body {
     border-right: 1px solid var(--clr-border);
     display: flex;
     flex-direction: column;
+    justify-content: space-between; /* Space out text and image */
     position: relative;
+    overflow: hidden;
 }
 
 .auth-side__header { margin-bottom: 60px; }
@@ -80,12 +77,16 @@ body {
     border-radius: 50%;
 }
 
+.auth-side-top {
+    max-width: 640px; /* Expand content width */
+}
+
 .auth-side__headline {
-    font-size: 38px;
+    font-size: 46px;
     font-weight: 800;
-    line-height: 1.1;
-    letter-spacing: -1.5px;
-    margin-bottom: 20px;
+    line-height: 1.05;
+    letter-spacing: -2px;
+    margin-bottom: 24px;
     position: relative;
     z-index: 10;
 }
@@ -93,11 +94,11 @@ body {
 .auth-side__headline span.blue { color: var(--clr-accent-blue); }
 
 .auth-side__desc {
-    font-size: 15px;
+    font-size: 17px;
     color: var(--clr-text-muted);
     line-height: 1.6;
-    max-width: 420px;
-    margin-bottom: 40px;
+    max-width: 540px; /* Wider description */
+    margin-bottom: 60px;
     position: relative;
     z-index: 10;
 }
@@ -105,43 +106,30 @@ body {
 .feature-list {
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    position: relative;
-    z-index: 10;
+    gap: 32px;
 }
 
 .feature-item {
     display: flex;
     align-items: center;
-    gap: 16px;
-    max-width: 380px;
+    gap: 20px;
+    max-width: 540px; /* Wider features */
 }
 
 .feature-icon {
-    width: 40px; height: 40px;
+    width: 48px; height: 48px; /* Larger icons */
     flex-shrink: 0;
     background: #F5F5F7;
-    border-radius: 10px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--clr-accent-blue);
 }
 
-.feature-text h4 { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
-.feature-text p { font-size: 11px; color: var(--clr-text-muted); line-height: 1.4; }
+.feature-text h4 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.feature-text p { font-size: 13px; color: var(--clr-text-muted); line-height: 1.4; }
 
-.auth-illustration {
-    position: absolute;
-    bottom: 40px;
-    right: 40px;
-    width: 380px;
-    max-width: 45%;
-    pointer-events: none;
-    z-index: 1;
-    opacity: 0.85;
-    filter: drop-shadow(0 20px 40px rgba(0,0,0,0.05));
-}
 
 /* ── PANEL DERECHO (Form) ── */
 .auth-form-panel {
@@ -154,9 +142,10 @@ body {
     position: relative;
 }
 
-.auth-form-panel__top {
-    position: absolute;
-    top: 40px; right: 40px;
+.auth-form-wrapper {
+    width: 100%;
+    max-width: 440px; /* Optimal readability */
+    margin: 0 auto;
 }
 
 .auth-form__title { font-size: 32px; font-weight: 800; margin-bottom: 8px; }

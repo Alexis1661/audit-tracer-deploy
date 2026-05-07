@@ -1,166 +1,131 @@
 {% extends "base.html" %}
 
-{% block title %}Nuevo Usuario{% endblock %}
-{% block meta_description %}Registro de nuevos usuarios por parte del administrador.{% endblock %}
+{% block title %}Registrar Usuario — Audit Tracer{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
 <style>
-    /* Ajustes para integrar el formulario de registro en el dashboard */
-    .admin-form-container {
-        background-color: var(--color-white);
-        border: 1px solid var(--color-gray-border);
-        border-radius: var(--border-radius-lg);
-        padding: 40px;
+    .form-container {
         max-width: 600px;
         margin: 0 auto;
-    }
-    .strength-bar-container {
-        height: 4px;
-        background-color: var(--color-gray-border);
-        border-radius: 4px;
-        overflow: hidden;
-        margin-top: 6px;
-    }
-    .strength-bar {
-        height: 100%;
-        width: 0%;
-        border-radius: 4px;
-        transition: width 0.3s ease, background-color 0.3s ease;
-    }
-    .strength-label {
-        font-size: var(--font-size-xs);
-        font-weight: 600;
-        margin-top: 3px;
-        min-height: 16px;
+        background: white;
+        border-radius: 24px;
+        border: 1px solid var(--clr-border);
+        padding: 40px;
+        box-shadow: var(--shadow-md);
     }
 </style>
 {% endblock %}
 
 {% block body %}
 <div class="dashboard-layout">
-
-    {# SIDEBAR #}
-    <nav class="sidebar">
-        <div class="sidebar__header">
-            <div class="sidebar__brand">
-                <div class="sidebar__brand-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                         fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                        <line x1="12" y1="15" x2="12" y2="17"></line>
-                    </svg>
-                </div>
-                <div class="sidebar__brand-text">
-                    Audit Tracer
-                    <small>Módulo Administrativo</small>
-                </div>
+    
+    {# ── SIDEBAR ── #}
+    <aside class="sidebar">
+        <a href="{{ url_for('landing') }}" class="sidebar__brand">
+            <div class="sidebar__brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
             </div>
-        </div>
+            Audit Tracer
+        </a>
 
-        <div class="sidebar__nav">
-            <p class="sidebar__nav-label">Principal</p>
-            <a href="{{ url_for('dashboard') }}" class="sidebar__nav-item">
+        <div class="nav-section">
+            <div class="nav-section__title">Principal</div>
+            <a href="{{ url_for('dashboard') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                 Dashboard
             </a>
+        </div>
 
-            <p class="sidebar__nav-label">Auditoría</p>
-            <a href="{{ url_for('eventos') }}" class="sidebar__nav-item">
+        <div class="nav-section">
+            <div class="nav-section__title">Auditoría</div>
+            <a href="{{ url_for('eventos') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
                 Eventos
             </a>
+        </div>
 
-            <p class="sidebar__nav-label">Administración</p>
-            <a href="{{ url_for('lista_usuarios') }}" class="sidebar__nav-item active">
+        {% if session.get('rol') == 'ADMIN' %}
+        <div class="nav-section">
+            <div class="nav-section__title">Administración</div>
+            <a href="{{ url_for('lista_usuarios') }}" class="nav-item active">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
                 Usuarios
             </a>
         </div>
+        {% endif %}
 
         <div class="sidebar__footer">
-            <div class="sidebar__user">
-                <div class="sidebar__user-avatar">{{ session.get('nombre', 'U')[0] | upper }}</div>
-                <div class="sidebar__user-info">
-                    <span class="sidebar__user-email">{{ session.get('nombre', 'Usuario') }}</span>
-                    <span class="sidebar__user-role">{{ session.get('rol', '') }}</span>
+            <div class="user-profile">
+                <div class="user-avatar">{{ session.get('nombre', 'U')[0] | upper }}</div>
+                <div style="flex: 1;">
+                    <div style="font-size: 13px; font-weight: 700;">{{ session.get('nombre', 'Usuario') }}</div>
+                    <div style="font-size: 11px; color: var(--clr-text-muted);">{{ session.get('rol', 'Personal') }}</div>
                 </div>
             </div>
-            <a href="{{ url_for('logout') }}" class="sidebar__logout">Cerrar sesión</a>
+            <a href="{{ url_for('logout') }}" class="logout-link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                Cerrar sesión
+            </a>
         </div>
-    </nav>
+    </aside>
 
-    {# CONTENIDO #}
-    <div class="dashboard-main">
-        <header class="dashboard-topbar">
-            <div>
-                <h2 class="topbar__title">Gestión de Usuarios</h2>
-                <p class="topbar__breadcrumb">Audit Tracer › Usuarios › Nuevo</p>
+    {# ── MAIN CONTENT ── #}
+    <main class="main-content">
+        <header class="header">
+            <div class="header__title">
+                <h1>Registrar Nuevo Usuario</h1>
+                <p>Crea una nueva cuenta de acceso y asigna permisos específicos.</p>
             </div>
+            <a href="{{ url_for('lista_usuarios') }}" class="btn btn-outline">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                Cancelar
+            </a>
         </header>
 
-        <main class="dashboard-content">
-            
-            <div class="admin-form-container">
-                <h1 class="auth-form-box__title">Registrar Nuevo Usuario</h1>
-                <p class="auth-form-box__subtitle" style="margin-bottom: 24px;">
-                    Asigna un rol y credenciales. Este evento quedará auditado bajo tu ID.
-                </p>
-
-                {# Alertas #}
-                {% if error %}
-                <div class="alert alert-error" style="margin-bottom: 20px;">{{ error }}</div>
-                {% endif %}
-
-                <form id="registro-form" class="auth-form" method="POST" action="{{ url_for('nuevo_usuario_post') }}" novalidate>
-                    
-                    <div class="form-group">
-                        <label class="form-label" for="email">Correo electrónico institucional</label>
-                        <input id="email" name="email" type="email" class="form-input" required value="{{ request.form.get('email', '') }}">
-                        <span id="email-error" class="field-error" role="alert"></span>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="password">Contraseña temporal</label>
-                        <div class="input-password-wrapper">
-                            <input id="password" name="password" type="password" class="form-input" required>
-                            <button type="button" id="toggle-password" class="btn-toggle-password">👁️</button>
-                        </div>
-                        <span id="password-error" class="field-error" role="alert"></span>
-                        <div class="strength-bar-container"><div id="pass-strength-bar" class="strength-bar"></div></div>
-                        <div id="pass-strength-text" class="strength-label"></div>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="confirmar_password">Confirmar contraseña</label>
-                        <div class="input-password-wrapper">
-                            <input id="confirmar_password" name="confirmar_password" type="password" class="form-input" required>
-                            <button type="button" id="toggle-confirm" class="btn-toggle-password">👁️</button>
-                        </div>
-                        <span id="confirm-error" class="field-error" role="alert"></span>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="rol">Rol asignado</label>
-                        <select id="rol" name="rol" class="form-select" required>
-                            <option value="" disabled selected>Selecciona un rol...</option>
-                            <option value="ANALISTA">Analista</option>
-                            <option value="AUDITOR">Auditor</option>
-                            <option value="CIENTIFICO_DATOS">Científico de Datos</option>
-                            <option value="ADMIN">Administrador</option>
-                        </select>
-                        <span id="rol-error" class="field-error" role="alert"></span>
-                    </div>
-
-                    <button type="submit" id="submit-btn" class="btn btn-primary btn-full" style="margin-top: 10px;">
-                        Crear Usuario
-                    </button>
-                </form>
+        <div class="form-container">
+            {% if error %}
+            <div style="padding: 12px 16px; border-radius: 12px; margin-bottom: 24px; font-size: 14px; font-weight: 600; background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5;">
+                {{ error }}
             </div>
+            {% endif %}
 
-        </main>
-    </div>
+            <form method="POST" action="{{ url_for('nuevo_usuario_post') }}">
+                <div class="form-group">
+                    <label class="form-label">Correo electrónico institucional</label>
+                    <input name="email" type="email" class="form-input" placeholder="nombre@hospital.com" required value="{{ request.form.get('email', '') }}">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Rol de Acceso</label>
+                    <select name="rol" class="form-select" required>
+                        <option value="" disabled selected>Selecciona un nivel de acceso...</option>
+                        <option value="ANALISTA">Analista de Datos</option>
+                        <option value="AUDITOR">Auditor Clínico</option>
+                        <option value="CIENTIFICO_DATOS">Científico de Datos</option>
+                        <option value="ADMIN">Administrador de Sistema</option>
+                    </select>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 24px;">
+                    <div class="form-group">
+                        <label class="form-label">Contraseña Temporal</label>
+                        <input name="password" type="password" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Confirmar Contraseña</label>
+                        <input name="confirmar_password" type="password" class="form-input" required>
+                    </div>
+                </div>
+
+                <div style="margin-top: 40px;">
+                    <button type="submit" class="btn btn-primary" style="width: 100%; padding: 14px;">Generar Credenciales y Registrar</button>
+                    <p style="text-align: center; font-size: 12px; color: var(--clr-text-muted); margin-top: 16px; line-height: 1.4;">
+                        Al registrar este usuario, se generará una entrada de auditoría vinculada a tu perfil administrativo como responsable de la creación.
+                    </p>
+                </div>
+            </form>
+        </div>
+    </main>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script src="{{ url_for('static', filename='js/registro.js') }}"></script>
 {% endblock %}
