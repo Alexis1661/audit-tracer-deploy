@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Acceso Denegado{% endblock %}
+{% block meta_description %}No tienes permisos para acceder a este módulo.{% endblock %}
+
+{% block extra_css %}
+<style>
+  .denied-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+    font-family: 'Inter', sans-serif;
+    padding: 2rem;
+  }
+
+  .denied-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 20px;
+    padding: 3rem 3.5rem;
+    max-width: 520px;
+    width: 100%;
+    text-align: center;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 0 60px rgba(239, 68, 68, 0.12);
+    animation: fadeIn 0.4s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .denied-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    display: block;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.6; }
+  }
+
+  .denied-code {
+    font-size: 5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+  }
+
+  .denied-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin-bottom: 1rem;
+  }
+
+  .denied-desc {
+    color: #94a3b8;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+  }
+
+  .denied-detail {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 2rem;
+    text-align: left;
+  }
+
+  .denied-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.3rem 0;
+    font-size: 0.85rem;
+  }
+
+  .denied-detail-label {
+    color: #64748b;
+    font-weight: 500;
+  }
+
+  .denied-detail-value {
+    color: #f1f5f9;
+    font-family: 'Outfit', monospace;
+    font-weight: 600;
+  }
+
+  .denied-badge {
+    display: inline-block;
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: 99px;
+    letter-spacing: 0.05em;
+  }
+
+  .denied-log-note {
+    color: #f59e0b;
+    font-size: 0.8rem;
+    margin-bottom: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+  }
+
+  .btn-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, #0ea5e9, #6366f1);
+    color: white;
+    text-decoration: none;
+    padding: 0.75rem 1.75rem;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+
+  .btn-back:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+    color: white;
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="denied-page">
+  <div class="denied-card">
+    <div class="denied-code">403</div>
+    <div class="denied-title">Acceso Denegado</div>
+    <p class="denied-desc">
+      Tu rol no tiene permiso para acceder a este módulo.<br>
+      Según la política de mínimo privilegio (HIPAA · Ley 1581), solo los roles autorizados pueden operar esta sección.
+    </p>
+
+    <div class="denied-detail">
+      <div class="denied-detail-row">
+        <span class="denied-detail-label">Usuario</span>
+        <span class="denied-detail-value">{{ nombre }}</span>
+      </div>
+      <div class="denied-detail-row">
+        <span class="denied-detail-label">Rol actual</span>
+        <span class="denied-badge">{{ rol }}</span>
+      </div>
+      <div class="denied-detail-row">
+        <span class="denied-detail-label">Módulo bloqueado</span>
+        <span class="denied-detail-value">{{ modulo }}</span>
+      </div>
+    </div>
+
+    <div class="denied-log-note">
+      ⚠️ Este intento ha sido registrado en el audit log como <strong>ACCESO_DENEGADO</strong>
+    </div>
+
+    <a href="{{ url_for('dashboard') }}" class="btn-back">
+      ← Volver al Dashboard
+    </a>
+  </div>
+</div>
+{% endblock %}
