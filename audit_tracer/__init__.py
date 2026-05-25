@@ -8,3 +8,6 @@ init_tracker()
 # HU-2.1: Activar interceptor automático de accesos a datos clínicos
 # Intercepta pd.read_csv, pd.read_excel, df[], df.query()
 _activate_data_capture()
+
+from .transform_capture import activate as _activate_transform_capture
+_activate_transform_capture()
