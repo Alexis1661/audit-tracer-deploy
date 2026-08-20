@@ -2,14 +2,12 @@ import pytest
 import os
 import sqlite3
 from audit_tracer.db import get_connection
-from audit_tracer.models.audit_log import insert_event, get_events
+from audit_tracer.models.audit_log import insert_event, get_events, verify_integrity
 from audit_tracer.utils.hashing import hash_event
 
 @pytest.fixture
 def db_conn():
-    if os.path.exists("audit_trail.db"):
-        os.remove("audit_trail.db")
-    conn = get_connection()
+    conn = get_connection(":memory:")
     yield conn
     conn.close()
 
@@ -42,6 +40,28 @@ def test_get_events_filters(db_conn):
     assert len(get_events(db_conn, nivel_alerta='NORMAL')) == 1
     assert len(get_events(db_conn, usuario_id='u3')) == 0
 
-# TODO: HU-3.3 — Juan Pablo Ordoñez
-# Implementar: verify_integrity(conn) -> list
-# Ver criterios de aceptación en Jira: PDGTRAZDSA
+def test_verify_integrity(db_conn):
+    """verify_integrity() detecta si un registro fue alterado manualmente."""
+    # Insert a valid event
+    event = {
+        'usuario_id': 'u1', 
+        'tipo_accion': 'CARGA', 
+        'nivel_alerta': 'NORMAL',
+        'sesion_id': 's1'
+    }
+    insert_event(db_conn, event)
+    
+    # Check that it starts clean
+    corrupted = verify_integrity(db_conn)
+    assert len(corrupted) == 0
+    
+    # Manually alter a record in the database
+    cursor = db_conn.cursor()
+    cursor.execute("UPDATE audit_log SET tipo_accion = 'BORRADO' WHERE usuario_id = 'u1'")
+    db_conn.commit()
+    
+    # Verify integrity should now detect it
+    corrupted = verify_integrity(db_conn)
+    assert len(corrupted) == 1
+    assert corrupted[0]['tipo_accion'] == 'BORRADO'
+    assert corrupted[0]['stored_hash'] != corrupted[0]['calculated_hash']
