@@ -8,9 +8,7 @@ from audit_tracer.models.audit_log import get_events
 
 @pytest.fixture
 def db_conn():
-    if os.path.exists("audit_trail.db"):
-        os.remove("audit_trail.db")
-    conn = get_connection()
+    conn = get_connection(":memory:")
     yield conn
     conn.close()
 

@@ -21,12 +21,13 @@ def insert_event(conn: sqlite3.Connection, event: Dict) -> int:
         event['timestamp'] = datetime.utcnow().isoformat()
     
     columns = [
-        'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion', 
-        'dataset_nombre', 'columnas_afectadas', 'ruta_destino', 
-        'contexto_ejecucion', 'motivo_fallo', 'nivel_alerta', 
+        'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion',
+        'dataset_nombre', 'columnas_afectadas', 'ruta_destino',
+        'filas_exportadas', 'sobrescritura',
+        'contexto_ejecucion', 'motivo_fallo', 'nivel_alerta',
         'motivo_alerta'
     ]
-    
+
     # Create a full dictionary with all columns to ensure consistency for hashing
     full_event = {col: event.get(col) for col in columns}
     
@@ -117,9 +118,10 @@ def verify_integrity(conn: sqlite3.Connection) -> List[Dict]:
     corrupted_records = []
     
     columns_to_hash = [
-        'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion', 
-        'dataset_nombre', 'columnas_afectadas', 'ruta_destino', 
-        'contexto_ejecucion', 'motivo_fallo', 'nivel_alerta', 
+        'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion',
+        'dataset_nombre', 'columnas_afectadas', 'ruta_destino',
+        'filas_exportadas', 'sobrescritura',
+        'contexto_ejecucion', 'motivo_fallo', 'nivel_alerta',
         'motivo_alerta'
     ]
     

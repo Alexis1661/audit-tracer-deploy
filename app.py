@@ -269,12 +269,18 @@ def dashboard():
     
     # Alertas críticas
     critical_alerts = [e for e in all_events if e['nivel_alerta'] == 'CRITICO']
-    
+
     # Usuarios únicos (basado en el log)
     unique_users = len(set(e['usuario_id'] for e in all_events))
-    
+
+    # Exportaciones de datos (HU-2.3 — PDGTRAZDSA-101)
+    export_events = [e for e in all_events if e['tipo_accion'] == 'EXPORTACION']
+    total_exportaciones = len(export_events)
+    filas_exportadas_total = sum(e['filas_exportadas'] or 0 for e in export_events)
+    exportaciones_criticas = len([e for e in export_events if e['nivel_alerta'] == 'CRITICO'])
+
     conn.close()
-    
+
     return render_template(
         'dashboard/index.html',
         nombre=session.get('nombre', 'Usuario'),
@@ -283,6 +289,9 @@ def dashboard():
         eventos_hoy=len(events_today),
         usuarios_activos=unique_users,
         alertas_criticas=len(critical_alerts),
+        total_exportaciones=total_exportaciones,
+        filas_exportadas_total=filas_exportadas_total,
+        exportaciones_criticas=exportaciones_criticas,
         now_date=today
     )
 

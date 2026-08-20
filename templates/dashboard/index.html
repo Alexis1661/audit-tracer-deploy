@@ -108,6 +108,16 @@
                 <div class="stat-card__value">0</div>
                 <div class="stat-card__label">Alertas de Integridad</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-card__header">
+                    <div class="stat-card__icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></div>
+                    {% if exportaciones_criticas > 0 %}
+                    <span style="font-size: 11px; color: #FF3B30; font-weight: 700;">{{ exportaciones_criticas }} crítica{{ 's' if exportaciones_criticas != 1 else '' }}</span>
+                    {% endif %}
+                </div>
+                <div class="stat-card__value">{{ total_exportaciones }}</div>
+                <div class="stat-card__label">Exportaciones de Datos · {{ filas_exportadas_total }} filas</div>
+            </div>
         </div>
 
         {# ── PREVIEW SECTION ── #}
