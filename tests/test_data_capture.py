@@ -505,13 +505,16 @@ class TestUsuarioDesconocido:
         assert len(ev["motivo_alerta"]) > 0
 
     def test_usuario_identificado_no_genera_alerta(self, clean_db, monkeypatch):
-        """Cuando el usuario es conocido, nivel_alerta debe ser NORMAL."""
+        """Cuando el usuario es conocido y accede en horario laboral, nivel_alerta debe ser NORMAL."""
         _, mock_conn = clean_db
 
         monkeypatch.setattr(
             "audit_tracer.data_capture._get_session",
             lambda: ("usuario_prueba", "sesion-123"),
         )
+        # Fuerza horario laboral (HU-4.4 CA1-c) para que el test sea determinista
+        # sin importar la hora real en la que corran las pruebas.
+        monkeypatch.setattr("audit_tracer.data_capture.es_horario_laboral", lambda dt: True)
 
         raw = pd.DataFrame({"col": [1]})
         audited = data_capture.wrap_dataframe(raw, "datos_clinicos.csv")
@@ -521,6 +524,82 @@ class TestUsuarioDesconocido:
         ev = events[-1]
         assert ev["nivel_alerta"] == "NORMAL"
         assert ev["motivo_alerta"] is None
+
+
+# ──────────────────────────────────────────────────────────────
+# HU-4.4 CA1-c: Accesos fuera del horario laboral configurable
+# ──────────────────────────────────────────────────────────────
+
+class TestHorarioLaboral:
+    """CA1: accesos a datos fuera del horario laboral configurado → CRITICO."""
+
+    def test_acceso_fuera_de_horario_genera_nivel_alerta_critico(self, clean_db, monkeypatch):
+        _, mock_conn = clean_db
+
+        monkeypatch.setattr(
+            "audit_tracer.data_capture._get_session",
+            lambda: ("usuario_prueba", "sesion-123"),
+        )
+        monkeypatch.setattr("audit_tracer.data_capture.es_horario_laboral", lambda dt: False)
+
+        raw = pd.DataFrame({"col": [1]})
+        audited = data_capture.wrap_dataframe(raw, "datos_clinicos.csv")
+        _ = audited["col"]
+
+        events = _get_events_by_type(mock_conn, "CONSULTA")
+        ev = events[-1]
+        assert ev["nivel_alerta"] == "CRITICO"
+        assert "horario laboral" in ev["motivo_alerta"].lower()
+
+    def test_acceso_dentro_de_horario_no_genera_alerta(self, clean_db, monkeypatch):
+        _, mock_conn = clean_db
+
+        monkeypatch.setattr(
+            "audit_tracer.data_capture._get_session",
+            lambda: ("usuario_prueba", "sesion-123"),
+        )
+        monkeypatch.setattr("audit_tracer.data_capture.es_horario_laboral", lambda dt: True)
+
+        raw = pd.DataFrame({"col": [1]})
+        audited = data_capture.wrap_dataframe(raw, "datos_clinicos.csv")
+        _ = audited["col"]
+
+        events = _get_events_by_type(mock_conn, "CONSULTA")
+        ev = events[-1]
+        assert ev["nivel_alerta"] == "NORMAL"
+
+    def test_usuario_desconocido_fuera_de_horario_sigue_siendo_critico_por_usuario(self, clean_db, monkeypatch):
+        """El motivo por usuario no identificado tiene prioridad sobre el de horario."""
+        _, mock_conn = clean_db
+
+        monkeypatch.setattr(
+            "audit_tracer.data_capture._get_session",
+            lambda: ("DESCONOCIDO", "sesion-sin-usuario"),
+        )
+        monkeypatch.setattr("audit_tracer.data_capture.es_horario_laboral", lambda dt: False)
+
+        raw = pd.DataFrame({"col": [1]})
+        audited = data_capture.wrap_dataframe(raw, "datos_clinicos.csv")
+        _ = audited["col"]
+
+        events = _get_events_by_type(mock_conn, "CONSULTA")
+        ev = events[-1]
+        assert ev["nivel_alerta"] == "CRITICO"
+        assert "no identificado" in ev["motivo_alerta"].lower()
+
+    def test_es_horario_laboral_respeta_limites_configurados(self):
+        """Utilidad pura: [HORA_INICIO_LABORAL, HORA_FIN_LABORAL) es horario laboral."""
+        from datetime import datetime
+        from audit_tracer.utils.horario import es_horario_laboral, HORA_INICIO_LABORAL, HORA_FIN_LABORAL
+
+        dentro = datetime(2026, 1, 5, HORA_INICIO_LABORAL, 0)
+        fuera_temprano = datetime(2026, 1, 5, max(HORA_INICIO_LABORAL - 1, 0), 0)
+        fuera_tarde = datetime(2026, 1, 5, HORA_FIN_LABORAL, 0)
+
+        assert es_horario_laboral(dentro) is True
+        assert es_horario_laboral(fuera_tarde) is False
+        if HORA_INICIO_LABORAL > 0:
+            assert es_horario_laboral(fuera_temprano) is False
 
     def test_evento_desconocido_no_se_pierde(self, clean_db, monkeypatch, sample_csv):
         """CA3: los eventos sin usuario identificado sí deben persistir."""
