@@ -54,6 +54,25 @@
         padding: 4px 8px;
         border-radius: 4px;
     }
+
+    /* HU-2.4: resaltado visual de intentos fallidos de acceso */
+    .audit-table tr.fila-acceso-fallido {
+        background: #FFF5F5;
+        border-left: 3px solid #DC2626;
+    }
+    .audit-table tr.fila-acceso-fallido:hover { background: #FEE2E2; }
+    .audit-table tr.fila-acceso-fallido td:first-child { padding-left: 13px; } /* compensa el border-left */
+    .motivo-fallo-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #B91C1C;
+        background: #FEE2E2;
+        border: 1px solid #FECACA;
+        padding: 2px 8px;
+        border-radius: 5px;
+        margin-top: 4px;
+    }
 </style>
 {% endblock %}
 
@@ -83,7 +102,7 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
                 Eventos
             </a>
-            <a href="#" class="nav-item">
+            <a href="{{ url_for('reportes') }}" class="nav-item">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
                 Reportes
             </a>
@@ -123,12 +142,18 @@
                     <h1>Registros de Auditoría</h1>
                     <p>Trazabilidad total de cada acción realizada en el sistema.</p>
                 </div>
-                <form action="{{ url_for('verificar_integridad') }}" method="POST">
-                    <button type="submit" class="btn btn-primary">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                        Verificar Integridad
-                    </button>
-                </form>
+                <div style="display: flex; gap: 12px;">
+                    <a href="{{ url_for('exportar_eventos_criticos', usuario_id=filtros.usuario_id, tipo_accion=filtros.tipo_accion) }}" class="btn btn-outline">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        Exportar Críticos (CSV)
+                    </a>
+                    <form action="{{ url_for('verificar_integridad') }}" method="POST">
+                        <button type="submit" class="btn btn-primary">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                            Verificar Integridad
+                        </button>
+                    </form>
+                </div>
             </header>
 
             {# ── ALERTAS ── #}
@@ -140,22 +165,51 @@
                 {% endfor %}
             {% endwith %}
 
-            {# ── FILTERS ── #}
-            <form method="GET" action="{{ url_for('eventos') }}" style="background: white; padding: 20px; border-radius: 16px; border: 1px solid var(--clr-border); margin-bottom: 24px; display: flex; gap: 20px; align-items: flex-end; box-shadow: var(--shadow-sm);">
-                <div style="flex: 1;">
+            {# ── FILTERS (HU-4.2: usuario, fecha, tipo de acción, dataset — combinables) ── #}
+            <form method="GET" action="{{ url_for('eventos') }}" style="background: white; padding: 20px; border-radius: 16px; border: 1px solid var(--clr-border); margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end; box-shadow: var(--shadow-sm);">
+                <div style="flex: 1; min-width: 160px;">
                     <label class="form-label">Filtrar Usuario</label>
                     <input type="text" name="usuario_id" class="form-input" placeholder="ID o Correo" value="{{ filtros.usuario_id or '' }}">
                 </div>
-                <div style="width: 200px;">
+                <div style="flex: 1; min-width: 160px;">
+                    <label class="form-label">Dataset</label>
+                    <input type="text" name="dataset_nombre" class="form-input" placeholder="Ej. PATIENTS.csv" value="{{ filtros.dataset_nombre or '' }}">
+                </div>
+                <div style="width: 165px;">
+                    <label class="form-label">Desde</label>
+                    <input type="date" name="fecha_inicio" class="form-input" value="{{ filtros.fecha_inicio or '' }}">
+                </div>
+                <div style="width: 165px;">
+                    <label class="form-label">Hasta</label>
+                    <input type="date" name="fecha_fin" class="form-input" value="{{ filtros.fecha_fin or '' }}">
+                </div>
+                <div style="width: 210px;">
                     <label class="form-label">Acción</label>
                     <select name="tipo_accion" class="form-select">
                         <option value="">Todas</option>
+                        <option value="CARGA" {% if filtros.tipo_accion == 'CARGA' %}selected{% endif %}>Carga de Datos</option>
+                        <option value="CONSULTA" {% if filtros.tipo_accion == 'CONSULTA' %}selected{% endif %}>Consulta</option>
+                        <option value="TRANSFORMACION" {% if filtros.tipo_accion == 'TRANSFORMACION' %}selected{% endif %}>Transformación</option>
+                        <option value="EXPORTACION" {% if filtros.tipo_accion == 'EXPORTACION' %}selected{% endif %}>Exportación de Datos</option>
+                        <option value="MODELADO" {% if filtros.tipo_accion == 'MODELADO' %}selected{% endif %}>Modelado</option>
+                        <option value="MODELADO_FALLIDO" {% if filtros.tipo_accion == 'MODELADO_FALLIDO' %}selected{% endif %}>Modelado Fallido</option>
+                        <option value="ACCESO_FALLIDO" {% if filtros.tipo_accion == 'ACCESO_FALLIDO' %}selected{% endif %}>Acceso Fallido</option>
+                        <option value="ACCESO_DENEGADO" {% if filtros.tipo_accion == 'ACCESO_DENEGADO' %}selected{% endif %}>Acceso Denegado</option>
                         <option value="INICIO_SESION" {% if filtros.tipo_accion == 'INICIO_SESION' %}selected{% endif %}>Inicio Sesión</option>
+                        <option value="CIERRE_SESION" {% if filtros.tipo_accion == 'CIERRE_SESION' %}selected{% endif %}>Cierre Sesión</option>
+                        <option value="SESION_INTERRUMPIDA" {% if filtros.tipo_accion == 'SESION_INTERRUMPIDA' %}selected{% endif %}>Sesión Interrumpida</option>
                         <option value="CREACION_USUARIO" {% if filtros.tipo_accion == 'CREACION_USUARIO' %}selected{% endif %}>Creación Usuario</option>
                         <option value="MODIFICACION_ROL" {% if filtros.tipo_accion == 'MODIFICACION_ROL' %}selected{% endif %}>Modificación Rol</option>
                     </select>
                 </div>
+                <div style="display: flex; align-items: center; gap: 8px; padding-bottom: 10px;">
+                    <input type="checkbox" id="solo_criticos" name="nivel_alerta" value="CRITICO" {% if filtros.nivel_alerta == 'CRITICO' %}checked{% endif %}>
+                    <label for="solo_criticos" class="form-label" style="margin: 0; white-space: nowrap;">Solo Críticos</label>
+                </div>
                 <button type="submit" class="btn btn-outline">Filtrar Resultados</button>
+                {% if filtros.usuario_id or filtros.tipo_accion or filtros.nivel_alerta or filtros.dataset_nombre or filtros.fecha_inicio or filtros.fecha_fin %}
+                <a href="{{ url_for('eventos') }}" class="btn btn-outline">Limpiar</a>
+                {% endif %}
             </form>
         </div>
 
@@ -167,22 +221,53 @@
                         <th>Fecha y Hora</th>
                         <th>Usuario</th>
                         <th>Acción Realizada</th>
+                        <th>Detalle</th>
                         <th>Estado</th>
                         <th>Hash de Integridad</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for evento in eventos %}
-                    <tr>
+                    {# HU-2.4: clase especial para intentos fallidos de acceso #}
+                    <tr{% if evento.tipo_accion == 'ACCESO_FALLIDO' %} class="fila-acceso-fallido"{% endif %}>
                         <td>{{ evento.timestamp.split('.')[0].replace('T', ' ') }}</td>
                         <td><span style="font-weight: 700;">{{ evento.usuario_id[:8] }}...</span></td>
                         <td>{{ evento.tipo_accion }}</td>
-                        <td><span class="badge badge-{{ evento.nivel_alerta | lower }}">{{ evento.nivel_alerta }}</span></td>
+                        <td>
+                            {% if evento.tipo_accion == 'ACCESO_FALLIDO' %}
+                            {# HU-2.4 CA2: mostrar dataset_nombre y motivo_fallo #}
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-weight: 600;">{{ evento.dataset_nombre or '—' }}</span>
+                                {% if evento.motivo_fallo %}
+                                <span class="motivo-fallo-tag">{{ evento.motivo_fallo }}</span>
+                                {% endif %}
+                            </div>
+                            {% elif evento.tipo_accion == 'EXPORTACION' %}
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="font-weight: 600;">{{ evento.dataset_nombre or 'dataset_desconocido' }}</span>
+                                <span style="font-size: 12px; color: var(--clr-text-muted);" title="{{ evento.ruta_destino }}">{{ evento.ruta_destino or '—' }}</span>
+                                <span style="font-size: 12px; color: var(--clr-text-muted);">
+                                    {{ evento.filas_exportadas if evento.filas_exportadas is not none else '—' }} filas
+                                    {% if evento.sobrescritura %}
+                                    · <span class="badge badge-advertencia">Sobrescrito</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% else %}
+                            <span style="color: var(--clr-text-muted);">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge badge-{{ evento.nivel_alerta | lower }}">{{ evento.nivel_alerta }}</span>
+                            {% if evento.motivo_alerta %}
+                            <div style="font-size: 11px; color: var(--clr-text-muted); margin-top: 4px; max-width: 220px;">{{ evento.motivo_alerta }}</div>
+                            {% endif %}
+                        </td>
                         <td><span class="hash-code">{{ evento.hash_integridad[:16] }}...</span></td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="5" style="text-align: center; padding: 60px; color: var(--clr-text-muted);">
+                        <td colspan="6" style="text-align: center; padding: 60px; color: var(--clr-text-muted);">
                             No se encontraron registros de auditoría.
                         </td>
                     </tr>

@@ -59,6 +59,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
     -- Ruta del archivo de destino en operaciones de exportación.
     -- Ejemplo: '/outputs/resultados_modelo.csv'
 
+    filas_exportadas  INTEGER,
+    -- Número de filas incluidas en una exportación (tipo_accion = EXPORTACION).
+    -- Exigido por HU-2.3 CA2.
+
+    sobrescritura     INTEGER,
+    -- Indicador de sobrescritura de archivo en exportaciones (0/1).
+    -- 1 = el archivo de destino ya existía y fue sobreescrito.
+    -- Exigido por HU-2.3 CA3.
+
     -- CONTEXTO DE EJECUCIÓN
     contexto_ejecucion TEXT,
     -- Nombre del script o notebook desde el cual se ejecutó la operación.
