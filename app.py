@@ -3,8 +3,9 @@ app.py — Punto de entrada principal del frontend Flask.
 Sistema de Auditoría de Trazabilidad de Datos Clínicos.
 """
 
+import io
 import os
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, Response
 
 # ── Importaciones del backend existente ─────────────────────────────────────
 from audit_tracer.db import get_connection
@@ -13,7 +14,7 @@ from audit_tracer.auth.registro import register_user
 from audit_tracer.auth.gestion_roles import assign_role
 from audit_tracer.models.usuarios import get_all_users, get_user_by_id
 from audit_tracer.utils.session import generate_session_id
-from audit_tracer.models.audit_log import get_events, verify_integrity, insert_event
+from audit_tracer.models.audit_log import get_events, verify_integrity, insert_event, export_critical_events_to_csv
 from audit_tracer.auth.control_acceso import has_permission  # HU-1.4
 from datetime import datetime, timedelta
 
@@ -342,6 +343,34 @@ def eventos():
             'nivel_alerta': nivel_alerta
         }
     )
+
+
+@app.route('/eventos/criticos/exportar')
+@login_required
+@modulo_required('consulta_reportes')  # HU-1.4
+def exportar_eventos_criticos():
+    """
+    HU-4.4 CA5 — Exporta a CSV los eventos con nivel_alerta = CRITICO,
+    respetando los filtros de usuario y tipo de acción activos en la vista.
+    """
+    usuario_id = request.args.get('usuario_id')
+    tipo_accion = request.args.get('tipo_accion')
+
+    conn = get_db()
+    buffer = io.StringIO()
+    export_critical_events_to_csv(
+        conn, buffer,
+        usuario_id=usuario_id,
+        tipo_accion=tipo_accion,
+    )
+    conn.close()
+
+    return Response(
+        buffer.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=eventos_criticos.csv'}
+    )
+
 
 @app.route('/verificar-integridad', methods=['POST'])
 @login_required

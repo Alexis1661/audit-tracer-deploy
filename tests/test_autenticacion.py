@@ -50,22 +50,51 @@ def test_user_blocking(db_conn):
     register_user(db_conn, email, "pwd", "ANALISTA", "admin")
     user = get_user_by_email(db_conn, email)
     user_id = user['usuario_id']
-    
+
     for i in range(4):
         result = login(db_conn, email, "wrong", f"s{i}")
         assert result['success'] is False
         assert "bloqueada" not in result['message']
-    
+
     # 5th attempt
     result = login(db_conn, email, "wrong", "s4")
     assert result['success'] is False
     assert "bloqueada" in result['message']
-    
+
     # Verify in DB
     user_after = get_user_by_email(db_conn, email)
     assert user_after['activo'] == 0
-    
-    # Verify critical event
+
+    # Verify critical events: el intento #4 ya dispara CRITICO por la ventana
+    # de tiempo (HU-4.4 CA1-a: >3 intentos fallidos en <5 min), y el #5 por
+    # el bloqueo de cuenta (contador acumulado).
+    events = get_events(db_conn, nivel_alerta='CRITICO', usuario_id=user_id)
+    assert len(events) == 2
+    motivos = [e['motivo_alerta'] for e in events]
+    assert any("5 intentos fallidos" in m for m in motivos)
+    assert any("minutos" in m for m in motivos)
+
+
+def test_intentos_fallidos_en_ventana_de_tiempo_genera_critico(db_conn):
+    """HU-4.4 CA1-a: más de 3 intentos fallidos del mismo usuario en <5 min -> CRITICO."""
+    email = "ventana@test.com"
+    register_user(db_conn, email, "pwd", "ANALISTA", "admin")
+    user = get_user_by_email(db_conn, email)
+    user_id = user['usuario_id']
+
+    # 3 intentos fallidos: todavía no debe ser CRITICO por ventana de tiempo
+    for i in range(3):
+        result = login(db_conn, email, "wrong", f"s{i}")
+        assert result['success'] is False
+
+    events = get_events(db_conn, nivel_alerta='CRITICO', usuario_id=user_id)
+    assert len(events) == 0
+
+    # 4to intento fallido, dentro de la ventana de 5 minutos -> CRITICO
+    result = login(db_conn, email, "wrong", "s3")
+    assert result['success'] is False
+    assert "bloqueada" not in result['message']  # el bloqueo por cuenta ocurre en el 5to
+
     events = get_events(db_conn, nivel_alerta='CRITICO', usuario_id=user_id)
     assert len(events) == 1
-    assert "5 intentos fallidos" in events[0]['motivo_alerta']
+    assert "intentos fallidos en menos de" in events[0]['motivo_alerta']

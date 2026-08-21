@@ -1,5 +1,7 @@
+import csv
+import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from ..utils.hashing import hash_event
 
@@ -100,6 +102,119 @@ def get_events(
     rows = cursor.fetchall()
     
     return [dict(row) for row in rows]
+
+
+# ──────────────────────────────────────────────────────────────
+# HU-4.4 — Identificación de eventos críticos
+# ──────────────────────────────────────────────────────────────
+
+def get_critical_events(
+    conn: sqlite3.Connection,
+    usuario_id: str = None,
+    fecha_inicio: str = None,
+    fecha_fin: str = None,
+    tipo_accion: str = None,
+    dataset_nombre: str = None,
+) -> List[Dict]:
+    """
+    CA2 — Función equivalente a get_events(conn, ..., nivel_alerta='CRITICO').
+    Permite consultar únicamente los eventos clasificados como críticos,
+    opcionalmente combinados con los mismos filtros que get_events() (CA4).
+
+    Returns:
+        List[Dict]: Eventos con nivel_alerta = 'CRITICO' que cumplen los filtros.
+    """
+    return get_events(
+        conn,
+        usuario_id=usuario_id,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        tipo_accion=tipo_accion,
+        dataset_nombre=dataset_nombre,
+        nivel_alerta='CRITICO',
+    )
+
+
+def contar_intentos_fallidos_recientes(
+    conn: sqlite3.Connection,
+    usuario_id: str,
+    ahora: datetime,
+    ventana_minutos: int = 5,
+) -> int:
+    """
+    CA1-a — Cuenta eventos ACCESO_FALLIDO ya registrados para `usuario_id`
+    dentro de los últimos `ventana_minutos` minutos contados hacia atrás
+    desde `ahora`. No incluye el intento que se está evaluando: ese debe
+    sumarse aparte antes de insertarlo, ya que todavía no existe en la BD.
+
+    Returns:
+        int: Número de intentos fallidos recientes ya persistidos.
+    """
+    desde = (ahora - timedelta(minutes=ventana_minutos)).isoformat()
+    query = (
+        "SELECT COUNT(*) FROM audit_log "
+        "WHERE usuario_id = ? AND tipo_accion = 'ACCESO_FALLIDO' "
+        "AND timestamp >= ? AND timestamp <= ?"
+    )
+    cursor = conn.cursor()
+    cursor.execute(query, (usuario_id, desde, ahora.isoformat()))
+    return cursor.fetchone()[0]
+
+
+# Columnas incluidas en la exportación CSV de eventos críticos (CA5).
+# Cubre el detalle completo del registro, incluyendo el hash de integridad
+# para que el reporte sea verificable frente a audit_log.
+CRITICAL_EVENTS_CSV_COLUMNS = [
+    'event_id', 'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion',
+    'dataset_nombre', 'columnas_afectadas', 'ruta_destino', 'filas_exportadas',
+    'sobrescritura', 'contexto_ejecucion', 'motivo_fallo', 'nivel_alerta',
+    'motivo_alerta', 'hash_integridad',
+]
+
+
+def export_critical_events_to_csv(
+    conn: sqlite3.Connection,
+    dest,
+    usuario_id: str = None,
+    fecha_inicio: str = None,
+    fecha_fin: str = None,
+    tipo_accion: str = None,
+    dataset_nombre: str = None,
+) -> int:
+    """
+    CA5 — Exporta a CSV los eventos críticos (nivel_alerta = CRITICO) que
+    cumplan los filtros dados, combinables igual que get_critical_events().
+
+    Args:
+        dest: ruta de archivo (str/os.PathLike) o un objeto file-like ya
+              abierto en modo texto (p. ej. io.StringIO para descargas HTTP).
+
+    Returns:
+        int: Número de eventos exportados.
+    """
+    eventos = get_critical_events(
+        conn,
+        usuario_id=usuario_id,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        tipo_accion=tipo_accion,
+        dataset_nombre=dataset_nombre,
+    )
+
+    def _write(f):
+        writer = csv.DictWriter(f, fieldnames=CRITICAL_EVENTS_CSV_COLUMNS)
+        writer.writeheader()
+        for evento in eventos:
+            writer.writerow({col: evento.get(col) for col in CRITICAL_EVENTS_CSV_COLUMNS})
+
+    if isinstance(dest, (str, os.PathLike)):
+        with open(dest, "w", newline="", encoding="utf-8") as f:
+            _write(f)
+    else:
+        _write(dest)
+
+    return len(eventos)
+
 
 def verify_integrity(conn: sqlite3.Connection) -> List[Dict]:
     """
