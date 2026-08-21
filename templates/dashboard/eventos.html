@@ -146,20 +146,41 @@
                 {% endfor %}
             {% endwith %}
 
-            {# ── FILTERS ── #}
-            <form method="GET" action="{{ url_for('eventos') }}" style="background: white; padding: 20px; border-radius: 16px; border: 1px solid var(--clr-border); margin-bottom: 24px; display: flex; gap: 20px; align-items: flex-end; box-shadow: var(--shadow-sm);">
-                <div style="flex: 1;">
+            {# ── FILTERS (HU-4.2: usuario, fecha, tipo de acción, dataset — combinables) ── #}
+            <form method="GET" action="{{ url_for('eventos') }}" style="background: white; padding: 20px; border-radius: 16px; border: 1px solid var(--clr-border); margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end; box-shadow: var(--shadow-sm);">
+                <div style="flex: 1; min-width: 160px;">
                     <label class="form-label">Filtrar Usuario</label>
                     <input type="text" name="usuario_id" class="form-input" placeholder="ID o Correo" value="{{ filtros.usuario_id or '' }}">
                 </div>
-                <div style="width: 200px;">
+                <div style="flex: 1; min-width: 160px;">
+                    <label class="form-label">Dataset</label>
+                    <input type="text" name="dataset_nombre" class="form-input" placeholder="Ej. PATIENTS.csv" value="{{ filtros.dataset_nombre or '' }}">
+                </div>
+                <div style="width: 165px;">
+                    <label class="form-label">Desde</label>
+                    <input type="date" name="fecha_inicio" class="form-input" value="{{ filtros.fecha_inicio or '' }}">
+                </div>
+                <div style="width: 165px;">
+                    <label class="form-label">Hasta</label>
+                    <input type="date" name="fecha_fin" class="form-input" value="{{ filtros.fecha_fin or '' }}">
+                </div>
+                <div style="width: 210px;">
                     <label class="form-label">Acción</label>
                     <select name="tipo_accion" class="form-select">
                         <option value="">Todas</option>
+                        <option value="CARGA" {% if filtros.tipo_accion == 'CARGA' %}selected{% endif %}>Carga de Datos</option>
+                        <option value="CONSULTA" {% if filtros.tipo_accion == 'CONSULTA' %}selected{% endif %}>Consulta</option>
+                        <option value="TRANSFORMACION" {% if filtros.tipo_accion == 'TRANSFORMACION' %}selected{% endif %}>Transformación</option>
+                        <option value="EXPORTACION" {% if filtros.tipo_accion == 'EXPORTACION' %}selected{% endif %}>Exportación de Datos</option>
+                        <option value="MODELADO" {% if filtros.tipo_accion == 'MODELADO' %}selected{% endif %}>Modelado</option>
+                        <option value="MODELADO_FALLIDO" {% if filtros.tipo_accion == 'MODELADO_FALLIDO' %}selected{% endif %}>Modelado Fallido</option>
+                        <option value="ACCESO_FALLIDO" {% if filtros.tipo_accion == 'ACCESO_FALLIDO' %}selected{% endif %}>Acceso Fallido</option>
+                        <option value="ACCESO_DENEGADO" {% if filtros.tipo_accion == 'ACCESO_DENEGADO' %}selected{% endif %}>Acceso Denegado</option>
                         <option value="INICIO_SESION" {% if filtros.tipo_accion == 'INICIO_SESION' %}selected{% endif %}>Inicio Sesión</option>
+                        <option value="CIERRE_SESION" {% if filtros.tipo_accion == 'CIERRE_SESION' %}selected{% endif %}>Cierre Sesión</option>
+                        <option value="SESION_INTERRUMPIDA" {% if filtros.tipo_accion == 'SESION_INTERRUMPIDA' %}selected{% endif %}>Sesión Interrumpida</option>
                         <option value="CREACION_USUARIO" {% if filtros.tipo_accion == 'CREACION_USUARIO' %}selected{% endif %}>Creación Usuario</option>
                         <option value="MODIFICACION_ROL" {% if filtros.tipo_accion == 'MODIFICACION_ROL' %}selected{% endif %}>Modificación Rol</option>
-                        <option value="EXPORTACION" {% if filtros.tipo_accion == 'EXPORTACION' %}selected{% endif %}>Exportación de Datos</option>
                     </select>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px; padding-bottom: 10px;">
@@ -167,6 +188,9 @@
                     <label for="solo_criticos" class="form-label" style="margin: 0; white-space: nowrap;">Solo Críticos</label>
                 </div>
                 <button type="submit" class="btn btn-outline">Filtrar Resultados</button>
+                {% if filtros.usuario_id or filtros.tipo_accion or filtros.nivel_alerta or filtros.dataset_nombre or filtros.fecha_inicio or filtros.fecha_fin %}
+                <a href="{{ url_for('eventos') }}" class="btn btn-outline">Limpiar</a>
+                {% endif %}
             </form>
         </div>
 

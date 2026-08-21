@@ -300,36 +300,52 @@ def dashboard():
 @login_required
 @modulo_required('consulta_reportes')  # HU-1.4
 def eventos():
-    """Vista de consulta de registros de auditoría con paginación."""
+    """
+    Vista de consulta de registros de auditoría con paginación.
+    HU-4.2 — Permite filtrar por usuario, rango de fechas, tipo de acción
+    y dataset, de forma individual o combinada (CA1-CA5).
+    """
     usuario_id = request.args.get('usuario_id')
     tipo_accion = request.args.get('tipo_accion')
     nivel_alerta = request.args.get('nivel_alerta')
-    
+    dataset_nombre = request.args.get('dataset_nombre')
+    fecha_inicio = request.args.get('fecha_inicio')
+    fecha_fin = request.args.get('fecha_fin')
+
+    # Los campos <input type="date"> entregan 'YYYY-MM-DD'; se amplían a los
+    # límites del día para que la comparación lexicográfica sobre el
+    # timestamp ISO 8601 cubra el día completo (CA2).
+    fecha_inicio_query = f"{fecha_inicio}T00:00:00" if fecha_inicio else None
+    fecha_fin_query = f"{fecha_fin}T23:59:59.999999" if fecha_fin else None
+
     # Paginación
     page = request.args.get('page', 1, type=int)
     per_page = 10
     offset = (page - 1) * per_page
-    
+
     conn = get_db()
-    
-    # Obtener eventos filtrados
+
+    # Obtener eventos filtrados (CA1-CA5: los filtros se combinan con AND en get_events)
     eventos_list = get_events(
-        conn, 
-        usuario_id=usuario_id, 
-        tipo_accion=tipo_accion, 
+        conn,
+        usuario_id=usuario_id,
+        fecha_inicio=fecha_inicio_query,
+        fecha_fin=fecha_fin_query,
+        tipo_accion=tipo_accion,
+        dataset_nombre=dataset_nombre,
         nivel_alerta=nivel_alerta
     )
-    
+
     # Invertir para ver lo más reciente primero si no se filtró por fecha
     eventos_list = list(reversed(eventos_list))
-    
+
     total = len(eventos_list)
     paginated_eventos = eventos_list[offset : offset + per_page]
-    
+
     conn.close()
-    
+
     total_pages = (total + per_page - 1) // per_page
-    
+
     return render_template(
         'dashboard/eventos.html',
         nombre=session.get('nombre', 'Usuario'),
@@ -340,7 +356,10 @@ def eventos():
         filtros={
             'usuario_id': usuario_id,
             'tipo_accion': tipo_accion,
-            'nivel_alerta': nivel_alerta
+            'nivel_alerta': nivel_alerta,
+            'dataset_nombre': dataset_nombre,
+            'fecha_inicio': fecha_inicio,
+            'fecha_fin': fecha_fin,
         }
     )
 
