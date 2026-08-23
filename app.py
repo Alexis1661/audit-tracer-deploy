@@ -412,7 +412,7 @@ def eventos():
 
     conn = get_db()
 
-    # Obtener eventos filtrados (CA1-CA5: los filtros se combinan con AND en get_events)
+    # Obtener eventos filtrados en orden cronológico descendente (HU-4.1 CA1-CA4)
     eventos_list = get_events(
         conn,
         usuario_id=usuario_id,
@@ -420,11 +420,9 @@ def eventos():
         fecha_fin=fecha_fin_query,
         tipo_accion=tipo_accion,
         dataset_nombre=dataset_nombre,
-        nivel_alerta=nivel_alerta
+        nivel_alerta=nivel_alerta,
+        orden_desc=True
     )
-
-    # Invertir para ver lo más reciente primero si no se filtró por fecha
-    eventos_list = list(reversed(eventos_list))
 
     total = len(eventos_list)
     paginated_eventos = eventos_list[offset : offset + per_page]
