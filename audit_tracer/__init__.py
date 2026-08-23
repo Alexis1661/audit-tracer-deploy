@@ -1,5 +1,5 @@
 # Package initialization
-from .session_tracker import init_tracker
+from .session_tracker import init_tracker, login, logout
 from .data_capture import activate as _activate_data_capture
 
 # Inicializar rastreo de sesión automático para scripts y Jupyter
