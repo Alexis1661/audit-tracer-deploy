@@ -54,6 +54,25 @@
         padding: 4px 8px;
         border-radius: 4px;
     }
+
+    /* HU-2.4: resaltado visual de intentos fallidos de acceso */
+    .audit-table tr.fila-acceso-fallido {
+        background: #FFF5F5;
+        border-left: 3px solid #DC2626;
+    }
+    .audit-table tr.fila-acceso-fallido:hover { background: #FEE2E2; }
+    .audit-table tr.fila-acceso-fallido td:first-child { padding-left: 13px; } /* compensa el border-left */
+    .motivo-fallo-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #B91C1C;
+        background: #FEE2E2;
+        border: 1px solid #FECACA;
+        padding: 2px 8px;
+        border-radius: 5px;
+        margin-top: 4px;
+    }
 </style>
 {% endblock %}
 
@@ -210,6 +229,7 @@
                 </thead>
                 <tbody>
                     {% for evento in eventos %}
+                    {# HU-2.4: clase especial para intentos fallidos de acceso #}
                     <tr{% if evento.tipo_accion == 'ACCESO_FALLIDO' %} class="fila-acceso-fallido"{% endif %}>
                         <td><span style="font-family: monospace; font-weight: 700; color: var(--clr-text-muted);">#{{ evento.event_id }}</span></td>
                         <td>{{ evento.timestamp.split('.')[0].replace('T', ' ') }}</td>
@@ -217,6 +237,7 @@
                         <td>{{ evento.tipo_accion }}</td>
                         <td>
                             {% if evento.tipo_accion == 'ACCESO_FALLIDO' %}
+                            {# HU-2.4 CA2: mostrar dataset_nombre y motivo_fallo #}
                             <div style="display: flex; flex-direction: column; gap: 4px;">
                                 <span style="font-weight: 600;">{{ evento.dataset_nombre or '—' }}</span>
                                 {% if evento.motivo_fallo %}
