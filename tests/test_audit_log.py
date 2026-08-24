@@ -11,6 +11,10 @@ from audit_tracer.models.audit_log import (
     get_critical_events,
     contar_intentos_fallidos_recientes,
     export_critical_events_to_csv,
+    generate_report,
+    export_report_to_csv,
+    REPORT_CSV_COLUMNS,
+    NO_RESULTS_MESSAGE,
 )
 from audit_tracer.utils.hashing import hash_event
 from datetime import datetime
@@ -420,3 +424,211 @@ class TestAsociacionUsuarioEvento:
         eventos = get_events(db_conn, usuario_id='usuario123')
         assert len(eventos) == 1
         assert eventos[0]['usuario_id'] == 'usuario123'
+
+
+# ──────────────────────────────────────────────────────────────
+# HU-4.5 — Reportes de auditoría por fechas y usuario + exportación CSV
+# ──────────────────────────────────────────────────────────────
+
+class TestGenerateReport:
+    """
+    CA1: filtros individuales y combinados (usuario_id, fechas, tipo_accion, dataset_nombre).
+    CA2: columnas del reporte y orden cronológico ascendente.
+    CA3: exportación a CSV con cabecera estandarizada.
+    CA4: mensaje exacto cuando no hay resultados, sin errores ni CSV corrupto.
+    """
+
+    @pytest.fixture
+    def eventos_reporte(self, db_conn):
+        """Eventos con distintos usuarios, fechas, tipo_accion y dataset."""
+        insert_event(db_conn, {
+            'usuario_id': 'usuario123', 'sesion_id': 's1', 'tipo_accion': 'CARGA',
+            'dataset_nombre': 'PATIENTS.csv', 'columnas_afectadas': '["id","edad"]',
+            'timestamp': '2026-01-01T08:00:00', 'nivel_alerta': 'NORMAL',
+        })
+        insert_event(db_conn, {
+            'usuario_id': 'usuario123', 'sesion_id': 's1', 'tipo_accion': 'EXPORTACION',
+            'dataset_nombre': 'PATIENTS.csv', 'columnas_afectadas': 'nombre,apellido,diagnostico',
+            'timestamp': '2026-01-05T08:00:00', 'nivel_alerta': 'NORMAL',
+        })
+        insert_event(db_conn, {
+            'usuario_id': 'usuario456', 'sesion_id': 's2', 'tipo_accion': 'EXPORTACION',
+            'dataset_nombre': 'admissions.xlsx', 'columnas_afectadas': '["diagnosis"]',
+            'timestamp': '2026-01-10T08:00:00', 'nivel_alerta': 'CRITICO',
+        })
+        insert_event(db_conn, {
+            'usuario_id': 'usuario456', 'sesion_id': 's2', 'tipo_accion': 'CONSULTA',
+            'dataset_nombre': 'admissions.xlsx', 'columnas_afectadas': '["age"]',
+            'timestamp': '2026-01-15T08:00:00', 'nivel_alerta': 'NORMAL',
+        })
+        insert_event(db_conn, {
+            'usuario_id': 'usuario789', 'sesion_id': 's3', 'tipo_accion': 'CARGA',
+            'dataset_nombre': 'pacientes.csv', 'columnas_afectadas': '["subject_id"]',
+            'timestamp': '2026-01-08T08:00:00', 'nivel_alerta': 'NORMAL',
+        })
+        return db_conn
+
+    # ── Test 1: filtrado por usuario ────────────────────────────
+    def test_filtrado_por_usuario(self, eventos_reporte):
+        reporte = generate_report(eventos_reporte, usuario_id='usuario123')
+        assert len(reporte) == 2
+        assert all(e['usuario_id'] == 'usuario123' for e in reporte)
+
+    # ── Test 2: filtrado por rango de fechas ────────────────────
+    def test_filtrado_por_rango_de_fechas(self, eventos_reporte):
+        reporte = generate_report(
+            eventos_reporte,
+            fecha_inicio='2026-01-04T00:00:00',
+            fecha_fin='2026-01-09T23:59:59',
+        )
+        assert len(reporte) == 2
+        timestamps = {e['timestamp'] for e in reporte}
+        assert timestamps == {'2026-01-05T08:00:00', '2026-01-08T08:00:00'}
+
+    # ── Test 3: filtros combinados ───────────────────────────────
+    def test_filtros_combinados(self, eventos_reporte):
+        reporte = generate_report(
+            eventos_reporte,
+            usuario_id='usuario456',
+            fecha_inicio='2026-01-01T00:00:00',
+            fecha_fin='2026-01-12T00:00:00',
+            tipo_accion='EXPORTACION',
+        )
+        assert len(reporte) == 1
+        assert reporte[0]['usuario_id'] == 'usuario456'
+        assert reporte[0]['tipo_accion'] == 'EXPORTACION'
+        assert reporte[0]['timestamp'] == '2026-01-10T08:00:00'
+
+    # ── Test 4: filtrado por dataset ─────────────────────────────
+    def test_filtrado_por_dataset(self, eventos_reporte):
+        reporte = generate_report(eventos_reporte, dataset_nombre='pacientes.csv')
+        assert len(reporte) == 1
+        assert reporte[0]['dataset_nombre'] == 'pacientes.csv'
+        assert reporte[0]['usuario_id'] == 'usuario789'
+
+    # ── Test 5: sin resultados ───────────────────────────────────
+    def test_sin_resultados(self, eventos_reporte):
+        reporte = generate_report(eventos_reporte, usuario_id='usuario_inexistente')
+        assert reporte == []
+        assert NO_RESULTS_MESSAGE == "No se encontraron eventos para los filtros seleccionados."
+
+    def test_sin_resultados_no_lanza_excepcion_con_filtros_combinados(self, eventos_reporte):
+        """CA4: ninguna combinación de filtros sin coincidencias debe lanzar excepción."""
+        reporte = generate_report(
+            eventos_reporte,
+            usuario_id='usuario123',
+            tipo_accion='ACCESO_DENEGADO',
+            dataset_nombre='no_existe.csv',
+        )
+        assert reporte == []
+
+    # ── Test 6: orden cronológico ascendente ─────────────────────
+    def test_orden_cronologico_ascendente(self, db_conn):
+        """CA2: aunque se inserten desordenados, el reporte queda timestamp ASC."""
+        insert_event(db_conn, {
+            'usuario_id': 'u1', 'sesion_id': 's1', 'tipo_accion': 'CARGA',
+            'timestamp': '2026-03-01T10:00:00',
+        })
+        insert_event(db_conn, {
+            'usuario_id': 'u1', 'sesion_id': 's1', 'tipo_accion': 'CONSULTA',
+            'timestamp': '2026-01-01T10:00:00',
+        })
+        insert_event(db_conn, {
+            'usuario_id': 'u1', 'sesion_id': 's1', 'tipo_accion': 'EXPORTACION',
+            'timestamp': '2026-02-01T10:00:00',
+        })
+
+        reporte = generate_report(db_conn, usuario_id='u1')
+        timestamps = [e['timestamp'] for e in reporte]
+        assert timestamps == sorted(timestamps)
+        assert timestamps == ['2026-01-01T10:00:00', '2026-02-01T10:00:00', '2026-03-01T10:00:00']
+
+    # ── CA2: forma exacta de las columnas del reporte ─────────────
+    def test_columnas_del_reporte_son_exactamente_las_de_ca2(self, eventos_reporte):
+        reporte = generate_report(eventos_reporte, usuario_id='usuario123')
+        assert set(reporte[0].keys()) == set(REPORT_CSV_COLUMNS)
+        assert REPORT_CSV_COLUMNS == [
+            'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
+            'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+        ]
+
+
+class TestExportReportToCsv:
+    """CA3: exportación del reporte a CSV con cabecera estandarizada."""
+
+    @pytest.fixture
+    def eventos_reporte(self, db_conn):
+        insert_event(db_conn, {
+            'usuario_id': 'usuario123', 'sesion_id': 's1', 'tipo_accion': 'CARGA',
+            'dataset_nombre': 'PATIENTS.csv', 'columnas_afectadas': 'nombre,apellido,diagnostico',
+            'timestamp': '2026-01-01T08:00:00', 'nivel_alerta': 'NORMAL',
+        })
+        insert_event(db_conn, {
+            'usuario_id': 'usuario456', 'sesion_id': 's2', 'tipo_accion': 'EXPORTACION',
+            'dataset_nombre': 'admissions.xlsx', 'columnas_afectadas': '["diagnosis"]',
+            'timestamp': '2026-01-10T08:00:00', 'nivel_alerta': 'CRITICO',
+        })
+        return db_conn
+
+    # ── Test 7: CSV ───────────────────────────────────────────────
+    def test_csv_tiene_cabecera_correcta_y_siete_columnas(self, eventos_reporte, tmp_path):
+        dest = tmp_path / "reporte.csv"
+        total = export_report_to_csv(eventos_reporte, str(dest))
+        assert total == 2
+
+        with open(dest, newline='', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            header = next(reader)
+
+        assert header == [
+            'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
+            'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+        ]
+        assert len(header) == 7
+
+    def test_csv_respeta_orden_cronologico_y_solo_incluye_eventos_filtrados(self, eventos_reporte, tmp_path):
+        dest = tmp_path / "reporte_u123.csv"
+        total = export_report_to_csv(eventos_reporte, str(dest), usuario_id='usuario123')
+        assert total == 1
+
+        with open(dest, newline='', encoding='utf-8') as f:
+            rows = list(csv.DictReader(f))
+
+        assert len(rows) == 1
+        assert rows[0]['usuario_id'] == 'usuario123'
+
+    def test_csv_escapa_correctamente_valores_con_comas(self, eventos_reporte, tmp_path):
+        """columnas_afectadas='nombre,apellido,diagnostico' debe sobrevivir el round-trip como un solo campo."""
+        dest = tmp_path / "reporte_comas.csv"
+        export_report_to_csv(eventos_reporte, str(dest), usuario_id='usuario123')
+
+        with open(dest, newline='', encoding='utf-8') as f:
+            rows = list(csv.DictReader(f))
+
+        assert len(rows) == 1
+        assert rows[0]['columnas_afectadas'] == 'nombre,apellido,diagnostico'
+
+    def test_csv_sin_resultados_tiene_solo_cabecera_sin_error(self, eventos_reporte, tmp_path):
+        """CA4: filtros sin coincidencias -> CSV válido con únicamente la cabecera, sin excepción."""
+        dest = tmp_path / "reporte_vacio.csv"
+        total = export_report_to_csv(eventos_reporte, str(dest), usuario_id='usuario_inexistente')
+        assert total == 0
+
+        with open(dest, newline='', encoding='utf-8') as f:
+            rows = list(csv.reader(f))
+
+        assert len(rows) == 1  # solo la cabecera
+        assert rows[0] == [
+            'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
+            'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+        ]
+
+    def test_csv_exporta_a_buffer_en_memoria(self, eventos_reporte):
+        """Soporta un objeto file-like, igual que export_critical_events_to_csv (patrón reutilizado)."""
+        buffer = io.StringIO()
+        total = export_report_to_csv(eventos_reporte, buffer)
+        assert total == 2
+
+        buffer.seek(0)
+        rows = list(csv.DictReader(buffer))
+        assert len(rows) == 2

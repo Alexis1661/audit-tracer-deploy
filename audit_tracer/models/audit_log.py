@@ -270,5 +270,96 @@ def verify_integrity(conn: sqlite3.Connection) -> List[Dict]:
                 'stored_hash': stored_hash,
                 'calculated_hash': calculated_hash
             })
-            
+
     return corrupted_records
+
+
+# ──────────────────────────────────────────────────────────────
+# HU-4.5 — Reportes de auditoría por fechas y usuario, exportación CSV
+# ──────────────────────────────────────────────────────────────
+
+# CA2/CA3 — Columnas exactas del reporte de auditoría (display y CSV).
+REPORT_CSV_COLUMNS = [
+    'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
+    'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+]
+
+# CA4 — Mensaje exacto cuando los filtros no producen eventos. Única fuente
+# de verdad: la vista lo reutiliza en lugar de duplicar el texto literal.
+NO_RESULTS_MESSAGE = "No se encontraron eventos para los filtros seleccionados."
+
+
+def generate_report(
+    conn: sqlite3.Connection,
+    usuario_id: str = None,
+    fecha_inicio: str = None,
+    fecha_fin: str = None,
+    tipo_accion: str = None,
+    dataset_nombre: str = None,
+) -> List[Dict]:
+    """
+    CA1 — Genera el reporte de auditoría filtrando por usuario_id, rango de
+    fechas, tipo_accion y dataset_nombre, de forma individual o combinada
+    (delega en get_events(), que ya soporta estos filtros combinados con AND).
+
+    CA2 — Cada evento se reduce a las columnas REPORT_CSV_COLUMNS, en orden
+    cronológico ascendente (get_events() ya ordena por timestamp ASC).
+
+    Returns:
+        List[Dict]: Eventos del reporte, o [] si ningún evento cumple los
+        filtros (CA4: no se lanza excepción, la lista vacía es el resultado).
+    """
+    eventos = get_events(
+        conn,
+        usuario_id=usuario_id,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        tipo_accion=tipo_accion,
+        dataset_nombre=dataset_nombre,
+    )
+    return [{col: evento.get(col) for col in REPORT_CSV_COLUMNS} for evento in eventos]
+
+
+def export_report_to_csv(
+    conn: sqlite3.Connection,
+    dest,
+    usuario_id: str = None,
+    fecha_inicio: str = None,
+    fecha_fin: str = None,
+    tipo_accion: str = None,
+    dataset_nombre: str = None,
+) -> int:
+    """
+    CA3 — Exporta a CSV el reporte de generate_report(), con la cabecera
+    estandarizada REPORT_CSV_COLUMNS. Si no hay eventos, escribe igualmente
+    un CSV válido con solo la cabecera (CA4: nunca un CSV corrupto).
+
+    Args:
+        dest: ruta de archivo (str/os.PathLike) o un objeto file-like ya
+              abierto en modo texto (p. ej. io.StringIO para descargas HTTP).
+
+    Returns:
+        int: Número de eventos exportados.
+    """
+    eventos = generate_report(
+        conn,
+        usuario_id=usuario_id,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        tipo_accion=tipo_accion,
+        dataset_nombre=dataset_nombre,
+    )
+
+    def _write(f):
+        writer = csv.DictWriter(f, fieldnames=REPORT_CSV_COLUMNS)
+        writer.writeheader()
+        for evento in eventos:
+            writer.writerow(evento)
+
+    if isinstance(dest, (str, os.PathLike)):
+        with open(dest, "w", newline="", encoding="utf-8") as f:
+            _write(f)
+    else:
+        _write(dest)
+
+    return len(eventos)
