@@ -306,6 +306,15 @@ def dashboard():
     filas_exportadas_total = sum(e['filas_exportadas'] or 0 for e in export_events)
     exportaciones_criticas = len([e for e in export_events if e['nivel_alerta'] == 'CRITICO'])
 
+    # Intentos fallidos de acceso — HU-2.4 (CA3: accesos fallidos del día)
+    accesos_fallidos_hoy = len([
+        e for e in events_today if e['tipo_accion'] == 'ACCESO_FALLIDO'
+    ])
+    accesos_fallidos_criticos_hoy = len([
+        e for e in events_today
+        if e['tipo_accion'] == 'ACCESO_FALLIDO' and e['nivel_alerta'] == 'CRITICO'
+    ])
+
     # Distribución de eventos por tipo de acción (HU-4.2/4.4)
     top_tipos = Counter(e['tipo_accion'] for e in all_events).most_common(6)
     max_tipo_count = top_tipos[0][1] if top_tipos else 1
@@ -341,6 +350,8 @@ def dashboard():
         total_exportaciones=total_exportaciones,
         filas_exportadas_total=filas_exportadas_total,
         exportaciones_criticas=exportaciones_criticas,
+        accesos_fallidos_hoy=accesos_fallidos_hoy,                    # HU-2.4
+        accesos_fallidos_criticos_hoy=accesos_fallidos_criticos_hoy,  # HU-2.4
         eventos_por_tipo=eventos_por_tipo,
         alertas_por_nivel=alertas_por_nivel,
         criticos_por_causa=criticos_por_causa,
