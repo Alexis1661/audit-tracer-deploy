@@ -225,13 +225,18 @@
                         <th>Detalle</th>
                         <th>Estado</th>
                         <th>Hash de Integridad</th>
+                        <th>Acción</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for evento in eventos %}
                     {# HU-2.4: clase especial para intentos fallidos de acceso #}
                     <tr{% if evento.tipo_accion == 'ACCESO_FALLIDO' %} class="fila-acceso-fallido"{% endif %}>
-                        <td><span style="font-family: monospace; font-weight: 700; color: var(--clr-text-muted);">#{{ evento.event_id }}</span></td>
+                        <td>
+                            <a href="{{ url_for('detalle_evento', event_id=evento.event_id) }}" style="font-family: monospace; font-weight: 700; color: var(--clr-accent-blue); text-decoration: none;" title="Ver detalle del evento #{{ evento.event_id }}">
+                                #{{ evento.event_id }}
+                            </a>
+                        </td>
                         <td>{{ evento.timestamp.split('.')[0].replace('T', ' ') }}</td>
                         <td><span style="font-weight: 700;">{{ evento.usuario_id[:8] if evento.usuario_id else 'DESCONOCIDO' }}...</span></td>
                         <td>{{ evento.tipo_accion }}</td>
@@ -266,10 +271,15 @@
                             {% endif %}
                         </td>
                         <td><span class="hash-code">{{ evento.hash_integridad[:16] }}...</span></td>
+                        <td>
+                            <a href="{{ url_for('detalle_evento', event_id=evento.event_id) }}" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px; font-weight: 700;">
+                                Ver
+                            </a>
+                        </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" style="text-align: center; padding: 60px; color: var(--clr-text-muted);">
+                        <td colspan="8" style="text-align: center; padding: 60px; color: var(--clr-text-muted);">
                             No se encontraron registros de auditoría.
                         </td>
                     </tr>

@@ -109,6 +109,25 @@ def get_events(
     return [dict(row) for row in rows]
 
 
+def get_event_by_id(conn: sqlite3.Connection, event_id: int) -> Optional[Dict]:
+    """
+    HU-4.3 — Retrieves details for a specific event by its event_id (CA1-CA4).
+
+    Args:
+        conn (sqlite3.Connection): Database connection.
+        event_id (int): Unique identifier of the event.
+
+    Returns:
+        Optional[Dict]: Event dictionary containing all fields, or None if not found.
+    """
+    query = "SELECT * FROM audit_log WHERE event_id = ?"
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(query, (event_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+
 # ──────────────────────────────────────────────────────────────
 # HU-4.4 — Identificación de eventos críticos
 # ──────────────────────────────────────────────────────────────
