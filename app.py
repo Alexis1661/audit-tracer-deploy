@@ -17,6 +17,7 @@ from audit_tracer.models.usuarios import get_all_users, get_user_by_id
 from audit_tracer.utils.session import generate_session_id
 from audit_tracer.models.audit_log import (
     get_events,
+    get_event_by_id,
     verify_integrity,
     insert_event,
     get_critical_events,
@@ -457,6 +458,30 @@ def eventos():
             'fecha_inicio': fecha_inicio,
             'fecha_fin': fecha_fin,
         }
+    )
+
+
+@app.route('/eventos/<int:event_id>')
+@login_required
+@modulo_required('consulta_reportes')  # HU-1.4
+def detalle_evento(event_id):
+    """
+    HU-4.3 — Visualización de detalle de evento (CA1-CA4).
+    Muestra todos los datos asociados a un evento específico por su event_id.
+    """
+    conn = get_db()
+    evento = get_event_by_id(conn, event_id)
+    conn.close()
+
+    if not evento:
+        flash(f'Evento #{event_id} no encontrado.', 'error')
+        return redirect(url_for('eventos'))
+
+    return render_template(
+        'dashboard/detalle_evento.html',
+        nombre=session.get('nombre', 'Usuario'),
+        rol=session.get('rol', 'N/A'),
+        evento=evento,
     )
 
 
