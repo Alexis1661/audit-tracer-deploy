@@ -332,3 +332,91 @@ class TestExportCriticalEventsToCsv:
         with open(dest, newline='', encoding='utf-8') as f:
             rows = list(csv.DictReader(f))
         assert rows == []
+
+
+# ──────────────────────────────────────────────────────────────
+# HU-2.5 — Asociar cada evento a un usuario único identificable
+# ──────────────────────────────────────────────────────────────
+
+class TestAsociacionUsuarioEvento:
+    """
+    CA1: cada evento queda asociado a un usuario_id.
+    CA2: usuario no identificado -> usuario_id=DESCONOCIDO, nivel_alerta=CRITICO,
+         y el evento se registra igualmente (no se pierde).
+    CA3: eventos de una misma sesión comparten sesion_id.
+    """
+
+    # ── CA1: usuario autenticado ────────────────────────────────
+    def test_usuario_autenticado_queda_asociado_al_evento(self, db_conn):
+        """Caso 1 del DoD: usuario123/sesion456 -> se persisten tal cual, sin alerta."""
+        event_id = insert_event(db_conn, {
+            'usuario_id': 'usuario123', 'sesion_id': 'sesion456', 'tipo_accion': 'CARGA',
+        })
+        eventos = get_events(db_conn, usuario_id='usuario123')
+        assert len(eventos) == 1
+        assert eventos[0]['event_id'] == event_id
+        assert eventos[0]['usuario_id'] == 'usuario123'
+        assert eventos[0]['sesion_id'] == 'sesion456'
+        assert eventos[0]['nivel_alerta'] != 'CRITICO'
+
+    # ── CA2: usuario no identificado ────────────────────────────
+    def test_usuario_no_identificado_se_marca_desconocido_y_critico(self, db_conn):
+        """Caso 2 del DoD: sin usuario -> DESCONOCIDO + CRITICO, evento sí se guarda."""
+        event_id = insert_event(db_conn, {
+            'sesion_id': 'sesion789', 'tipo_accion': 'CONSULTA',
+        })
+        eventos = get_events(db_conn, usuario_id='DESCONOCIDO')
+        assert len(eventos) == 1
+        assert eventos[0]['event_id'] == event_id
+        assert eventos[0]['usuario_id'] == 'DESCONOCIDO'
+        assert eventos[0]['nivel_alerta'] == 'CRITICO'
+        assert eventos[0]['motivo_alerta']
+
+    def test_evento_sin_usuario_ni_sesion_no_se_pierde(self, db_conn):
+        """CA2: falta total de usuario_id/sesion_id -> igual se persiste (no NOT NULL error)."""
+        event_id = insert_event(db_conn, {'tipo_accion': 'ACCESO_FALLIDO'})
+        eventos = get_events(db_conn)
+        assert any(e['event_id'] == event_id for e in eventos)
+        evento = next(e for e in eventos if e['event_id'] == event_id)
+        assert evento['usuario_id'] == 'DESCONOCIDO'
+        assert evento['sesion_id'] == 'SIN_SESION'
+        assert evento['nivel_alerta'] == 'CRITICO'
+
+    def test_usuario_desconocido_explicito_tambien_se_fuerza_a_critico(self, db_conn):
+        """Aun si el llamador manda nivel_alerta=NORMAL, DESCONOCIDO se reclasifica a CRITICO."""
+        insert_event(db_conn, {
+            'usuario_id': 'DESCONOCIDO', 'sesion_id': 's1', 'tipo_accion': 'ACCESO_FALLIDO',
+            'nivel_alerta': 'NORMAL',
+        })
+        eventos = get_events(db_conn, usuario_id='DESCONOCIDO')
+        assert eventos[0]['nivel_alerta'] == 'CRITICO'
+
+    def test_motivo_alerta_explicito_se_respeta_para_desconocido(self, db_conn):
+        """Si el llamador ya definió un motivo_alerta específico, no se sobreescribe."""
+        insert_event(db_conn, {
+            'sesion_id': 's1', 'tipo_accion': 'ACCESO_FALLIDO',
+            'motivo_alerta': 'Motivo específico del llamador',
+        })
+        eventos = get_events(db_conn, usuario_id='DESCONOCIDO')
+        assert eventos[0]['motivo_alerta'] == 'Motivo específico del llamador'
+
+    # ── CA3: consistencia usuario_id + sesion_id ────────────────
+    def test_multiples_eventos_misma_sesion_comparten_sesion_id(self, db_conn):
+        """Caso 3 del DoD: varios eventos del mismo usuario en una sesión -> mismo sesion_id."""
+        insert_event(db_conn, {'usuario_id': 'usuario123', 'sesion_id': 'sesion456', 'tipo_accion': 'CARGA'})
+        insert_event(db_conn, {'usuario_id': 'usuario123', 'sesion_id': 'sesion456', 'tipo_accion': 'CONSULTA'})
+        insert_event(db_conn, {'usuario_id': 'usuario123', 'sesion_id': 'sesion456', 'tipo_accion': 'EXPORTACION'})
+
+        eventos = get_events(db_conn, usuario_id='usuario123')
+        assert len(eventos) == 3
+        sesion_ids = {e['sesion_id'] for e in eventos}
+        assert sesion_ids == {'sesion456'}
+
+    # ── CA5: consulta/filtrado por usuario_id ───────────────────
+    def test_ca5_filtro_por_usuario_id_no_devuelve_eventos_de_otros_usuarios(self, db_conn):
+        insert_event(db_conn, {'usuario_id': 'usuario123', 'sesion_id': 's1', 'tipo_accion': 'CARGA'})
+        insert_event(db_conn, {'usuario_id': 'otro_usuario', 'sesion_id': 's2', 'tipo_accion': 'CARGA'})
+
+        eventos = get_events(db_conn, usuario_id='usuario123')
+        assert len(eventos) == 1
+        assert eventos[0]['usuario_id'] == 'usuario123'

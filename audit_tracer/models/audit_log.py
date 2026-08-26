@@ -11,6 +11,10 @@ def insert_event(conn: sqlite3.Connection, event: Dict) -> int:
     Calculates the integrity hash before insertion.
     Never allows updates or deletes.
 
+    HU-2.5 CA1/CA2/CA3: normaliza usuario_id/sesion_id para que el evento
+    nunca se pierda por falta de identificación, y clasifica como CRITICO
+    todo evento cuyo usuario_id sea DESCONOCIDO.
+
     Args:
         conn (sqlite3.Connection): Database connection.
         event (Dict): Event data dictionary.
@@ -21,7 +25,18 @@ def insert_event(conn: sqlite3.Connection, event: Dict) -> int:
     # Ensure timestamp is set if not provided
     if 'timestamp' not in event:
         event['timestamp'] = datetime.utcnow().isoformat()
-    
+
+    # HU-2.5 CA2/CA3: garantizar usuario_id y sesion_id siempre presentes,
+    # para que ningún evento se pierda por violar el NOT NULL del schema.
+    event['usuario_id'] = event.get('usuario_id') or 'DESCONOCIDO'
+    event['sesion_id'] = event.get('sesion_id') or 'SIN_SESION'
+
+    # HU-2.5 CA2: usuario no identificado siempre se marca como CRITICO.
+    if event['usuario_id'] == 'DESCONOCIDO':
+        event['nivel_alerta'] = 'CRITICO'
+        if not event.get('motivo_alerta'):
+            event['motivo_alerta'] = 'Operación ejecutada por usuario no identificado'
+
     columns = [
         'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion',
         'dataset_nombre', 'columnas_afectadas', 'ruta_destino',

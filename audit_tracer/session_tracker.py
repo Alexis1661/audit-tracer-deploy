@@ -2,8 +2,9 @@ import atexit
 import os
 import signal
 from datetime import datetime
+from typing import Dict
 from .db import get_connection
-from .auth.autenticacion import logout
+from .auth.autenticacion import login as _auth_login, logout as _auth_logout
 from .models.audit_log import insert_event
 from .utils.session import generate_session_id, get_hostname, detect_environment
 
@@ -13,7 +14,10 @@ class SessionTracker:
     def __init__(self):
         self.sesion_id = generate_session_id()
         self.start_time = datetime.utcnow()
-        self.usuario_id = os.environ.get('AUDIT_TRACER_USER', 'SISTEMA_LOCAL')
+        # HU-2.5 CA4: usuario_id solo se establece tras un login() válido
+        # contra el mismo mecanismo de autenticación que usa la app web.
+        # Hasta entonces el usuario es DESCONOCIDO (CA2).
+        self.usuario_id = 'DESCONOCIDO'
         self.conn = None
         self._active = False
         
@@ -56,6 +60,54 @@ class SessionTracker:
             # pero notificamos por consola
             print(f"Audit Tracer Error: No se pudo iniciar la sesión de auditoría: {e}")
 
+    def login(self, email: str, password: str) -> Dict:
+        """
+        HU-2.5 CA4 — Autentica al usuario activo del modo librería reutilizando
+        el mismo mecanismo de autenticación que la app web (auth.autenticacion.login),
+        sin generar una sesion_id nueva: se conserva self.sesion_id (CA3).
+
+        En éxito, self.usuario_id pasa a ser el usuario autenticado y los
+        eventos posteriores (CARGA, CONSULTA, EXPORTACION, ...) quedan
+        correctamente atribuidos. En fallo, self.usuario_id no se modifica
+        (permanece DESCONOCIDO si no había login previo).
+
+        Args:
+            email (str): Email del usuario.
+            password (str): Contraseña del usuario.
+
+        Returns:
+            Dict: Resultado de auth.autenticacion.login (success, message, ...).
+        """
+        conn = self.conn or get_connection()
+        try:
+            result = _auth_login(conn, email, password, self.sesion_id)
+        finally:
+            if conn is not self.conn:
+                conn.close()
+
+        if result.get('success'):
+            self.usuario_id = result['usuario_id']
+
+        return result
+
+    def logout(self) -> None:
+        """
+        HU-2.5 CA4 — Cierra la identificación del usuario activo (registra
+        CIERRE_SESION vía auth.autenticacion.logout) y vuelve a DESCONOCIDO,
+        para que cualquier operación posterior no se atribuya erróneamente
+        al usuario anterior.
+        """
+        if self.usuario_id == 'DESCONOCIDO':
+            return
+
+        conn = self.conn or get_connection()
+        try:
+            _auth_logout(conn, self.usuario_id, self.sesion_id, self.start_time.isoformat())
+        finally:
+            if conn is not self.conn:
+                conn.close()
+            self.usuario_id = 'DESCONOCIDO'
+
     def end_session(self, abrupt=False):
         """Finaliza el registro de la sesión."""
         if not self._active:
@@ -83,3 +135,16 @@ def init_tracker():
     """Inicializa el tracker global."""
     tracker = SessionTracker.get_instance()
     tracker.start_session()
+
+
+def login(email: str, password: str) -> Dict:
+    """
+    HU-2.5 CA4 — API pública de modo librería: autentica al usuario activo
+    contra el mismo mecanismo usado por la app web. Ver SessionTracker.login().
+    """
+    return SessionTracker.get_instance().login(email, password)
+
+
+def logout() -> None:
+    """HU-2.5 CA4 — API pública de modo librería. Ver SessionTracker.logout()."""
+    SessionTracker.get_instance().logout()

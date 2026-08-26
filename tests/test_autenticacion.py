@@ -98,3 +98,21 @@ def test_intentos_fallidos_en_ventana_de_tiempo_genera_critico(db_conn):
     events = get_events(db_conn, nivel_alerta='CRITICO', usuario_id=user_id)
     assert len(events) == 1
     assert "intentos fallidos en menos de" in events[0]['motivo_alerta']
+
+
+# ──────────────────────────────────────────────────────────────
+# HU-2.5 CA2 — Login con email no registrado (usuario no identificable)
+# ──────────────────────────────────────────────────────────────
+
+def test_login_email_no_registrado_se_marca_desconocido_y_critico(db_conn):
+    """CA2: email inexistente -> no hay usuario que autenticar, se registra
+    DESCONOCIDO con nivel_alerta=CRITICO, y el evento no se pierde."""
+    result = login(db_conn, "no_existe@test.com", "cualquiera", "sesion_x")
+
+    assert result['success'] is False
+    assert result['message'] == 'Credenciales inválidas'
+
+    events = get_events(db_conn, usuario_id='DESCONOCIDO', tipo_accion='ACCESO_FALLIDO')
+    assert len(events) == 1
+    assert events[0]['sesion_id'] == 'sesion_x'
+    assert events[0]['nivel_alerta'] == 'CRITICO'
