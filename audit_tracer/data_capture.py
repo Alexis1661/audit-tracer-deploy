@@ -2,14 +2,16 @@
 audit_tracer/data_capture.py
 ============================
 HU-2.1 — Registrar eventos de acceso a datos clínicos
+HU-2.4 — Registrar intentos fallidos de acceso a datos clínicos
 
 Intercepta automáticamente operaciones de carga y consulta sobre
 DataFrames de pandas, generando registros en audit_log sin intervención
 manual del usuario.
 
 Operaciones interceptadas:
-  CARGA    → pd.read_csv(), pd.read_excel()
-  CONSULTA → df[columna/s], df.query()
+  CARGA          → pd.read_csv(), pd.read_excel()
+  CONSULTA       → df[columna/s], df.query()
+  ACCESO_FALLIDO → FileNotFoundError, PermissionError, OSError, IsADirectoryError
 
 Normas: HIPAA §164.312(b) · Ley 1581/2012 · ISO/IEC 27001
 """
@@ -26,7 +28,8 @@ import pandas as pd
 from .db import get_connection
 from .models.audit_log import insert_event
 from .utils.session import detect_environment, get_hostname
-from .utils.horario import es_horario_laboral, HORA_INICIO_LABORAL, HORA_FIN_LABORAL
+from .failed_access import log_failed_access, ACCESS_FAILURE_EXCEPTIONS   # HU-2.4
+from .utils.horario import es_horario_laboral, HORA_INICIO_LABORAL, HORA_FIN_LABORAL  # HU-4.4
 
 
 # ──────────────────────────────────────────────────────────────
@@ -168,13 +171,19 @@ def _log_event(
 def _audited_read_csv(filepath_or_buffer=None, *args, **kwargs) -> pd.DataFrame:
     """
     Reemplazo auditado de pd.read_csv().
-    Registra tipo_accion = 'CARGA' antes de devolver el DataFrame.
+    Registra tipo_accion = 'CARGA' en caso de éxito.
+    Registra tipo_accion = 'ACCESO_FALLIDO' si ocurre un error de acceso (HU-2.4).
     """
     dataset_nombre = _resolve_dataset_nombre(
         filepath_or_buffer, default="buffer_csv"
     )
 
-    df = _original_read_csv(filepath_or_buffer, *args, **kwargs)
+    try:
+        df = _original_read_csv(filepath_or_buffer, *args, **kwargs)
+    except ACCESS_FAILURE_EXCEPTIONS as exc:
+        # HU-2.4 CA1: registrar fallo y relanzar la excepción
+        log_failed_access(dataset_nombre=dataset_nombre, exc=exc)
+        raise
 
     _log_event(
         tipo_accion="CARGA",
@@ -187,11 +196,17 @@ def _audited_read_csv(filepath_or_buffer=None, *args, **kwargs) -> pd.DataFrame:
 def _audited_read_excel(io=None, *args, **kwargs) -> pd.DataFrame:
     """
     Reemplazo auditado de pd.read_excel().
-    Registra tipo_accion = 'CARGA' antes de devolver el DataFrame.
+    Registra tipo_accion = 'CARGA' en caso de éxito.
+    Registra tipo_accion = 'ACCESO_FALLIDO' si ocurre un error de acceso (HU-2.4).
     """
     dataset_nombre = _resolve_dataset_nombre(io, default="buffer_excel")
 
-    df = _original_read_excel(io, *args, **kwargs)
+    try:
+        df = _original_read_excel(io, *args, **kwargs)
+    except ACCESS_FAILURE_EXCEPTIONS as exc:
+        # HU-2.4 CA1: registrar fallo y relanzar la excepción
+        log_failed_access(dataset_nombre=dataset_nombre, exc=exc)
+        raise
 
     _log_event(
         tipo_accion="CARGA",

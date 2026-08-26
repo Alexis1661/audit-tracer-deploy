@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Detalle de Evento #{{ evento.event_id }} — Audit Tracer{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+    .detail-card {
+        background: white;
+        border-radius: 20px;
+        border: 1px solid var(--clr-border);
+        box-shadow: var(--shadow-sm);
+        padding: 32px;
+        margin-bottom: 24px;
+    }
+    
+    .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 24px;
+    }
+
+    .detail-item {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .detail-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--clr-text-muted);
+    }
+
+    .detail-value {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--clr-text-main);
+        word-break: break-word;
+    }
+
+    .detail-value--code {
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        font-size: 13px;
+        background: #F5F5F7;
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--clr-border);
+    }
+
+    .badge {
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        display: inline-block;
+        width: fit-content;
+    }
+    .badge-normal { background: #F5F5F7; color: var(--clr-text-muted); }
+    .badge-advertencia { background: #FFF9E6; color: #D97706; }
+    .badge-critico { background: #FEF2F2; color: #DC2626; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-layout">
+    
+    {# ── SIDEBAR ── #}
+    <aside class="sidebar">
+        <a href="{{ url_for('landing') }}" class="sidebar__brand">
+            <div class="sidebar__brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            </div>
+            Audit Tracer
+        </a>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Principal</div>
+            <a href="{{ url_for('dashboard') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                Dashboard
+            </a>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Auditoría</div>
+            <a href="{{ url_for('eventos') }}" class="nav-item active">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                Eventos
+            </a>
+            <a href="{{ url_for('reportes') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                Reportes
+            </a>
+        </div>
+
+        {% if session.get('rol') == 'ADMIN' %}
+        <div class="nav-section">
+            <div class="nav-section__title">Administración</div>
+            <a href="{{ url_for('lista_usuarios') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                Usuarios
+            </a>
+        </div>
+        {% endif %}
+
+        <div class="sidebar__footer">
+            <div class="user-profile">
+                <div class="user-avatar">{{ session.get('nombre', 'U')[0] | upper }}</div>
+                <div style="flex: 1;">
+                    <div style="font-size: 13px; font-weight: 700;">{{ session.get('nombre', 'Usuario') }}</div>
+                    <div style="font-size: 11px; color: var(--clr-text-muted);">{{ session.get('rol', 'Personal') }}</div>
+                </div>
+            </div>
+            <a href="{{ url_for('logout') }}" class="logout-link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                Cerrar sesión
+            </a>
+        </div>
+    </aside>
+
+    {# ── MAIN CONTENT ── #}
+    <main class="main-content">
+        <header class="header" style="margin-bottom: 24px;">
+            <div class="header__title">
+                <a href="{{ url_for('eventos') }}" class="btn btn-outline" style="margin-bottom: 16px; width: fit-content;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                    Volver a Eventos
+                </a>
+                <h1>Detalle del Evento #{{ evento.event_id }}</h1>
+                <p>Información completa y trazabilidad almacenada en audit_log (HU-4.3).</p>
+            </div>
+            <div>
+                <span class="badge badge-{{ evento.nivel_alerta | lower }}">{{ evento.nivel_alerta or 'NORMAL' }}</span>
+            </div>
+        </header>
+
+        {# ── SECCIÓN 1: INFORMACIÓN PRINCIPAL ── #}
+        <div class="detail-card">
+            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">1. Información General del Evento</h3>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <span class="detail-label">ID Evento (event_id)</span>
+                    <span class="detail-value">#{{ evento.event_id }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Tipo de Acción</span>
+                    <span class="detail-value" style="color: var(--clr-accent-blue);">{{ evento.tipo_accion }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Fecha y Hora (Timestamp)</span>
+                    <span class="detail-value">{{ evento.timestamp.replace('T', ' ') if evento.timestamp else '—' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">ID Usuario</span>
+                    <span class="detail-value">{{ evento.usuario_id or 'DESCONOCIDO' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">ID Sesión</span>
+                    <span class="detail-value">{{ evento.sesion_id or '—' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Nivel de Alerta</span>
+                    <span class="badge badge-{{ evento.nivel_alerta | lower }}">{{ evento.nivel_alerta or 'NORMAL' }}</span>
+                </div>
+            </div>
+        </div>
+
+        {# ── SECCIÓN 2: DETALLES DE EJECUCIÓN Y DATOS ── #}
+        <div class="detail-card">
+            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">2. Detalles del Dataset y Ejecución</h3>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <span class="detail-label">Nombre del Dataset</span>
+                    <span class="detail-value">{{ evento.dataset_nombre or '—' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Columnas Afectadas</span>
+                    <span class="detail-value">{{ evento.columnas_afectadas or '—' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Ruta Destino (Exportación)</span>
+                    <span class="detail-value">{{ evento.ruta_destino or '—' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Filas Exportadas</span>
+                    <span class="detail-value">{{ evento.filas_exportadas if evento.filas_exportadas is not none else '—' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Sobrescritura</span>
+                    <span class="detail-value">
+                        {% if evento.sobrescritura is not none %}
+                            {{ 'Sí' if evento.sobrescritura else 'No' }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Motivo de Fallo (si aplica)</span>
+                    <span class="detail-value" style="color: #DC2626;">{{ evento.motivo_fallo or '—' }}</span>
+                </div>
+            </div>
+
+            <div style="margin-top: 24px;" class="detail-item">
+                <span class="detail-label">Contexto de Ejecución</span>
+                <span class="detail-value detail-value--code">{{ evento.contexto_ejecucion or '—' }}</span>
+            </div>
+
+            {% if evento.motivo_alerta %}
+            <div style="margin-top: 20px;" class="detail-item">
+                <span class="detail-label">Motivo de Alerta</span>
+                <span class="detail-value" style="color: #D97706; font-weight: 700;">{{ evento.motivo_alerta }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        {# ── SECCIÓN 3: SEGURIDAD E INTEGRIDAD ── #}
+        <div class="detail-card">
+            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">3. Trazabilidad e Integridad Criptográfica</h3>
+            <div class="detail-item">
+                <span class="detail-label">Hash de Integridad SHA-256</span>
+                <span class="detail-value detail-value--code" style="word-break: break-all;">
+                    {{ evento.hash_integridad or 'No generado' }}
+                </span>
+            </div>
+        </div>
+
+    </main>
+</div>
+{% endblock %}
