@@ -69,11 +69,12 @@ def get_events(
     fecha_fin: str = None, 
     tipo_accion: str = None, 
     dataset_nombre: str = None, 
-    nivel_alerta: str = None
+    nivel_alerta: str = None,
+    orden_desc: bool = False
 ) -> List[Dict]:
     """
     Retrieves events from the audit_log table with filters.
-    Results are sorted chronologically.
+    HU-4.1 — Consulta de eventos de auditoría (CA1-CA4).
 
     Args:
         conn (sqlite3.Connection): Database connection.
@@ -83,6 +84,7 @@ def get_events(
         tipo_accion (str, optional): Filter by action type.
         dataset_nombre (str, optional): Filter by dataset name.
         nivel_alerta (str, optional): Filter by alert level.
+        orden_desc (bool, optional): If True, orders by timestamp DESC (HU-4.1 CA3).
 
     Returns:
         List[Dict]: List of event dictionaries.
@@ -109,7 +111,10 @@ def get_events(
         query += " AND nivel_alerta = ?"
         params.append(nivel_alerta)
         
-    query += " ORDER BY timestamp ASC"
+    if orden_desc:
+        query += " ORDER BY timestamp DESC, event_id DESC"
+    else:
+        query += " ORDER BY timestamp ASC, event_id ASC"
     
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -117,6 +122,25 @@ def get_events(
     rows = cursor.fetchall()
     
     return [dict(row) for row in rows]
+
+
+def get_event_by_id(conn: sqlite3.Connection, event_id: int) -> Optional[Dict]:
+    """
+    HU-4.3 — Retrieves details for a specific event by its event_id (CA1-CA4).
+
+    Args:
+        conn (sqlite3.Connection): Database connection.
+        event_id (int): Unique identifier of the event.
+
+    Returns:
+        Optional[Dict]: Event dictionary containing all fields, or None if not found.
+    """
+    query = "SELECT * FROM audit_log WHERE event_id = ?"
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(query, (event_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
 
 
 # ──────────────────────────────────────────────────────────────

@@ -17,6 +17,7 @@ from audit_tracer.models.usuarios import get_all_users, get_user_by_id
 from audit_tracer.utils.session import generate_session_id
 from audit_tracer.models.audit_log import (
     get_events,
+    get_event_by_id,
     verify_integrity,
     insert_event,
     get_critical_events,
@@ -306,6 +307,15 @@ def dashboard():
     filas_exportadas_total = sum(e['filas_exportadas'] or 0 for e in export_events)
     exportaciones_criticas = len([e for e in export_events if e['nivel_alerta'] == 'CRITICO'])
 
+    # Intentos fallidos de acceso — HU-2.4 (CA3: accesos fallidos del día)
+    accesos_fallidos_hoy = len([
+        e for e in events_today if e['tipo_accion'] == 'ACCESO_FALLIDO'
+    ])
+    accesos_fallidos_criticos_hoy = len([
+        e for e in events_today
+        if e['tipo_accion'] == 'ACCESO_FALLIDO' and e['nivel_alerta'] == 'CRITICO'
+    ])
+
     # Distribución de eventos por tipo de acción (HU-4.2/4.4)
     top_tipos = Counter(e['tipo_accion'] for e in all_events).most_common(6)
     max_tipo_count = top_tipos[0][1] if top_tipos else 1
@@ -341,6 +351,8 @@ def dashboard():
         total_exportaciones=total_exportaciones,
         filas_exportadas_total=filas_exportadas_total,
         exportaciones_criticas=exportaciones_criticas,
+        accesos_fallidos_hoy=accesos_fallidos_hoy,                    # HU-2.4
+        accesos_fallidos_criticos_hoy=accesos_fallidos_criticos_hoy,  # HU-2.4
         eventos_por_tipo=eventos_por_tipo,
         alertas_por_nivel=alertas_por_nivel,
         criticos_por_causa=criticos_por_causa,
@@ -412,7 +424,7 @@ def eventos():
 
     conn = get_db()
 
-    # Obtener eventos filtrados (CA1-CA5: los filtros se combinan con AND en get_events)
+    # Obtener eventos filtrados en orden cronológico descendente (HU-4.1 CA1-CA4)
     eventos_list = get_events(
         conn,
         usuario_id=usuario_id,
@@ -420,11 +432,9 @@ def eventos():
         fecha_fin=fecha_fin_query,
         tipo_accion=tipo_accion,
         dataset_nombre=dataset_nombre,
-        nivel_alerta=nivel_alerta
+        nivel_alerta=nivel_alerta,
+        orden_desc=True
     )
-
-    # Invertir para ver lo más reciente primero si no se filtró por fecha
-    eventos_list = list(reversed(eventos_list))
 
     total = len(eventos_list)
     paginated_eventos = eventos_list[offset : offset + per_page]
@@ -448,6 +458,30 @@ def eventos():
             'fecha_inicio': fecha_inicio,
             'fecha_fin': fecha_fin,
         }
+    )
+
+
+@app.route('/eventos/<int:event_id>')
+@login_required
+@modulo_required('consulta_reportes')  # HU-1.4
+def detalle_evento(event_id):
+    """
+    HU-4.3 — Visualización de detalle de evento (CA1-CA4).
+    Muestra todos los datos asociados a un evento específico por su event_id.
+    """
+    conn = get_db()
+    evento = get_event_by_id(conn, event_id)
+    conn.close()
+
+    if not evento:
+        flash(f'Evento #{event_id} no encontrado.', 'error')
+        return redirect(url_for('eventos'))
+
+    return render_template(
+        'dashboard/detalle_evento.html',
+        nombre=session.get('nombre', 'Usuario'),
+        rol=session.get('rol', 'N/A'),
+        evento=evento,
     )
 
 
