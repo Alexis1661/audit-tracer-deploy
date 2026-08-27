@@ -22,6 +22,9 @@ from audit_tracer.models.audit_log import (
     insert_event,
     get_critical_events,
     export_critical_events_to_csv,
+    generate_report,
+    export_report_to_csv,
+    NO_RESULTS_MESSAGE,
 )
 from audit_tracer.auth.control_acceso import has_permission  # HU-1.4
 from datetime import datetime, timedelta
@@ -383,6 +386,38 @@ def reportes():
 
     ultimos_criticos = list(reversed(critical_events))[:10]
 
+    # HU-4.5 CA1 — Reporte de auditoría filtrable por usuario/fecha/acción/dataset.
+    reporte_usuario_id = request.args.get('reporte_usuario_id')
+    reporte_tipo_accion = request.args.get('reporte_tipo_accion')
+    reporte_dataset_nombre = request.args.get('reporte_dataset_nombre')
+    reporte_fecha_inicio = request.args.get('reporte_fecha_inicio')
+    reporte_fecha_fin = request.args.get('reporte_fecha_fin')
+
+    # Mismo criterio que /eventos: ampliar 'YYYY-MM-DD' a los límites del día
+    # para que la comparación lexicográfica sobre el timestamp ISO 8601 cubra
+    # el día completo.
+    reporte_fecha_inicio_query = f"{reporte_fecha_inicio}T00:00:00" if reporte_fecha_inicio else None
+    reporte_fecha_fin_query = f"{reporte_fecha_fin}T23:59:59.999999" if reporte_fecha_fin else None
+
+    conn = get_db()
+    reporte_eventos = generate_report(
+        conn,
+        usuario_id=reporte_usuario_id,
+        fecha_inicio=reporte_fecha_inicio_query,
+        fecha_fin=reporte_fecha_fin_query,
+        tipo_accion=reporte_tipo_accion,
+        dataset_nombre=reporte_dataset_nombre,
+    )
+    conn.close()
+
+    reporte_filtros = {
+        'reporte_usuario_id': reporte_usuario_id,
+        'reporte_tipo_accion': reporte_tipo_accion,
+        'reporte_dataset_nombre': reporte_dataset_nombre,
+        'reporte_fecha_inicio': reporte_fecha_inicio,
+        'reporte_fecha_fin': reporte_fecha_fin,
+    }
+
     return render_template(
         'dashboard/reportes.html',
         nombre=session.get('nombre', 'Usuario'),
@@ -392,6 +427,46 @@ def reportes():
         eventos_por_tipo=eventos_por_tipo,
         criticos_por_causa=criticos_por_causa,
         ultimos_criticos=ultimos_criticos,
+        reporte_eventos=reporte_eventos,
+        reporte_filtros=reporte_filtros,
+        reporte_mensaje_vacio=NO_RESULTS_MESSAGE if not reporte_eventos else None,
+    )
+
+
+@app.route('/reportes/exportar')
+@login_required
+@modulo_required('consulta_reportes')  # HU-1.4
+def exportar_reporte():
+    """
+    HU-4.5 CA3 — Exporta a CSV el reporte de auditoría filtrado por
+    usuario/fecha/tipo_accion/dataset, con la cabecera estandarizada
+    de REPORT_CSV_COLUMNS.
+    """
+    usuario_id = request.args.get('reporte_usuario_id')
+    tipo_accion = request.args.get('reporte_tipo_accion')
+    dataset_nombre = request.args.get('reporte_dataset_nombre')
+    fecha_inicio = request.args.get('reporte_fecha_inicio')
+    fecha_fin = request.args.get('reporte_fecha_fin')
+
+    fecha_inicio_query = f"{fecha_inicio}T00:00:00" if fecha_inicio else None
+    fecha_fin_query = f"{fecha_fin}T23:59:59.999999" if fecha_fin else None
+
+    conn = get_db()
+    buffer = io.StringIO()
+    export_report_to_csv(
+        conn, buffer,
+        usuario_id=usuario_id,
+        fecha_inicio=fecha_inicio_query,
+        fecha_fin=fecha_fin_query,
+        tipo_accion=tipo_accion,
+        dataset_nombre=dataset_nombre,
+    )
+    conn.close()
+
+    return Response(
+        buffer.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=reporte_auditoria.csv'}
     )
 
 

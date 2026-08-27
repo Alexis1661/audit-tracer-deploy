@@ -214,6 +214,92 @@
             </table>
         </div>
 
+        {# ── HU-4.5: REPORTE DE AUDITORÍA POR FECHAS Y USUARIO ── #}
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 40px; margin-bottom: 16px;">
+            <h2 style="font-size: 18px; font-weight: 800;">Generar Reporte de Auditoría</h2>
+        </div>
+
+        <form method="GET" action="{{ url_for('reportes') }}" style="background: white; padding: 20px; border-radius: 16px; border: 1px solid var(--clr-border); margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end; box-shadow: var(--shadow-sm);">
+            <div style="flex: 1; min-width: 160px;">
+                <label class="form-label">Usuario</label>
+                <input type="text" name="reporte_usuario_id" class="form-input" placeholder="ID o Correo" value="{{ reporte_filtros.reporte_usuario_id or '' }}">
+            </div>
+            <div style="flex: 1; min-width: 160px;">
+                <label class="form-label">Dataset</label>
+                <input type="text" name="reporte_dataset_nombre" class="form-input" placeholder="Ej. PATIENTS.csv" value="{{ reporte_filtros.reporte_dataset_nombre or '' }}">
+            </div>
+            <div style="width: 165px;">
+                <label class="form-label">Desde</label>
+                <input type="date" name="reporte_fecha_inicio" class="form-input" value="{{ reporte_filtros.reporte_fecha_inicio or '' }}">
+            </div>
+            <div style="width: 165px;">
+                <label class="form-label">Hasta</label>
+                <input type="date" name="reporte_fecha_fin" class="form-input" value="{{ reporte_filtros.reporte_fecha_fin or '' }}">
+            </div>
+            <div style="width: 210px;">
+                <label class="form-label">Acción</label>
+                <select name="reporte_tipo_accion" class="form-select">
+                    <option value="">Todas</option>
+                    <option value="CARGA" {% if reporte_filtros.reporte_tipo_accion == 'CARGA' %}selected{% endif %}>Carga de Datos</option>
+                    <option value="CONSULTA" {% if reporte_filtros.reporte_tipo_accion == 'CONSULTA' %}selected{% endif %}>Consulta</option>
+                    <option value="TRANSFORMACION" {% if reporte_filtros.reporte_tipo_accion == 'TRANSFORMACION' %}selected{% endif %}>Transformación</option>
+                    <option value="EXPORTACION" {% if reporte_filtros.reporte_tipo_accion == 'EXPORTACION' %}selected{% endif %}>Exportación de Datos</option>
+                    <option value="MODELADO" {% if reporte_filtros.reporte_tipo_accion == 'MODELADO' %}selected{% endif %}>Modelado</option>
+                    <option value="MODELADO_FALLIDO" {% if reporte_filtros.reporte_tipo_accion == 'MODELADO_FALLIDO' %}selected{% endif %}>Modelado Fallido</option>
+                    <option value="ACCESO_FALLIDO" {% if reporte_filtros.reporte_tipo_accion == 'ACCESO_FALLIDO' %}selected{% endif %}>Acceso Fallido</option>
+                    <option value="ACCESO_DENEGADO" {% if reporte_filtros.reporte_tipo_accion == 'ACCESO_DENEGADO' %}selected{% endif %}>Acceso Denegado</option>
+                    <option value="INICIO_SESION" {% if reporte_filtros.reporte_tipo_accion == 'INICIO_SESION' %}selected{% endif %}>Inicio Sesión</option>
+                    <option value="CIERRE_SESION" {% if reporte_filtros.reporte_tipo_accion == 'CIERRE_SESION' %}selected{% endif %}>Cierre Sesión</option>
+                    <option value="SESION_INTERRUMPIDA" {% if reporte_filtros.reporte_tipo_accion == 'SESION_INTERRUMPIDA' %}selected{% endif %}>Sesión Interrumpida</option>
+                    <option value="CREACION_USUARIO" {% if reporte_filtros.reporte_tipo_accion == 'CREACION_USUARIO' %}selected{% endif %}>Creación Usuario</option>
+                    <option value="MODIFICACION_ROL" {% if reporte_filtros.reporte_tipo_accion == 'MODIFICACION_ROL' %}selected{% endif %}>Modificación Rol</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-outline">Filtrar Resultados</button>
+            {% if reporte_filtros.reporte_usuario_id or reporte_filtros.reporte_tipo_accion or reporte_filtros.reporte_dataset_nombre or reporte_filtros.reporte_fecha_inicio or reporte_filtros.reporte_fecha_fin %}
+            <a href="{{ url_for('reportes') }}" class="btn btn-outline">Limpiar</a>
+            {% endif %}
+            <a href="{{ url_for('exportar_reporte', **reporte_filtros) }}" class="btn btn-primary">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Exportar Reporte (CSV)
+            </a>
+        </form>
+
+        <div class="audit-table-container">
+            <table class="audit-table">
+                <thead>
+                    <tr>
+                        <th>Event ID</th>
+                        <th>Usuario</th>
+                        <th>Fecha y Hora</th>
+                        <th>Acción</th>
+                        <th>Dataset</th>
+                        <th>Columnas Afectadas</th>
+                        <th>Nivel de Alerta</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for evento in reporte_eventos %}
+                    <tr>
+                        <td>{{ evento.event_id }}</td>
+                        <td><span style="font-weight: 700;">{{ evento.usuario_id }}</span></td>
+                        <td>{{ evento.timestamp.split('.')[0].replace('T', ' ') }}</td>
+                        <td>{{ evento.tipo_accion }}</td>
+                        <td>{{ evento.dataset_nombre or '—' }}</td>
+                        <td>{{ evento.columnas_afectadas or '—' }}</td>
+                        <td><span class="badge badge-{{ evento.nivel_alerta | lower }}">{{ evento.nivel_alerta }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 60px; color: var(--clr-text-muted);">
+                            {{ reporte_mensaje_vacio }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
     </main>
 </div>
 {% endblock %}

@@ -47,3 +47,27 @@ normaliza el evento de forma centralizada: `usuario_id='DESCONOCIDO'`,
 `sesion_id='SIN_SESION'` (si faltan) y `nivel_alerta='CRITICO'` — el evento
 **siempre se registra**, nunca se descarta. Los reportes (`/eventos`,
 `get_events()`, `get_critical_events()`) permiten filtrar por `usuario_id`.
+
+## Reportes de auditoría por fechas y usuario (HU-4.5)
+
+`models/audit_log.py::generate_report(conn, usuario_id=None, fecha_inicio=None,
+fecha_fin=None, tipo_accion=None, dataset_nombre=None)` genera el reporte de
+evidencia de auditoría: reutiliza `get_events()` (mismos filtros, combinables
+entre sí, orden `timestamp ASC`) y recorta cada evento a las 7 columnas del
+reporte: `event_id, usuario_id, timestamp, tipo_accion, dataset_nombre,
+columnas_afectadas, nivel_alerta`.
+
+`export_report_to_csv(conn, dest, ...)` exporta ese mismo reporte a CSV con
+esa cabecera exacta (mismo patrón que `export_critical_events_to_csv()`:
+`csv.DictWriter`, `dest` puede ser una ruta o un objeto file-like como
+`io.StringIO` para servir la descarga por HTTP). Si los filtros no producen
+eventos, el CSV se genera igual, solo con la cabecera — nunca queda corrupto
+ni se lanza una excepción.
+
+En la app web, la sección "Generar Reporte de Auditoría" de `/reportes`
+(ruta `GET /reportes`, filtros vía query string `reporte_*`) usa
+`generate_report()` para la tabla y `GET /reportes/exportar` para el CSV. Si
+no hay resultados, la tabla muestra exactamente el mensaje de
+`NO_RESULTS_MESSAGE`: *"No se encontraron eventos para los filtros
+seleccionados."* — constante única compartida entre backend y plantilla, para
+que el texto no se duplique ni se desincronice.
