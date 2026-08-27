@@ -9,7 +9,7 @@ from collections import Counter
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response
 
 # ── Importaciones del backend existente ─────────────────────────────────────
-from audit_tracer.db import get_connection
+from audit_tracer.db import get_central_connection
 from audit_tracer.auth.autenticacion import login as auth_login, logout as auth_logout
 from audit_tracer.auth.registro import register_user
 from audit_tracer.auth.gestion_roles import assign_role
@@ -54,9 +54,16 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def get_db():
-    """Devuelve una conexión a la base de datos SQLite."""
+    """
+    Devuelve una conexión a la base de datos CENTRAL consolidada (HU-5.4 CA4).
+    El dashboard ya no lee ni escribe contra el SQLite local: local queda
+    reservado para la librería de interceptores (data_capture.py,
+    export_capture.py, session_tracker.py), que sí puede quedar
+    desconectada (ej. una notebook de Colab) y necesita el modelo de
+    caché + sincronización posterior.
+    """
     os.chdir(BASE_DIR)  # Asegura que db_path sea relativo a la raíz
-    return get_connection()
+    return get_central_connection()
 
 
 # ── Decorador de protección de rutas ────────────────────────────────────────

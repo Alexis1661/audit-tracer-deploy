@@ -1,29 +1,46 @@
 import csv
 import os
 import sqlite3
+import uuid
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from ..utils.hashing import hash_event
 
-def insert_event(conn: sqlite3.Connection, event: Dict) -> int:
+# Los 13 campos funcionales sobre los que se calcula hash_integridad.
+# event_id, evento_uuid y hash_integridad quedan fuera a propósito:
+# son metadata de almacenamiento/transporte, no el evento auditado en sí.
+# Debe ser idéntica en la base local y en la central (HU-5.4 CA1) para que
+# un mismo evento produzca el mismo hash sin importar dónde se calculó.
+_HASHED_COLUMNS = [
+    'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion',
+    'dataset_nombre', 'columnas_afectadas', 'ruta_destino',
+    'filas_exportadas', 'sobrescritura',
+    'contexto_ejecucion', 'motivo_fallo', 'nivel_alerta',
+    'motivo_alerta'
+]
+
+
+def _prepare_event(event: Dict) -> Dict:
     """
-    Inserts an event into the audit_log table.
-    Calculates the integrity hash before insertion.
-    Never allows updates or deletes.
+    Normaliza un evento y calcula, en Python, todo lo necesario para
+    insertarlo en CUALQUIER conexión que comparta el esquema de audit_log
+    (local o central) — sin volver a tocar SQL específico de motor.
 
     HU-2.5 CA1/CA2/CA3: normaliza usuario_id/sesion_id para que el evento
     nunca se pierda por falta de identificación, y clasifica como CRITICO
     todo evento cuyo usuario_id sea DESCONOCIDO.
 
-    Args:
-        conn (sqlite3.Connection): Database connection.
-        event (Dict): Event data dictionary.
+    HU-5.4 CA1: genera evento_uuid si el evento no trae uno ya asignado
+    (insert_event_dual() genera uno solo y lo reutiliza en ambas bases,
+    para que el mismo evento tenga el mismo evento_uuid en local y central).
 
     Returns:
-        int: The newly created event_id.
+        Dict: copia del evento con timestamp, usuario_id, sesion_id,
+        evento_uuid y hash_integridad ya resueltos.
     """
-    # Ensure timestamp is set if not provided
-    if 'timestamp' not in event:
+    event = dict(event)  # no mutar el dict del caller
+
+    if not event.get('timestamp'):
         event['timestamp'] = datetime.utcnow().isoformat()
 
     # HU-2.5 CA2/CA3: garantizar usuario_id y sesion_id siempre presentes,
@@ -37,30 +54,100 @@ def insert_event(conn: sqlite3.Connection, event: Dict) -> int:
         if not event.get('motivo_alerta'):
             event['motivo_alerta'] = 'Operación ejecutada por usuario no identificado'
 
-    columns = [
-        'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion',
-        'dataset_nombre', 'columnas_afectadas', 'ruta_destino',
-        'filas_exportadas', 'sobrescritura',
-        'contexto_ejecucion', 'motivo_fallo', 'nivel_alerta',
-        'motivo_alerta'
-    ]
+    if not event.get('evento_uuid'):
+        event['evento_uuid'] = str(uuid.uuid4())
 
-    # Create a full dictionary with all columns to ensure consistency for hashing
-    full_event = {col: event.get(col) for col in columns}
-    
-    # Calculate integrity hash using the full dictionary
+    # El hash se calcula una sola vez, aquí, sobre los campos funcionales
+    # únicamente — evento_uuid queda fuera para que el mismo evento hashee
+    # igual sin importar en qué base terminó insertado.
+    full_event = {col: event.get(col) for col in _HASHED_COLUMNS}
     event['hash_integridad'] = hash_event(full_event)
-    
-    placeholders = ', '.join(['?'] * (len(columns) + 1))
-    query = f"INSERT INTO audit_log ({', '.join(columns)}, hash_integridad) VALUES ({placeholders})"
-    
-    values = [full_event.get(col) for col in columns] + [event['hash_integridad']]
-    
+
+    return event
+
+
+def _execute_insert(conn: sqlite3.Connection, prepared_event: Dict) -> int:
+    """Ejecuta el INSERT de un evento ya preparado por _prepare_event() en `conn`."""
+    columns = _HASHED_COLUMNS + ['evento_uuid', 'hash_integridad']
+    placeholders = ', '.join(['?'] * len(columns))
+    query = f"INSERT INTO audit_log ({', '.join(columns)}) VALUES ({placeholders})"
+    values = [prepared_event.get(col) for col in columns]
+
     cursor = conn.cursor()
     cursor.execute(query, values)
     conn.commit()
-    
+
     return cursor.lastrowid
+
+
+def insert_event(conn: sqlite3.Connection, event: Dict) -> int:
+    """
+    Inserts an event into the audit_log table.
+    Calculates the integrity hash before insertion.
+    Never allows updates or deletes.
+
+    Args:
+        conn (sqlite3.Connection): Database connection.
+        event (Dict): Event data dictionary.
+
+    Returns:
+        int: The newly created event_id.
+    """
+    prepared = _prepare_event(event)
+    event_id = _execute_insert(conn, prepared)
+
+    # Preservar el comportamiento histórico: el dict que pasó el caller
+    # queda con hash_integridad poblado tras el insert.
+    event['hash_integridad'] = prepared['hash_integridad']
+    event.setdefault('evento_uuid', prepared['evento_uuid'])
+
+    return event_id
+
+
+def insert_event_dual(
+    local_conn: Optional[sqlite3.Connection],
+    central_conn: Optional[sqlite3.Connection],
+    event: Dict,
+) -> Dict:
+    """
+    HU-5.4 — Escribe el mismo evento en la base local (caché/respaldo
+    inmediato) y en la base central consolidada, calculando el hash y el
+    evento_uuid UNA sola vez (no se duplica lógica de hashing entre las
+    dos escrituras).
+
+    Si la escritura central falla (ej. servidor no disponible), el evento
+    igual queda persistido localmente — no se pierde. Ese es exactamente
+    el modelo híbrido que sustenta HU-5.6/HU-5.8: local siempre se escribe
+    primero y no depende de que la central esté disponible.
+
+    Args:
+        local_conn: conexión local, o None para omitir esa escritura.
+        central_conn: conexión central, o None para omitir esa escritura.
+        event: datos del evento (mismo formato que insert_event()).
+
+    Returns:
+        Dict con 'evento_uuid', 'hash_integridad', 'local_event_id' y
+        'central_event_id' (None si no se escribió o si la escritura
+        central falló).
+    """
+    prepared = _prepare_event(event)
+
+    local_event_id = _execute_insert(local_conn, prepared) if local_conn is not None else None
+
+    central_event_id = None
+    if central_conn is not None:
+        try:
+            central_event_id = _execute_insert(central_conn, prepared)
+        except Exception as exc:
+            # TODO(HU-5.8): encolar para reintento de sincronización.
+            print(f"[AuditTracer] Advertencia: no se pudo escribir en la base central — {exc}")
+
+    return {
+        'evento_uuid': prepared['evento_uuid'],
+        'hash_integridad': prepared['hash_integridad'],
+        'local_event_id': local_event_id,
+        'central_event_id': central_event_id,
+    }
 
 def get_events(
     conn: sqlite3.Connection, 
@@ -260,6 +347,10 @@ def verify_integrity(conn: sqlite3.Connection) -> List[Dict]:
     Verifies the integrity of all records in the audit_log table.
     Recalculates the hash for each record and compares it with the stored hash.
 
+    HU-5.4 — Genérica sobre `conn`: funciona igual contra la base local o
+    la central, porque ambas comparten el mismo esquema y la misma lista
+    de columnas hasheadas (_HASHED_COLUMNS).
+
     Returns:
         List[Dict]: A list of records that failed the integrity check.
     """
@@ -268,22 +359,14 @@ def verify_integrity(conn: sqlite3.Connection) -> List[Dict]:
     cursor = conn.cursor()
     cursor.execute(query)
     rows = cursor.fetchall()
-    
+
     corrupted_records = []
-    
-    columns_to_hash = [
-        'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion',
-        'dataset_nombre', 'columnas_afectadas', 'ruta_destino',
-        'filas_exportadas', 'sobrescritura',
-        'contexto_ejecucion', 'motivo_fallo', 'nivel_alerta',
-        'motivo_alerta'
-    ]
-    
+
     for row in rows:
         stored_hash = row['hash_integridad']
         # Create dictionary for hashing (same logic as insert_event)
-        event_data = {col: row[col] for col in columns_to_hash}
-        
+        event_data = {col: row[col] for col in _HASHED_COLUMNS}
+
         calculated_hash = hash_event(event_data)
         
         if calculated_hash != stored_hash:

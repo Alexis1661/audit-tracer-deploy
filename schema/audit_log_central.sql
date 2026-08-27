@@ -1,9 +1,24 @@
 -- ============================================================
 -- SISTEMA DE AUDITORÍA DE TRAZABILIDAD
--- Tabla: audit_log
--- Versión: 1.0
--- Descripción: Registro centralizado de todos los eventos
---              auditables sobre datos clínicos sensibles.
+-- Base de datos CENTRAL consolidada (HU-5.4)
+-- Motor: SQLite en modo WAL (ver README.md — Base de datos central)
+-- ============================================================
+-- Esta tabla es estructuralmente compatible con schema/audit_log.sql
+-- (el audit_log LOCAL): mismos 13 campos funcionales sobre los que se
+-- calcula hash_integridad, para que insert_event()/verify_integrity()
+-- operen igual sobre cualquiera de las dos conexiones sin distinguir
+-- de cuál se trata.
+--
+-- Diferencias respecto al schema local:
+--   evento_uuid — identificador único global del evento (CA1), generado
+--                 en Python al momento de insertar (ver
+--                 audit_tracer/models/audit_log.py::_prepare_event()).
+--                 No participa del cálculo de hash_integridad: es
+--                 metadata de transporte/deduplicación para la futura
+--                 sincronización HU-5.8, no parte del evento auditado.
+--                 Sirve para reintentos idempotentes: si el mismo
+--                 evento se reenvía dos veces, el UNIQUE evita duplicarlo.
+--
 -- Normas: HIPAA §164.312(b) · Ley 1581/2012 · ISO/IEC 27001
 -- ============================================================
 
@@ -11,21 +26,23 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
     -- IDENTIFICADOR ÚNICO DEL EVENTO (en esta base)
     event_id          INTEGER  PRIMARY KEY AUTOINCREMENT,
-    -- Clave primaria autogenerada. Nunca puede repetirse ni ser nula.
-    -- Única solo dentro de ESTA base; para deduplicar entre esta base
-    -- local y la central (HU-5.4) se usa evento_uuid, no este campo.
+    -- Autoincremental y único solo dentro de ESTA base. No sirve como
+    -- clave de deduplicación entre orígenes distintos — para eso existe
+    -- evento_uuid.
 
     -- IDENTIFICADOR ÚNICO GLOBAL DEL EVENTO (HU-5.4 CA1)
     evento_uuid       TEXT     UNIQUE NOT NULL,
-    -- UUID4 generado en Python al construir el evento (ver
-    -- audit_tracer/models/audit_log.py::_prepare_event()). No participa
-    -- del cálculo de hash_integridad. Permite que la futura sincronización
-    -- HU-5.8 reintente sin duplicar eventos en la base central.
+    -- UUID4 generado en Python al construir el evento (mismo valor si el
+    -- evento también se escribió en la base local — ver insert_event_dual()).
+    -- Permite que HU-5.8 reintente una sincronización fallida sin crear
+    -- eventos duplicados en la central (idempotencia).
 
     -- IDENTIFICACIÓN DEL ACTOR
     usuario_id        TEXT     NOT NULL,
     -- ID único del usuario que ejecutó la acción.
-    -- Si no es identificable: 'DESCONOCIDO'
+    -- Si no es identificable: 'DESCONOCIDO'.
+    -- Con múltiples orígenes consolidados en una sola tabla, este campo
+    -- es lo que permite trazar el usuario emisor de cada evento (HU-5.4 CA1).
     -- Exigido por HIPAA §164.312(b)
 
     sesion_id         TEXT     NOT NULL,
@@ -35,81 +52,51 @@ CREATE TABLE IF NOT EXISTS audit_log (
     -- TEMPORALIDAD
     timestamp         TEXT     NOT NULL,
     -- Fecha y hora en formato ISO 8601: 'YYYY-MM-DDTHH:MM:SS.ffffff'
-    -- Ejemplo: '2026-04-14T10:32:15.123456'
     -- Exigido por HIPAA §164.312(b)
 
     -- TIPO DE EVENTO
     tipo_accion       TEXT     NOT NULL,
-    -- Valores permitidos:
-    -- CARGA              → pd.read_csv(), pd.read_excel()
-    -- CONSULTA           → df[], df.query()
-    -- TRANSFORMACION     → dropna(), fillna(), drop(), rename(), apply(), merge()
-    -- EXPORTACION        → to_csv(), to_excel(), to_json(), to_parquet()
-    -- MODELADO           → model.fit()
-    -- MODELADO_FALLIDO   → error durante entrenamiento
-    -- ACCESO_FALLIDO     → PermissionError, FileNotFoundError
-    -- INICIO_SESION      → import audit_tracer
-    -- CIERRE_SESION      → fin normal de script/kernel
-    -- SESION_INTERRUMPIDA → cierre abrupto del kernel
-    -- CAMBIO_ROL         → asignación/modificación de rol
-    -- CREACION_USUARIO   → registro de nuevo usuario
-    -- ACCESO_DENEGADO    → intento sin permisos
+    -- Mismos valores que en el audit_log local: CARGA, CONSULTA,
+    -- TRANSFORMACION, EXPORTACION, MODELADO, MODELADO_FALLIDO,
+    -- ACCESO_FALLIDO, INICIO_SESION, CIERRE_SESION, SESION_INTERRUMPIDA,
+    -- CAMBIO_ROL/MODIFICACION_ROL, CREACION_USUARIO, ACCESO_DENEGADO,
+    -- INTENTO_MODIFICACION, INTENTO_ELIMINACION.
 
     -- CONTEXTO DEL DATO AFECTADO
     dataset_nombre    TEXT,
-    -- Nombre del archivo o dataset sobre el que se operó.
-    -- Ejemplo: 'PATIENTS.csv', 'admissions_clean.csv'
-
     columnas_afectadas TEXT,
-    -- Lista de columnas involucradas (JSON array o string separado por comas).
-    -- Ejemplo: '["subject_id", "diagnosis", "age"]'
-
     ruta_destino      TEXT,
-    -- Ruta del archivo de destino en operaciones de exportación.
-    -- Ejemplo: '/outputs/resultados_modelo.csv'
 
     filas_exportadas  INTEGER,
-    -- Número de filas incluidas en una exportación (tipo_accion = EXPORTACION).
-    -- Exigido por HU-2.3 CA2.
+    -- Número de filas incluidas en una exportación (HU-2.3 CA2).
 
     sobrescritura     INTEGER,
-    -- Indicador de sobrescritura de archivo en exportaciones (0/1).
-    -- 1 = el archivo de destino ya existía y fue sobreescrito.
-    -- Exigido por HU-2.3 CA3.
+    -- Indicador de sobrescritura de archivo en exportaciones (0/1) (HU-2.3 CA3).
 
     -- CONTEXTO DE EJECUCIÓN
     contexto_ejecucion TEXT,
-    -- Nombre del script o notebook desde el cual se ejecutó la operación.
-    -- Ejemplo: 'analisis_readmision.ipynb', 'preprocesamiento.py'
 
     -- INFORMACIÓN DE FALLOS Y ALERTAS
     motivo_fallo      TEXT,
-    -- Causa del fallo en eventos ACCESO_FALLIDO o MODELADO_FALLIDO.
-    -- Ejemplo: 'PermissionError', 'FileNotFoundError', 'usuario no autorizado'
 
     nivel_alerta      TEXT     DEFAULT 'NORMAL',
-    -- Clasificación de severidad del evento.
     -- Valores: 'NORMAL', 'ADVERTENCIA', 'CRITICO'
-    -- CRITICO: >3 intentos fallidos en <5 min, exportaciones masivas >1000 filas
 
     motivo_alerta     TEXT,
-    -- Descripción de la causa de clasificación crítica.
-    -- Ejemplo: '3 intentos fallidos en 4 minutos'
 
-    -- INTEGRIDAD DEL REGISTRO
+    -- INTEGRIDAD DEL REGISTRO (HU-5.4 CA3 — mismo mecanismo que el local)
     hash_integridad   TEXT     NOT NULL
-    -- Hash SHA-256 calculado sobre los campos del evento.
-    -- Permite detectar alteraciones posteriores al registro.
-    -- Exigido por HIPAA §164.312(c)(1)
+    -- SHA-256 calculado en Python (hash_event()) sobre los 13 campos
+    -- funcionales. evento_uuid y event_id quedan fuera del cálculo,
+    -- igual que en el audit_log local — así el hash de un evento es
+    -- idéntico sin importar en qué base se calculó o insertó.
 
 );
 
 -- ============================================================
--- TABLA DE INTENTOS BLOQUEADOS (HU-5.4 — cierra faltante de HU-3.3,
--- que implementó esto en la rama feature/HU-3.3-Juan-Pablo pero nunca
--- se mergeó a main)
--- Registra cada intento de UPDATE/DELETE sobre audit_log rechazado
--- por los triggers de inmutabilidad de abajo.
+-- TABLA DE INTENTOS BLOQUEADOS (HU-5.4 — cierra faltante de HU-3.3)
+-- Registra cada intento de UPDATE/DELETE sobre audit_log que fue
+-- rechazado por los triggers de inmutabilidad de abajo.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS audit_intentos_bloqueados (
@@ -124,11 +111,16 @@ CREATE TABLE IF NOT EXISTS audit_intentos_bloqueados (
 );
 
 -- ============================================================
--- TRIGGERS DE INMUTABILIDAD (HU-5.4 CA3, mismo patrón en la base central)
--- RAISE(FAIL, ...) en vez de RAISE(ABORT, ...): FAIL aborta la sentencia
--- sin deshacer los efectos de sentencias/triggers previos en la misma
--- transacción, así que el INSERT en audit_intentos_bloqueados sobrevive
--- aunque el UPDATE/DELETE original sea rechazado.
+-- TRIGGERS DE INMUTABILIDAD (HU-5.4 CA3, patrón tomado de HU-3.3)
+-- Bloquean UPDATE/DELETE sobre audit_log y dejan constancia del
+-- intento en audit_intentos_bloqueados antes de rechazar la operación.
+--
+-- RAISE(FAIL, ...) en lugar de RAISE(ABORT, ...): FAIL aborta la
+-- sentencia sin deshacer los efectos de sentencias/triggers previos
+-- dentro de la misma transacción, así que el INSERT en
+-- audit_intentos_bloqueados sobrevive aunque el UPDATE/DELETE original
+-- sea rechazado. Con ABORT, ese INSERT también se revertiría y el
+-- intento quedaría sin rastro.
 -- ============================================================
 
 CREATE TRIGGER IF NOT EXISTS trg_audit_log_no_update
@@ -163,7 +155,7 @@ BEGIN
     SELECT RAISE(FAIL, 'INMUTABILIDAD: No se permite eliminar registros de auditoría.');
 END;
 
--- ÍNDICES para optimizar consultas de auditoría
+-- ÍNDICES
 CREATE INDEX IF NOT EXISTS idx_audit_usuario
     ON audit_log(usuario_id);
 
