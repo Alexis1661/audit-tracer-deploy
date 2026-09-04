@@ -1,0 +1,532 @@
+{% extends "base.html" %}
+
+{% block title %}Gestión de Tokens de Acceso — Audit Tracer{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+    .tokens-header-actions {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+    }
+    .tokens-filter-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        background: white;
+        padding: 16px 20px;
+        border-radius: 16px;
+        border: 1px solid var(--clr-border);
+        margin-bottom: 24px;
+        box-shadow: var(--shadow-sm);
+        align-items: center;
+    }
+    .tokens-filter-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .tokens-filter-group label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--clr-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .tokens-filter-group select {
+        padding: 8px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--clr-border);
+        background: #F9FAFB;
+        font-size: 13px;
+        color: var(--clr-text-main);
+        outline: none;
+        transition: border-color 0.2s;
+    }
+    .tokens-filter-group select:focus {
+        border-color: var(--clr-accent-blue);
+    }
+    .tokens-table-container {
+        background: white;
+        border-radius: 20px;
+        border: 1px solid var(--clr-border);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+    .tokens-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    .tokens-table th {
+        background: #F5F5F7;
+        padding: 16px;
+        text-align: left;
+        font-weight: 700;
+        color: var(--clr-text-muted);
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--clr-border);
+    }
+    .tokens-table td {
+        padding: 16px;
+        border-bottom: 1px solid var(--clr-border);
+        color: var(--clr-text-main);
+        vertical-align: middle;
+    }
+    .tokens-table tr:hover {
+        background: #FAFAFA;
+    }
+    .token-string-box {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #F0F4F8;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-family: 'JetBrains Mono', monospace, Consolas, Courier;
+        font-size: 12px;
+        color: #1E293B;
+        border: 1px solid #E2E8F0;
+        max-width: 240px;
+    }
+    .token-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .btn-copy {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--clr-accent-blue);
+        padding: 2px;
+        display: flex;
+        align-items: center;
+        transition: transform 0.15s ease;
+    }
+    .btn-copy:hover {
+        transform: scale(1.15);
+    }
+    .badge-estado {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .badge-estado--activo {
+        background: rgba(52, 199, 89, 0.15);
+        color: #15803D;
+    }
+    .badge-estado--expirado {
+        background: rgba(234, 179, 8, 0.15);
+        color: #B45309;
+    }
+    .badge-estado--revocado {
+        background: rgba(239, 68, 68, 0.15);
+        color: #B91C1C;
+    }
+    .btn-revoke {
+        background: rgba(239, 68, 68, 0.1);
+        color: #DC2626;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s ease;
+    }
+    .btn-revoke:hover {
+        background: #DC2626;
+        color: white;
+    }
+    .badge-source {
+        background: #F1F5F9;
+        color: #64748B;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+    .empty-state-card {
+        padding: 48px 24px;
+        text-align: center;
+        color: var(--clr-text-muted);
+    }
+
+    /* Modal Generar Token */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(4px);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+    .modal-overlay.active {
+        display: flex;
+    }
+    .modal-card {
+        background: white;
+        border-radius: 20px;
+        width: 100%;
+        max-width: 480px;
+        padding: 28px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        position: relative;
+    }
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .modal-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--clr-text-main);
+    }
+    .btn-close-modal {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--clr-text-muted);
+        font-size: 20px;
+    }
+    .form-group {
+        margin-bottom: 16px;
+    }
+    .form-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: var(--clr-text-main);
+    }
+    .form-control {
+        width: 100%;
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--clr-border);
+        background: #F9FAFB;
+        font-size: 14px;
+        outline: none;
+        box-sizing: border-box;
+    }
+    .form-control:focus {
+        border-color: var(--clr-accent-blue);
+        background: white;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-layout">
+    
+    {# ── SIDEBAR ── #}
+    <aside class="sidebar">
+        <a href="{{ url_for('landing') }}" class="sidebar__brand">
+            <div class="sidebar__brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            </div>
+            Audit Tracer
+        </a>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Principal</div>
+            <a href="{{ url_for('dashboard') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                Dashboard
+            </a>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Auditoría</div>
+            <a href="{{ url_for('eventos') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                Eventos
+            </a>
+            <a href="{{ url_for('reportes') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                Reportes
+            </a>
+        </div>
+
+        {% if session.get('rol') == 'ADMIN' %}
+        <div class="nav-section">
+            <div class="nav-section__title">Administración</div>
+            <a href="{{ url_for('lista_usuarios') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                Usuarios
+            </a>
+            <a href="{{ url_for('lista_tokens') }}" class="nav-item active">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                Tokens de Acceso
+            </a>
+        </div>
+        {% endif %}
+
+        <div class="sidebar__footer">
+            <div class="user-profile">
+                <div class="user-avatar">{{ session.get('nombre', 'U')[0] | upper }}</div>
+                <div style="flex: 1;">
+                    <div style="font-size: 13px; font-weight: 700;">{{ session.get('nombre', 'Usuario') }}</div>
+                    <div style="font-size: 11px; color: var(--clr-text-muted);">{{ session.get('rol', 'Personal') }}</div>
+                </div>
+            </div>
+            <a href="{{ url_for('logout') }}" class="logout-link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                Cerrar sesión
+            </a>
+        </div>
+    </aside>
+
+    {# ── MAIN CONTENT ── #}
+    <main class="main-content">
+        <header class="header">
+            <div class="header__title">
+                <h1>Tokens Personales de Acceso</h1>
+                <p>HU-5.5 — Generación, revisión y revocación de tokens personales para sincronización y consumo de API.</p>
+            </div>
+            <div class="tokens-header-actions">
+                <button type="button" class="btn btn-primary" onclick="abrirModalGenerar()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    Generar Nuevo Token
+                </button>
+            </div>
+        </header>
+
+        {# ── MENSAJES FLASH ── #}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div style="margin-bottom: 20px;">
+              {% for category, message in messages %}
+                <div style="padding: 12px 18px; border-radius: 12px; margin-bottom: 8px; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;
+                  {% if category == 'success' %} background: #DCFCE7; color: #166534; border: 1px solid #BBF7D0;
+                  {% elif category == 'error' %} background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA;
+                  {% else %} background: #E0F2FE; color: #075985; border: 1px solid #BAE6FD; {% endif %}">
+                  <span>{{ message }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {# ── RESUMEN DE MÉTRICAS ── #}
+        <div class="stats-grid" style="margin-bottom: 24px;">
+            <div class="stat-card">
+                <div class="stat-card__header">
+                    <div class="stat-card__icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></div>
+                </div>
+                <div class="stat-card__value">{{ total_tokens }}</div>
+                <div class="stat-card__label">Total Tokens Registrados</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card__header">
+                    <div class="stat-card__icon" style="background: rgba(52, 199, 89, 0.1); color: #34C759;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
+                </div>
+                <div class="stat-card__value">{{ tokens_activos }}</div>
+                <div class="stat-card__label">Tokens Activos y Vigentes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card__header">
+                    <div class="stat-card__icon" style="background: rgba(239, 68, 68, 0.1); color: #EF4444;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></div>
+                </div>
+                <div class="stat-card__value">{{ tokens_revocados }}</div>
+                <div class="stat-card__label">Tokens Revocados</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card__header">
+                    <div class="stat-card__icon" style="background: rgba(234, 179, 8, 0.1); color: #EAB308;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+                </div>
+                <div class="stat-card__value">{{ tokens_expirados }}</div>
+                <div class="stat-card__label">Tokens Expirados</div>
+            </div>
+        </div>
+
+        {# ── FILTROS ── #}
+        <form method="GET" action="{{ url_for('lista_tokens') }}" class="tokens-filter-bar">
+            <div class="tokens-filter-group">
+                <label for="usuario_id">Usuario:</label>
+                <select name="usuario_id" id="usuario_id" onchange="this.form.submit()">
+                    <option value="">Todos los usuarios</option>
+                    {% for u in usuarios %}
+                    <option value="{{ u.usuario_id }}" {% if filtros.usuario_id == u.usuario_id %}selected{% endif %}>
+                        {{ u.email }} ({{ u.rol }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="tokens-filter-group">
+                <label for="estado">Estado:</label>
+                <select name="estado" id="estado" onchange="this.form.submit()">
+                    <option value="">Todos los estados</option>
+                    <option value="ACTIVO" {% if filtros.estado == 'ACTIVO' %}selected{% endif %}>Activos</option>
+                    <option value="REVOCADO" {% if filtros.estado == 'REVOCADO' %}selected{% endif %}>Revocados</option>
+                    <option value="EXPIRADO" {% if filtros.estado == 'EXPIRADO' %}selected{% endif %}>Expirados</option>
+                </select>
+            </div>
+
+            {% if filtros.usuario_id or filtros.estado %}
+            <a href="{{ url_for('lista_tokens') }}" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;">
+                Limpiar Filtros
+            </a>
+            {% endif %}
+        </form>
+
+        {# ── TABLA DE TOKENS (CA3, CA4) ── #}
+        <div class="tokens-table-container">
+            {% if tokens %}
+            <table class="tokens-table">
+                <thead>
+                    <tr>
+                        <th>Usuario Asignado</th>
+                        <th>Token de Acceso</th>
+                        <th>Creación</th>
+                        <th>Expiración</th>
+                        <th>Vigencia</th>
+                        <th>Estado</th>
+                        <th>Origen</th>
+                        <th style="text-align: right;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in tokens %}
+                    <tr>
+                        <td>
+                            <div style="display: flex; flex-direction: column;">
+                                <span style="font-weight: 700;">{{ t.email or 'Usuario Desconocido' }}</span>
+                                <span style="font-size: 11px; color: var(--clr-text-muted);">Rol: {{ t.rol or 'N/A' }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="token-string-box" title="{{ t.token }}">
+                                <span class="token-text">{{ t.token[:16] }}...{{ t.token[-4:] }}</span>
+                                <button type="button" class="btn-copy" onclick="copiarToken('{{ t.token }}')" title="Copiar token completo">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                </button>
+                            </div>
+                        </td>
+                        <td>
+                            <span style="font-size: 12px; color: var(--clr-text-muted);">{{ t.fecha_creacion[:19].replace('T', ' ') }}</span>
+                        </td>
+                        <td>
+                            <span style="font-size: 12px; font-weight: 600;">{{ t.fecha_expiracion[:19].replace('T', ' ') }}</span>
+                        </td>
+                        <td>
+                            {% if t.estado == 'ACTIVO' %}
+                                <span style="font-size: 12px; font-weight: 700; color: #15803D;">{{ t.dias_restantes }} días rest.</span>
+                            {% elif t.estado == 'EXPIRADO' %}
+                                <span style="font-size: 12px; color: #B45309;">Vencido</span>
+                            {% else %}
+                                <span style="font-size: 12px; color: #991B1B;">Inactivo</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge-estado badge-estado--{{ t.estado.lower() }}">
+                                {% if t.estado == 'ACTIVO' %}● Activo
+                                {% elif t.estado == 'EXPIRADO' %}● Expirado
+                                {% else %}● Revocado{% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge-source">{{ t.creado_por }}</span>
+                        </td>
+                        <td style="text-align: right;">
+                            {% if t.estado == 'ACTIVO' %}
+                            <form method="POST" action="{{ url_for('revocar_token_post', token_id=t.token_id) }}" style="display: inline;" onsubmit="return confirm('¿Estás seguro de que deseas revocar este token? Dejará de ser válido inmediatamente.');">
+                                <button type="submit" class="btn-revoke" title="Revocar token inmediatamente">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                    Revocar
+                                </button>
+                            </form>
+                            {% else %}
+                            <span style="font-size: 12px; color: var(--clr-text-muted); font-style: italic;">Sin acciones</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state-card">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 12px; color: #94A3B8;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                <h3>No se encontraron tokens</h3>
+                <p style="font-size: 13px;">No hay registros con los filtros seleccionados o aún no se han generado tokens.</p>
+            </div>
+            {% endif %}
+        </div>
+
+    </main>
+</div>
+
+{# ── MODAL GENERAR TOKEN (CA1, CA2) ── #}
+<div id="modalGenerarToken" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h2 class="modal-title">Generar Token de Acceso</h2>
+            <button type="button" class="btn-close-modal" onclick="cerrarModalGenerar()">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('nuevo_token_post') }}">
+            <div class="form-group">
+                <label for="modal_usuario_id">Usuario Destino:</label>
+                <select name="usuario_id" id="modal_usuario_id" class="form-control" required>
+                    <option value="">Selecciona un usuario...</option>
+                    {% for u in usuarios %}
+                    <option value="{{ u.usuario_id }}">{{ u.email }} ({{ u.rol }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="dias_expiracion">Tiempo de Expiración (días):</label>
+                <select name="dias_expiracion" id="dias_expiracion" class="form-control" required>
+                    <option value="7">7 días</option>
+                    <option value="15">15 días</option>
+                    <option value="30" selected>30 días (Por defecto)</option>
+                    <option value="60">60 días</option>
+                    <option value="90">90 días</option>
+                    <option value="365">365 días (1 año)</option>
+                </select>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+                <button type="button" class="btn btn-outline" onclick="cerrarModalGenerar()">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Generar Token</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function abrirModalGenerar() {
+    document.getElementById('modalGenerarToken').classList.add('active');
+}
+
+function cerrarModalGenerar() {
+    document.getElementById('modalGenerarToken').classList.remove('active');
+}
+
+function copiarToken(token) {
+    navigator.clipboard.writeText(token).then(() => {
+        alert('Token copiado al portapapeles');
+    }).catch(() => {
+        prompt('Copia el token manualmente:', token);
+    });
+}
+</script>
+{% endblock %}

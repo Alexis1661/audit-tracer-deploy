@@ -31,7 +31,7 @@ def tracker_env(monkeypatch, tmp_path):
         db_exists = os.path.exists(db_file)
         conn = sqlite3.connect(db_file, check_same_thread=False)
         if not db_exists:
-            for sql_file in ["usuarios.sql", "audit_log.sql"]:
+            for sql_file in ["usuarios.sql", "audit_log.sql", "tokens.sql"]:
                 path = os.path.join(schema_dir, sql_file)
                 if os.path.exists(path):
                     with open(path, encoding="utf-8") as f:

@@ -23,6 +23,26 @@ def _migrate_audit_log(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migrate_tokens(conn: sqlite3.Connection) -> None:
+    """Crea la tabla tokens_acceso e índices si no existen en una BD existente."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tokens_acceso (
+            token_id          TEXT     PRIMARY KEY,
+            usuario_id        TEXT     NOT NULL,
+            token             TEXT     NOT NULL UNIQUE,
+            fecha_creacion    TEXT     NOT NULL,
+            fecha_expiracion  TEXT     NOT NULL,
+            estado            TEXT     NOT NULL DEFAULT 'ACTIVO',
+            creado_por        TEXT     NOT NULL DEFAULT 'LOGIN',
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(usuario_id)
+        );
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_token ON tokens_acceso(token);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_usuario ON tokens_acceso(usuario_id);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_estado ON tokens_acceso(estado);")
+    conn.commit()
+
+
 def get_connection(db_path: str = "audit_trail.db") -> sqlite3.Connection:
     """
     Returns an SQLite connection to the specified database file.
@@ -40,7 +60,7 @@ def get_connection(db_path: str = "audit_trail.db") -> sqlite3.Connection:
         # Initialize database from schema files
         schema_dir = "schema"
         # Table order is important if there were FKs, but here they are independent
-        schema_files = ["usuarios.sql", "audit_log.sql"]
+        schema_files = ["usuarios.sql", "audit_log.sql", "tokens.sql"]
 
         for schema_file in schema_files:
             file_path = os.path.join(schema_dir, schema_file)
@@ -54,5 +74,6 @@ def get_connection(db_path: str = "audit_trail.db") -> sqlite3.Connection:
         conn.commit()
     else:
         _migrate_audit_log(conn)
+        _migrate_tokens(conn)
 
     return conn

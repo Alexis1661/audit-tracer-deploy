@@ -6,6 +6,8 @@ from ..utils.hashing import verify_password
 from ..utils.session import get_hostname, detect_environment
 from datetime import datetime
 
+from .tokens import generar_token
+
 # HU-4.4 CA1-a: más de este número de intentos fallidos del mismo usuario en
 # menos de VENTANA_INTENTOS_FALLIDOS_MIN minutos se clasifica como CRITICO.
 UMBRAL_INTENTOS_FALLIDOS = 3
@@ -60,12 +62,20 @@ def login(conn: sqlite3.Connection, email: str, password: str, sesion_id: str) -
             'contexto_ejecucion': f"Env: {detect_environment()} | Host: {get_hostname()}",
             'nivel_alerta': 'NORMAL'
         })
+
+        # Generar token único por usuario al completar login (HU-5.5 CA1)
+        token_info = generar_token(
+            conn, user_id, dias_expiracion=30, creado_por='LOGIN', sesion_id=sesion_id
+        )
         
         return {
             'success': True, 
             'usuario_id': user_id, 
             'rol': user['rol'], 
-            'sesion_id': sesion_id
+            'sesion_id': sesion_id,
+            'token': token_info['token'],
+            'token_id': token_info['token_id'],
+            'token_expiracion': token_info['fecha_expiracion']
         }
     else:
         # Login failed
