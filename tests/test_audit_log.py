@@ -3,6 +3,7 @@ import io
 import pytest
 import os
 import sqlite3
+import uuid
 from audit_tracer.db import get_connection
 from audit_tracer.models.audit_log import (
     insert_event,
@@ -162,29 +163,39 @@ class TestFiltradoEventos:
         assert total_antes == total_despues == 4
 
 def test_verify_integrity(db_conn):
-    """verify_integrity() detecta si un registro fue alterado manualmente."""
+    """verify_integrity() detecta un registro cuyo hash no corresponde a sus datos."""
     # Insert a valid event
     event = {
-        'usuario_id': 'u1', 
-        'tipo_accion': 'CARGA', 
+        'usuario_id': 'u1',
+        'tipo_accion': 'CARGA',
         'nivel_alerta': 'NORMAL',
         'sesion_id': 's1'
     }
     insert_event(db_conn, event)
-    
+
     # Check that it starts clean
     corrupted = verify_integrity(db_conn)
     assert len(corrupted) == 0
-    
-    # Manually alter a record in the database
+
+    # Simular alteración insertando directamente una fila con un hash que
+    # no corresponde a sus propios datos. Ya no se puede simular esto con
+    # un UPDATE sobre la fila existente: HU-5.4 agregó un trigger que
+    # bloquea exactamente eso (ver TestInmutabilidad en test_central_db.py,
+    # que prueba ese bloqueo directamente).
     cursor = db_conn.cursor()
-    cursor.execute("UPDATE audit_log SET tipo_accion = 'BORRADO' WHERE usuario_id = 'u1'")
+    cursor.execute(
+        "INSERT INTO audit_log "
+        "(evento_uuid, usuario_id, sesion_id, timestamp, tipo_accion, nivel_alerta, hash_integridad) "
+        "VALUES (?, 'u2', 's2', '2026-01-01T00:00:00', 'BORRADO', 'CRITICO', 'hash_invalido_manual')",
+        (str(uuid.uuid4()),),
+    )
     db_conn.commit()
-    
+
     # Verify integrity should now detect it
     corrupted = verify_integrity(db_conn)
     assert len(corrupted) == 1
     assert corrupted[0]['tipo_accion'] == 'BORRADO'
+    assert corrupted[0]['stored_hash'] == 'hash_invalido_manual'
     assert corrupted[0]['stored_hash'] != corrupted[0]['calculated_hash']
 
 
