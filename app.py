@@ -6,13 +6,19 @@ Sistema de Auditoría de Trazabilidad de Datos Clínicos.
 import io
 import os
 from collections import Counter
-from flask import Flask, render_template, request, redirect, url_for, session, flash, Response
+from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, jsonify
 
 # ── Importaciones del backend existente ─────────────────────────────────────
 from audit_tracer.db import get_central_connection
 from audit_tracer.auth.autenticacion import login as auth_login, logout as auth_logout
 from audit_tracer.auth.registro import register_user
 from audit_tracer.auth.gestion_roles import assign_role
+from audit_tracer.auth.tokens import (
+    generar_token,
+    validar_token,
+    revocar_token,
+    listar_tokens,
+)
 from audit_tracer.models.usuarios import get_all_users, get_user_by_id
 from audit_tracer.utils.session import generate_session_id
 from audit_tracer.models.audit_log import (
@@ -180,6 +186,8 @@ def login_post():
         session['rol'] = result['rol']
         session['nombre'] = email
         session['sesion_id'] = result['sesion_id']
+        session['token'] = result.get('token')
+        session['token_expiracion'] = result.get('token_expiracion')
         session['login_time'] = datetime.utcnow().isoformat()
         return redirect(url_for('dashboard'))
     else:
@@ -283,6 +291,182 @@ def editar_usuario_post(usuario_id):
     except Exception as e:
         flash(f'Error del sistema: {str(e)}', 'error')
         return redirect(url_for('lista_usuarios'))
+
+
+# ── ADMINISTRACIÓN DE TOKENS PERSONALES (HU-5.5) ───────────────────────────
+
+@app.route('/admin/tokens', methods=['GET'])
+@login_required
+@admin_required
+def lista_tokens():
+    """
+    HU-5.5 CA3 — Lista de tokens personales activos y filtrables por usuario/estado.
+    """
+    usuario_id = request.args.get('usuario_id') or None
+    estado = request.args.get('estado') or None
+
+    conn = get_db()
+    tokens = listar_tokens(conn, usuario_id=usuario_id, estado=estado)
+    usuarios = get_all_users(conn)
+
+    # Calcular métricas para el dashboard de tokens
+    all_tokens = listar_tokens(conn)
+    total_tokens = len(all_tokens)
+    tokens_activos = len([t for t in all_tokens if t['estado'] == 'ACTIVO'])
+    tokens_revocados = len([t for t in all_tokens if t['estado'] == 'REVOCADO'])
+    tokens_expirados = len([t for t in all_tokens if t['estado'] == 'EXPIRADO'])
+
+    conn.close()
+
+    return render_template(
+        'admin/tokens.html',
+        tokens=tokens,
+        usuarios=usuarios,
+        filtros={'usuario_id': usuario_id, 'estado': estado},
+        total_tokens=total_tokens,
+        tokens_activos=tokens_activos,
+        tokens_revocados=tokens_revocados,
+        tokens_expirados=tokens_expirados,
+        nombre=session.get('nombre'),
+        rol=session.get('rol')
+    )
+
+
+@app.route('/admin/tokens/nuevo', methods=['POST'])
+@login_required
+@admin_required
+def nuevo_token_post():
+    """
+    HU-5.5 CA1 & CA2 — Generación manual de tokens para un usuario por el administrador.
+    """
+    usuario_id = request.form.get('usuario_id', '').strip()
+    dias_exp = request.form.get('dias_expiracion', '30').strip()
+
+    try:
+        dias_expiracion = int(dias_exp)
+    except ValueError:
+        dias_expiracion = 30
+
+    if not usuario_id:
+        flash('Debes seleccionar un usuario para generar el token.', 'error')
+        return redirect(url_for('lista_tokens'))
+
+    try:
+        conn = get_db()
+        token_info = generar_token(
+            conn,
+            usuario_id=usuario_id,
+            dias_expiracion=dias_expiracion,
+            creado_por='ADMIN',
+            sesion_id=session.get('sesion_id', 'N/A'),
+            admin_id=session.get('usuario_id')
+        )
+        conn.close()
+        flash(f'Token generado exitosamente con vigencia de {dias_expiracion} días.', 'success')
+    except Exception as e:
+        flash(f'Error al generar token: {str(e)}', 'error')
+
+    return redirect(url_for('lista_tokens'))
+
+
+@app.route('/admin/tokens/revocar/<token_id>', methods=['POST'])
+@login_required
+@admin_required
+def revocar_token_post(token_id):
+    """
+    HU-5.5 CA4 — Revocación manual de un token desde el dashboard.
+    """
+    try:
+        conn = get_db()
+        exito, mensaje = revocar_token(
+            conn,
+            token_id_o_str=token_id,
+            admin_id=session.get('usuario_id'),
+            sesion_id=session.get('sesion_id', 'N/A'),
+            motivo='Revocación manual desde dashboard de administración'
+        )
+        conn.close()
+
+        if exito:
+            flash('Token revocado exitosamente. Ha dejado de ser válido de inmediato.', 'success')
+        else:
+            flash(mensaje, 'error')
+    except Exception as e:
+        flash(f'Error al revocar token: {str(e)}', 'error')
+
+    return redirect(url_for('lista_tokens'))
+
+
+# ── API ENDPOINTS DE TOKENS (HU-5.5 CA5 / HU-6.1 ready) ───────────────────────
+
+@app.route('/api/tokens/validar', methods=['POST'])
+def api_validar_token():
+    """
+    HU-5.5 CA5 — Endpoint API para validar un token de acceso (vigente / revocado / expirado).
+    """
+    data = request.get_json(silent=True) or {}
+    token_str = data.get('token')
+
+    # Soporte también para Header 'Authorization: Bearer <token>'
+    if not token_str and 'Authorization' in request.headers:
+        auth_header = request.headers['Authorization']
+        if auth_header.startswith('Bearer '):
+            token_str = auth_header.split(' ', 1)[1]
+
+    if not token_str:
+        return jsonify({
+            'valido': False,
+            'mensaje': 'Token no proporcionado',
+            'estado': 'NO_PROPORCIONADO'
+        }), 400
+
+    conn = get_db()
+    valido, mensaje, token_data = validar_token(conn, token_str)
+    conn.close()
+
+    if not valido:
+        estado = token_data.get('estado', 'INVALIDO') if token_data else 'INEXISTENTE'
+        return jsonify({
+            'valido': False,
+            'mensaje': mensaje,
+            'estado': estado
+        }), 401
+
+    return jsonify({
+        'valido': True,
+        'mensaje': mensaje,
+        'estado': token_data.get('estado', 'ACTIVO'),
+        'usuario_id': token_data.get('usuario_id'),
+        'fecha_expiracion': token_data.get('fecha_expiracion')
+    }), 200
+
+
+@app.route('/api/tokens/revocar', methods=['POST'])
+@login_required
+@admin_required
+def api_revocar_token():
+    """
+    HU-5.5 CA4 — Endpoint API para revocar un token.
+    """
+    data = request.get_json(silent=True) or {}
+    token_target = data.get('token_id') or data.get('token')
+
+    if not token_target:
+        return jsonify({'success': False, 'message': 'Se requiere token_id o token'}), 400
+
+    conn = get_db()
+    exito, mensaje = revocar_token(
+        conn,
+        token_id_o_str=token_target,
+        admin_id=session.get('usuario_id'),
+        sesion_id=session.get('sesion_id', 'N/A'),
+        motivo=data.get('motivo', 'Revocación solicitada vía API')
+    )
+    conn.close()
+
+    status_code = 200 if exito else 404
+    return jsonify({'success': exito, 'message': mensaje}), status_code
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

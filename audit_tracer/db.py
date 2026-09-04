@@ -115,6 +115,26 @@ def _init_from_schema(conn: sqlite3.Connection, schema_files: list) -> None:
     conn.commit()
 
 
+def _migrate_tokens(conn: sqlite3.Connection) -> None:
+    """Crea la tabla tokens_acceso e índices si no existen en una BD existente."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tokens_acceso (
+            token_id          TEXT     PRIMARY KEY,
+            usuario_id        TEXT     NOT NULL,
+            token             TEXT     NOT NULL UNIQUE,
+            fecha_creacion    TEXT     NOT NULL,
+            fecha_expiracion  TEXT     NOT NULL,
+            estado            TEXT     NOT NULL DEFAULT 'ACTIVO',
+            creado_por        TEXT     NOT NULL DEFAULT 'LOGIN',
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(usuario_id)
+        );
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_token ON tokens_acceso(token);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_usuario ON tokens_acceso(usuario_id);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_estado ON tokens_acceso(estado);")
+    conn.commit()
+
+
 def get_connection(db_path: str = "audit_trail.db") -> sqlite3.Connection:
     """
     Returns an SQLite connection to the specified database file.
@@ -130,9 +150,10 @@ def get_connection(db_path: str = "audit_trail.db") -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout = 5000")
 
     if not db_exists:
-        _init_from_schema(conn, ["usuarios.sql", "audit_log.sql"])
+        _init_from_schema(conn, ["usuarios.sql", "audit_log.sql", "tokens.sql"])
     else:
         _migrate_audit_log(conn)
+        _migrate_tokens(conn)
 
     return conn
 
@@ -170,8 +191,9 @@ def get_central_connection(db_path: str = "audit_central.db") -> sqlite3.Connect
     conn.execute("PRAGMA busy_timeout = 5000")
 
     if not db_exists:
-        _init_from_schema(conn, ["usuarios.sql", "audit_log_central.sql"])
+        _init_from_schema(conn, ["usuarios.sql", "audit_log_central.sql", "tokens.sql"])
     else:
         _migrate_audit_log(conn)
+        _migrate_tokens(conn)
 
     return conn
