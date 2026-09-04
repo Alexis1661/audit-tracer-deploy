@@ -12,7 +12,7 @@ CA4: El sistema muestra el evento aunque tenga campos opcionales vacíos.
 """
 
 import pytest
-from audit_tracer.db import get_connection
+from audit_tracer.db import get_connection, get_central_connection
 from audit_tracer.models.audit_log import insert_event, get_event_by_id
 from app import app
 
@@ -138,8 +138,12 @@ class TestVistaFrontendDetalleEvento:
     """Pruebas de integración de la interfaz web para /eventos/<event_id>."""
 
     def test_endpoint_detalle_evento_existente_status_200(self, flask_client):
-        """Verifica que al consultar /eventos/<event_id> responda 200 OK con el contenido."""
-        conn = get_connection()
+        """Verifica que al consultar /eventos/<event_id> responda 200 OK con el contenido.
+
+        HU-5.4 CA4: el dashboard consulta exclusivamente la base central, así
+        que el evento de prueba se inserta ahí (no en la base local).
+        """
+        conn = get_central_connection()
         event_id = insert_event(conn, {
             'usuario_id': 'u_web_test',
             'sesion_id': 's_web_test',
