@@ -84,9 +84,11 @@ imposible con bases aisladas.
 
 La arquitectura objetivo es híbrida: cada evento se persiste primero en el
 SQLite local (caché/respaldo inmediato) y luego se sincroniza vía HTTPS a
-un servidor central. HU-5.4 construye el destino de esa sincronización — el
-endpoint que la recibe (HU-5.6) y el envío desde la librería (HU-5.8) son
-trabajo de HUs posteriores.
+un servidor central. HU-5.4 construyó el destino de esa sincronización; el
+endpoint que la recibe y el envío desde la librería se implementan en
+HU-5.8 (ver más abajo) — el endpoint de ingesta no existía como HU propia
+(HU-5.6) en el repositorio, así que HU-5.8 lo incluyó como prerrequisito
+directo, sin el cual no tenía a dónde sincronizar.
 
 ### Motor: SQLite en modo WAL
 
@@ -193,8 +195,10 @@ central falla (servidor no disponible), el evento igual queda persistido
 localmente; ese es el modelo de resiliencia que sustenta HU-5.6/5.8. Esta
 HU deja la función lista y probada (`tests/test_central_db.py::
 TestInsertEventDual`); conectarla a la librería de interceptores
-(`data_capture.py`, `export_capture.py`, etc.) es trabajo de HU-5.8, que
-todavía no existe.
+(`data_capture.py`, `export_capture.py`, etc.) no terminó siendo el
+mecanismo que usa HU-5.8 — ver la sección "Sincronización de eventos
+hacia el servidor central (HU-5.8)" más abajo para el porqué (Colab no
+puede abrir la base central directamente, solo HTTPS).
 
 ### Dashboard → base central (CA4)
 
@@ -205,3 +209,157 @@ base central fue, en la práctica, cambiar esa única función: ahora llama a
 existentes (`/eventos`, `/eventos/<id>`, `/reportes`, login, gestión de
 usuarios, etc.) siguen funcionando sin cambios adicionales porque ya
 pasaban todas por `get_db()`.
+
+## Sincronización de eventos hacia el servidor central (HU-5.8)
+
+### Por qué y qué encontró esta HU al empezar
+
+El objetivo es que los eventos capturados en un entorno intermitente
+(Google Colab u otro) lleguen al dashboard administrativo aunque ese
+entorno nunca abra una conexión directa a la base central — el modelo que
+ya describía la sección de HU-5.4 de arriba, pero que hasta esta HU nadie
+había construido. Al empezar, en el repositorio **no existía** ningún
+cliente HTTP, mecanismo de reintento, cola de pendientes, ni endpoint
+receptor: solo el comentario `# TODO(HU-5.8): encolar para reintento de
+sincronización` en `insert_event_dual()`. Tampoco existía HU-5.6 (el
+endpoint de ingesta) como pieza separada — HU-5.8 lo incluyó porque, sin
+él, no había a dónde sincronizar.
+
+Lo que sí existía y se reutilizó tal cual, sin modificarlo:
+- `evento_uuid` (HU-5.4): UUID4 generado una sola vez en `_prepare_event()`
+  y `UNIQUE NOT NULL` en ambos esquemas — es el identificador de
+  idempotencia que pedía esta HU, no se creó uno nuevo.
+- `validar_token()` (HU-5.5, `auth/tokens.py`): distingue token
+  inexistente / expirado / revocado. El endpoint receptor lo usa sin
+  tocar su código.
+
+### Cola local de sincronización (`audit_sync_queue`)
+
+Nueva tabla, solo en la base **local** (`schema/audit_log.sql`), NO en la
+central. Cada evento capturado por la librería tiene una fila espejo con
+`estado` (`PENDIENTE` | `SINCRONIZADO` | `FALLIDO`), `intentos`,
+`ultimo_intento`, `ultimo_error` y `sincronizado_en`.
+
+Se modela como tabla separada — y no como columnas nuevas en `audit_log`
+— a propósito: `audit_log` tiene los triggers de inmutabilidad de HU-5.4
+(`trg_audit_log_no_update`/`no_delete`), que bloquean *cualquier* UPDATE.
+El estado de sincronización necesita mutar (`PENDIENTE` → `SINCRONIZADO`),
+así que vive aparte, como metadata operativa de transporte — mismo
+criterio que ya justificaba dejar `evento_uuid` fuera de
+`hash_integridad`. Esto evita tocar (o debilitar) la inmutabilidad ya
+probada en `tests/test_central_db.py::TestInmutabilidad`.
+
+`models/audit_log.py::insert_event_and_enqueue_sync(conn, event)` es el
+único punto que usan los cuatro interceptores de captura
+(`data_capture.py`, `export_capture.py`, `failed_access.py`,
+`session_tracker.py`): inserta en `audit_log` y encola en
+`audit_sync_queue` en la misma operación. **CA1 se garantiza aquí**: el
+envío HTTP, si se intenta, ocurre en la línea siguiente, después de que
+esta función ya retornó — nunca antes.
+
+### Cliente HTTP (`audit_tracer/sync_client.py`)
+
+Usa `requests` (ya estaba instalado en el entorno como dependencia
+transitiva; se agregó explícitamente a `requirements.txt`). No se usó el
+paquete `backoff` sugerido en la HU porque no estaba instalado — se
+implementó backoff exponencial acotado a mano (`BACKOFF_BASE_SEGUNDOS *
+2^intento`, máx. `MAX_INTENTOS_POR_EVENTO = 3` intentos por evento).
+
+- **CA2**: fallos de red/timeout/5xx se reintentan con backoff hasta
+  agotar los 3 intentos; nunca un bucle infinito en memoria — el estado
+  vive en SQLite (`audit_sync_queue`), así que un evento sobrevive al
+  cierre del proceso/notebook y se retoma en cualquier sincronización
+  posterior (`sync_now()`, o el hilo automático de abajo).
+- **CA4**: un 401/403 (token inválido/expirado/revocado) **no se
+  reintenta** — reintentar con el mismo token no cambia el resultado. El
+  token nunca se imprime, nunca se guarda en `ultimo_error`.
+- **CA3**: mientras no llega un 200/201 del servidor, el evento se queda
+  en `audit_sync_queue` con estado `FALLIDO` (nunca se borra ni se marca
+  `SINCRONIZADO` sin confirmación positiva).
+- **HTTPS obligatorio**: `configure_sync()` rechaza URLs que no sean
+  `https://`, con una única excepción para `localhost`/`127.0.0.1` (uso
+  exclusivo de pruebas/desarrollo).
+
+`configure_sync(api_url, token, auto=True)` es el punto de entrada desde
+un notebook — usa un token personal ya emitido (HU-5.5, vía
+`/admin/tokens` o `generar_token()`). Con `auto=True` (por defecto)
+arranca un hilo daemon que barre la cola cada 30s, así un evento
+capturado sin conexión se sincroniza solo en cuanto el servidor vuelve a
+estar disponible, sin que el notebook tenga que hacer nada.
+
+### Endpoint receptor: `POST /api/eventos/sincronizar`
+
+Mismo patrón que los endpoints existentes de HU-5.5
+(`/api/tokens/validar`): sin sesión Flask, autenticado por
+`Authorization: Bearer <token>`. Recibe el evento como JSON con los
+mismos nombres de campo que `schema/audit_log.sql` /
+`audit_log_central.sql` (`usuario_id`, `sesion_id`, `timestamp`,
+`tipo_accion`, `dataset_nombre`, `columnas_afectadas`, `ruta_destino`,
+`filas_exportadas`, `sobrescritura`, `contexto_ejecucion`,
+`motivo_fallo`, `nivel_alerta`, `motivo_alerta`) más `evento_uuid`.
+
+1. **CA4** — Valida el token con `validar_token()` contra la base
+   central antes de aceptar nada. Si es inválido, responde `401` y deja
+   constancia en `audit_log` central (`tipo_accion =
+   'SINCRONIZACION_RECHAZADA'`) sin guardar ni loguear el valor del
+   token — solo el motivo (`"Token revocado"`, `"Token expirado"`, etc.).
+2. Valida que el payload traiga los campos `NOT NULL` del esquema
+   (`evento_uuid`, `usuario_id`, `sesion_id`, `timestamp`, `tipo_accion`)
+   — si falta alguno, `400`, nunca `500`.
+3. **CA5** — Inserta con `models/audit_log.py::insert_event_if_new()`.
+
+### Idempotencia a nivel de base de datos (CA5)
+
+`insert_event_if_new(conn, event)` primero hace un `SELECT` por
+`evento_uuid` (optimización del camino feliz), pero la garantía real de
+no-duplicados es la restricción `evento_uuid TEXT UNIQUE NOT NULL` que ya
+traía el esquema central desde HU-5.4: si dos reintentos llegan casi a la
+vez, el que pierde la carrera choca con esa `UNIQUE` en el `INSERT` y se
+recupera capturando el `IntegrityError` — la base de datos es quien
+impide el duplicado, no un `SELECT` previo que podría perder la carrera.
+Responde `201` en la primera inserción y `200` con `{"status":
+"duplicado"}` en cualquier reintento posterior del mismo `evento_uuid`.
+
+### Indicador en el notebook (Sub-tarea 5)
+
+`audit_tracer.sync_status()` imprime y devuelve un resumen (`{pendientes,
+fallidos, sincronizados, ultimo_intento, ultimo_error}`) leído de
+`audit_sync_queue`. `audit_tracer.sync_now()` fuerza un barrido
+inmediato de la cola sin esperar al hilo automático.
+
+### Dashboard administrativo — `/admin/sincronizacion` (Sub-tarea 6)
+
+Extiende el dashboard existente (mismo patrón que `/admin/tokens`, un
+link más en el sidebar de "Administración") — no se construyó un
+dashboard nuevo.
+
+**Límite honesto de arquitectura**: el dashboard Flask lee
+`audit_central.db`; la cola de pendientes/fallidos vive en el
+`audit_trail.db` **local de cada notebook/Colab**. En un despliegue real,
+un Colab remoto corre en otra máquina que el servidor central jamás toca
+directamente — el servidor no puede saber cuántos eventos tiene
+pendientes un cliente que nunca le reportó su estado (eso requeriría un
+protocolo de heartbeat que esta HU no pide y que sería alcance nuevo). Por
+eso el panel muestra dos cosas con procedencia distinta, explícitamente
+etiquetadas:
+- **Cola de "esta instancia"**: leída directamente de `audit_trail.db` si
+  existe en este mismo servidor (como en este repo, donde local y central
+  conviven en el mismo filesystem para pruebas/demo) — pendientes,
+  fallidos, sincronizados, último intento, último error.
+- **Rechazos de autenticación**: esta sí es una señal genuinamente
+  centralizada — eventos `SINCRONIZACION_RECHAZADA` que el servidor
+  central observó de verdad, sin exponer ningún token.
+
+### Pruebas
+
+`tests/test_sync_events.py` — cola local y `evento_uuid` estable entre
+reintentos, persistencia-antes-que-red (CA1), cliente HTTP con
+`requests.post` mockeado (envío exitoso, servidor caído, recuperación de
+conexión, token inválido sin retry infinito, no reenvío de un evento ya
+sincronizado), idempotencia a nivel de BD (incluida la rama de
+`IntegrityError` por carrera concurrente), el endpoint receptor completo
+con `app.test_client()` contra una base central aislada (a diferencia de
+otros tests del repo, que sin querer pegan contra `audit_central.db`
+real), y una integración extremo a extremo con un servidor Flask real en
+un hilo (`werkzeug.serving.make_server`, sin mocks) que prueba caída y
+recuperación con sockets reales.

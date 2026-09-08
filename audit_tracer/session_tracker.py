@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict
 from .db import get_connection
 from .auth.autenticacion import login as _auth_login, logout as _auth_logout
-from .models.audit_log import insert_event
+from .models.audit_log import insert_event_and_enqueue_sync
 from .utils.session import generate_session_id, get_hostname, detect_environment
 
 class SessionTracker:
@@ -44,7 +44,8 @@ class SessionTracker:
 
         try:
             self.conn = get_connection()
-            insert_event(self.conn, {
+            # HU-5.8 CA1: persistencia local + encolado antes de cualquier envío.
+            resultado = insert_event_and_enqueue_sync(self.conn, {
                 'usuario_id': self.usuario_id,
                 'sesion_id': self.sesion_id,
                 'timestamp': self.start_time.isoformat(),
@@ -52,6 +53,11 @@ class SessionTracker:
                 'contexto_ejecucion': f"MODO_LIBRERIA | Env: {detect_environment()} | Host: {get_hostname()}",
                 'nivel_alerta': 'NORMAL'
             })
+            try:
+                from .sync_client import try_sync_event
+                try_sync_event(self.conn, resultado['event_id'])  # best-effort, nunca lanza
+            except Exception:
+                pass
             self._active = True
             # Registrar el cierre automático para terminación normal
             atexit.register(self.end_session)
@@ -118,7 +124,7 @@ class SessionTracker:
             now = datetime.utcnow()
             duration = int((now - self.start_time).total_seconds())
 
-            insert_event(self.conn, {
+            resultado = insert_event_and_enqueue_sync(self.conn, {
                 'usuario_id': self.usuario_id,
                 'sesion_id': self.sesion_id,
                 'timestamp': now.isoformat(),
@@ -126,6 +132,11 @@ class SessionTracker:
                 'contexto_ejecucion': f"Duración: {duration}s",
                 'nivel_alerta': 'NORMAL' if not abrupt else 'ADVERTENCIA'
             })
+            try:
+                from .sync_client import try_sync_event
+                try_sync_event(self.conn, resultado['event_id'])  # best-effort, nunca lanza
+            except Exception:
+                pass
             self.conn.close()
             self._active = False
         except:

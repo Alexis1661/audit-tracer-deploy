@@ -3,7 +3,7 @@ import os
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from ..utils.hashing import hash_event
 
 # Los 13 campos funcionales sobre los que se calcula hash_integridad.
@@ -226,6 +226,22 @@ def get_event_by_id(conn: sqlite3.Connection, event_id: int) -> Optional[Dict]:
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute(query, (event_id,))
+    row = cursor.fetchone()
+    return dict(row) if row else None
+
+
+def get_event_by_uuid(conn: sqlite3.Connection, evento_uuid: str) -> Optional[Dict]:
+    """
+    HU-5.8 — Busca un evento por su evento_uuid (clave de idempotencia de
+    la sincronización). Funciona igual sobre la base local o la central.
+
+    Returns:
+        Optional[Dict]: El evento si existe, o None.
+    """
+    query = "SELECT * FROM audit_log WHERE evento_uuid = ?"
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(query, (evento_uuid,))
     row = cursor.fetchone()
     return dict(row) if row else None
 
@@ -470,3 +486,171 @@ def export_report_to_csv(
         _write(dest)
 
     return len(eventos)
+
+
+# ──────────────────────────────────────────────────────────────
+# HU-5.8 — Sincronización de eventos hacia el servidor central
+# ──────────────────────────────────────────────────────────────
+#
+# Dos mitades:
+#   (a) Cola local (audit_sync_queue, solo en la base LOCAL): registra
+#       qué eventos capturados por la librería (Colab u otro entorno)
+#       todavía no fueron confirmados por el servidor central.
+#   (b) Inserción idempotente (usada por el endpoint receptor sobre la
+#       base CENTRAL): garantiza que reintentar el envío de un mismo
+#       evento_uuid nunca produzca una segunda fila.
+
+# CA1/CA3 — Sub-tarea 2: encolar SIEMPRE junto con la inserción local.
+def insert_event_and_enqueue_sync(conn: sqlite3.Connection, event: Dict) -> Dict:
+    """
+    CA1 — Inserta `event` en la base LOCAL (audit_log) y, en la misma
+    operación, lo encola en audit_sync_queue con estado 'PENDIENTE'.
+
+    Este es el único punto que usan los interceptores de captura
+    (data_capture.py, export_capture.py, failed_access.py,
+    session_tracker.py): garantiza que ningún evento capturado quede sin
+    persistir localmente antes de que se intente cualquier envío HTTP —
+    la llamada de red, si ocurre, siempre sucede DESPUÉS de que esta
+    función retorna.
+
+    Args:
+        conn:  Conexión a la base LOCAL (no la central: la central no
+               tiene tabla audit_sync_queue).
+        event: Mismo formato que insert_event().
+
+    Returns:
+        Dict: {'event_id', 'evento_uuid', 'hash_integridad'} del evento
+        ya persistido y encolado.
+    """
+    event_id = insert_event(conn, event)
+    conn.execute(
+        "INSERT INTO audit_sync_queue (event_id, evento_uuid, estado) VALUES (?, ?, 'PENDIENTE')",
+        (event_id, event["evento_uuid"]),
+    )
+    conn.commit()
+    return {
+        "event_id": event_id,
+        "evento_uuid": event["evento_uuid"],
+        "hash_integridad": event["hash_integridad"],
+    }
+
+
+def get_pending_sync_events(conn: sqlite3.Connection) -> List[Dict]:
+    """
+    CA2/CA3 — Eventos locales todavía no confirmados por el servidor
+    central (estado 'PENDIENTE' o 'FALLIDO'), en orden de captura, con
+    todos los campos de audit_log necesarios para reconstruir el payload
+    de sincronización.
+    """
+    query = """
+        SELECT a.*, q.estado, q.intentos, q.ultimo_intento, q.ultimo_error
+        FROM audit_sync_queue q
+        JOIN audit_log a ON a.event_id = q.event_id
+        WHERE q.estado IN ('PENDIENTE', 'FALLIDO')
+        ORDER BY a.event_id ASC
+    """
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(query)
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def mark_event_synced(conn: sqlite3.Connection, event_id: int, cuando: str) -> None:
+    """CA3 — Confirmación positiva del servidor central: marca la fila de la cola como SINCRONIZADO."""
+    conn.execute(
+        """
+        UPDATE audit_sync_queue
+        SET estado = 'SINCRONIZADO', ultimo_intento = ?, ultimo_error = NULL,
+            intentos = intentos + 1, sincronizado_en = ?
+        WHERE event_id = ?
+        """,
+        (cuando, cuando, event_id),
+    )
+    conn.commit()
+
+
+def mark_event_sync_failed(conn: sqlite3.Connection, event_id: int, error_mensaje: str, cuando: str) -> None:
+    """
+    CA2/CA3 — Registra un intento de envío fallido sin eliminar la fila:
+    el evento permanece en la cola para reintentarse. `error_mensaje`
+    nunca debe incluir el valor del token (CA4).
+    """
+    conn.execute(
+        """
+        UPDATE audit_sync_queue
+        SET estado = 'FALLIDO', ultimo_intento = ?, ultimo_error = ?,
+            intentos = intentos + 1
+        WHERE event_id = ?
+        """,
+        (cuando, error_mensaje, event_id),
+    )
+    conn.commit()
+
+
+def get_sync_queue_summary(conn: sqlite3.Connection) -> Dict:
+    """
+    Sub-tarea 5/6 — Resumen de la cola local para el indicador de
+    notebook y el panel de diagnóstico del dashboard.
+    """
+    filas = conn.execute("SELECT estado, COUNT(*) FROM audit_sync_queue GROUP BY estado").fetchall()
+    conteos = {estado: total for estado, total in filas}
+
+    ultimo = conn.execute(
+        """
+        SELECT ultimo_intento, ultimo_error FROM audit_sync_queue
+        WHERE ultimo_intento IS NOT NULL
+        ORDER BY ultimo_intento DESC LIMIT 1
+        """
+    ).fetchone()
+
+    return {
+        "pendientes": conteos.get("PENDIENTE", 0),
+        "fallidos": conteos.get("FALLIDO", 0),
+        "sincronizados": conteos.get("SINCRONIZADO", 0),
+        "ultimo_intento": ultimo[0] if ultimo else None,
+        "ultimo_error": ultimo[1] if ultimo else None,
+    }
+
+
+# CA5 — Sub-tarea 4: inserción idempotente usada por el endpoint receptor.
+def insert_event_if_new(conn: sqlite3.Connection, event: Dict) -> Tuple[Dict, bool]:
+    """
+    CA5 — Inserta `event` en `conn` (la base CENTRAL) solo si su
+    evento_uuid no existe todavía. Es la operación que usa el endpoint
+    receptor (POST /api/eventos/sincronizar) para que reintentar el envío
+    de un mismo evento nunca produzca una segunda fila.
+
+    La garantía real de no-duplicados es la restricción `evento_uuid TEXT
+    UNIQUE NOT NULL` del esquema (schema/audit_log_central.sql, HU-5.4):
+    el SELECT inicial es solo una optimización para el camino feliz (evita
+    pagar el costo de un INSERT fallido en el caso común). Si dos
+    solicitudes concurrentes llegan a la vez para el mismo evento_uuid, la
+    que pierde la carrera choca con esa restricción UNIQUE y se recupera
+    capturando el IntegrityError — la base de datos es quien realmente
+    impide el duplicado, no esta función.
+
+    Returns:
+        Tuple[Dict, bool]: (evento almacenado, True si se insertó ahora;
+        False si ya existía — en ambos casos el caller puede responder
+        de forma idempotente).
+
+    Raises:
+        ValueError: Si el evento no trae evento_uuid.
+    """
+    evento_uuid = event.get("evento_uuid")
+    if not evento_uuid:
+        raise ValueError("evento_uuid es obligatorio para insertar de forma idempotente")
+
+    existente = get_event_by_uuid(conn, evento_uuid)
+    if existente:
+        return existente, False
+
+    try:
+        event_id = insert_event(conn, dict(event))
+    except sqlite3.IntegrityError:
+        existente = get_event_by_uuid(conn, evento_uuid)
+        if existente:
+            return existente, False
+        raise  # IntegrityError no relacionado con un evento_uuid duplicado
+
+    return get_event_by_id(conn, event_id), True

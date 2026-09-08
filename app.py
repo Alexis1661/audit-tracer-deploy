@@ -5,11 +5,12 @@ Sistema de Auditoría de Trazabilidad de Datos Clínicos.
 
 import io
 import os
+import sqlite3
 from collections import Counter
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, jsonify
 
 # ── Importaciones del backend existente ─────────────────────────────────────
-from audit_tracer.db import get_central_connection
+from audit_tracer.db import get_central_connection, get_connection
 from audit_tracer.auth.autenticacion import login as auth_login, logout as auth_logout
 from audit_tracer.auth.registro import register_user
 from audit_tracer.auth.gestion_roles import assign_role
@@ -31,6 +32,8 @@ from audit_tracer.models.audit_log import (
     generate_report,
     export_report_to_csv,
     NO_RESULTS_MESSAGE,
+    insert_event_if_new,       # HU-5.8
+    get_sync_queue_summary,    # HU-5.8
 )
 from audit_tracer.auth.control_acceso import has_permission  # HU-1.4
 from datetime import datetime, timedelta
@@ -397,6 +400,50 @@ def revocar_token_post(token_id):
     return redirect(url_for('lista_tokens'))
 
 
+# ── DIAGNÓSTICO DE SINCRONIZACIÓN (HU-5.8 Sub-tarea 6) ─────────────────────────
+
+@app.route('/admin/sincronizacion')
+@login_required
+@admin_required
+def admin_sincronizacion():
+    """
+    HU-5.8 Sub-tarea 6 — Panel de diagnóstico de sincronización.
+
+    Combina dos fuentes con alcance distinto:
+      - Cola local de ESTA instancia (audit_trail.db, si existe en este
+        filesystem): pendientes / fallidos / sincronizados / último intento
+        / último error — leído directamente de audit_sync_queue.
+      - Rechazos de autenticación que el servidor central sí observó de
+        verdad (tipo_accion = SINCRONIZACION_RECHAZADA), sin exponer tokens.
+
+    En un despliegue distribuido real, un Colab remoto corre en otra
+    máquina: el servidor central NO puede ver la cola local de un cliente
+    que nunca llegó a conectarse (eso requeriría que el cliente reporte su
+    propio estado, protocolo fuera del alcance de esta HU). El panel de
+    cola local, por eso, se etiqueta explícitamente como "esta instancia".
+    """
+    cola_local = None
+    try:
+        conn_local = get_connection()
+        cola_local = get_sync_queue_summary(conn_local)
+        conn_local.close()
+    except Exception:
+        cola_local = None
+
+    conn = get_db()
+    rechazos = get_events(conn, tipo_accion='SINCRONIZACION_RECHAZADA', orden_desc=True)
+    conn.close()
+
+    return render_template(
+        'admin/sincronizacion.html',
+        nombre=session.get('nombre', 'Usuario'),
+        rol=session.get('rol', 'N/A'),
+        cola_local=cola_local,
+        total_rechazos=len(rechazos),
+        rechazos_recientes=rechazos[:10],
+    )
+
+
 # ── API ENDPOINTS DE TOKENS (HU-5.5 CA5 / HU-6.1 ready) ───────────────────────
 
 @app.route('/api/tokens/validar', methods=['POST'])
@@ -467,6 +514,85 @@ def api_revocar_token():
     status_code = 200 if exito else 404
     return jsonify({'success': exito, 'message': mensaje}), status_code
 
+
+# ── ENDPOINT RECEPTOR DE EVENTOS (HU-5.8, cierra el hueco de HU-5.6) ───────────
+
+# Campos NOT NULL en audit_log/audit_log_central: sin ellos el INSERT
+# fallaría con un error de esquema, así que se validan antes de tocar la BD.
+_CAMPOS_EVENTO_REQUERIDOS = ('evento_uuid', 'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion')
+
+# Mismos nombres de columna que schema/audit_log.sql / audit_log_central.sql —
+# el payload JSON usa exactamente estos campos (ver README HU-5.8).
+_CAMPOS_EVENTO_ACEPTADOS = _CAMPOS_EVENTO_REQUERIDOS + (
+    'dataset_nombre', 'columnas_afectadas', 'ruta_destino', 'filas_exportadas',
+    'sobrescritura', 'contexto_ejecucion', 'motivo_fallo', 'nivel_alerta', 'motivo_alerta',
+)
+
+
+@app.route('/api/eventos/sincronizar', methods=['POST'])
+def api_sincronizar_evento():
+    """
+    HU-5.8 CA1-CA5 — Endpoint receptor de eventos sincronizados desde la
+    librería (Colab u otro entorno). No existía ningún endpoint de
+    ingesta en el repositorio (HU-5.6 estaba pendiente); se implementa
+    aquí porque HU-5.8 no tiene a dónde sincronizar sin él.
+
+    1. Autentica al emisor con un token personal (HU-5.5, sin tocar
+       validar_token()).
+    2. Valida que el payload traiga los campos NOT NULL del esquema.
+    3. Inserta de forma idempotente por evento_uuid (CA5): reintentar el
+       mismo evento nunca crea una segunda fila.
+    """
+    token_str = None
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token_str = auth_header.split(' ', 1)[1].strip()
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'status': 'error', 'mensaje': 'Se esperaba un cuerpo JSON con los campos del evento'}), 400
+
+    conn = get_db()
+
+    # CA4: validar el token del emisor ANTES de aceptar el evento.
+    valido, mensaje, token_data = validar_token(conn, token_str)
+    if not valido:
+        # Deja constancia del rechazo en auditoría sin exponer el valor del token.
+        try:
+            insert_event(conn, {
+                'usuario_id': (token_data or {}).get('usuario_id', 'DESCONOCIDO'),
+                'sesion_id': 'SINCRONIZACION',
+                'timestamp': datetime.utcnow().isoformat(),
+                'tipo_accion': 'SINCRONIZACION_RECHAZADA',
+                'motivo_fallo': mensaje,
+                'nivel_alerta': 'ADVERTENCIA',
+            })
+        except Exception:
+            pass
+        conn.close()
+        return jsonify({'status': 'error', 'mensaje': mensaje}), 401
+
+    evento = {campo: data.get(campo) for campo in _CAMPOS_EVENTO_ACEPTADOS if campo in data}
+    faltantes = [c for c in _CAMPOS_EVENTO_REQUERIDOS if not evento.get(c)]
+    if faltantes:
+        conn.close()
+        return jsonify({
+            'status': 'error',
+            'mensaje': f"Campos requeridos faltantes: {', '.join(faltantes)}",
+        }), 400
+
+    try:
+        registro, creado = insert_event_if_new(conn, evento)
+    except sqlite3.IntegrityError as exc:
+        conn.close()
+        return jsonify({'status': 'error', 'mensaje': f'Evento inválido: {exc}'}), 400
+    conn.close()
+
+    return jsonify({
+        'status': 'creado' if creado else 'duplicado',
+        'event_id': registro['event_id'],
+        'evento_uuid': registro['evento_uuid'],
+    }), 201 if creado else 200
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
