@@ -181,3 +181,46 @@ CREATE INDEX IF NOT EXISTS idx_audit_nivel_alerta
 
 CREATE INDEX IF NOT EXISTS idx_audit_evento_uuid
     ON audit_log(evento_uuid);
+
+-- ============================================================
+-- COLA LOCAL DE SINCRONIZACIÓN (HU-5.8)
+-- Solo existe en la base LOCAL (no en audit_log_central): cada fila de
+-- audit_log capturada por la librería (Colab u otro entorno) tiene una
+-- fila espejo aquí que rastrea su envío al servidor central.
+--
+-- Se modela como tabla separada — y no como columnas nuevas en
+-- audit_log — a propósito: audit_log tiene triggers que bloquean TODO
+-- UPDATE (inmutabilidad, HU-5.4 CA3), y el estado de sincronización
+-- necesita mutar (PENDIENTE -> SINCRONIZADO). Es metadata operativa de
+-- transporte, no parte del evento auditado — mismo criterio ya usado
+-- para justificar que evento_uuid quede fuera del hash_integridad.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS audit_sync_queue (
+
+    event_id        INTEGER PRIMARY KEY REFERENCES audit_log(event_id),
+    -- Mismo event_id de la fila local que representa. Uno a uno.
+
+    evento_uuid     TEXT    NOT NULL UNIQUE,
+    -- Copia de audit_log.evento_uuid: identificador estable enviado al
+    -- servidor central en cada intento, nunca regenerado entre reintentos.
+
+    estado          TEXT    NOT NULL DEFAULT 'PENDIENTE',
+    -- 'PENDIENTE' | 'SINCRONIZADO' | 'FALLIDO'
+
+    intentos        INTEGER NOT NULL DEFAULT 0,
+    -- Número de intentos de envío realizados hasta ahora.
+
+    ultimo_intento  TEXT,
+    -- Timestamp ISO 8601 del último intento de envío (exitoso o no).
+
+    ultimo_error    TEXT,
+    -- Motivo del último fallo (sin datos sensibles: nunca el token).
+
+    sincronizado_en TEXT
+    -- Timestamp ISO 8601 de la confirmación positiva del servidor central.
+
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_queue_estado
+    ON audit_sync_queue(estado);

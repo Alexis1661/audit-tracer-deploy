@@ -102,6 +102,30 @@ def _migrate_audit_log(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migrate_sync_queue(conn: sqlite3.Connection) -> None:
+    """
+    HU-5.8 — Crea audit_sync_queue en bases LOCALES preexistentes que se
+    crearon antes de que esta tabla existiera en schema/audit_log.sql.
+
+    Se aplica únicamente a la base local (llamada solo desde
+    get_connection()): la central es el destino de la sincronización, no
+    necesita rastrear su propio envío.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS audit_sync_queue (
+            event_id        INTEGER PRIMARY KEY REFERENCES audit_log(event_id),
+            evento_uuid     TEXT    NOT NULL UNIQUE,
+            estado          TEXT    NOT NULL DEFAULT 'PENDIENTE',
+            intentos        INTEGER NOT NULL DEFAULT 0,
+            ultimo_intento  TEXT,
+            ultimo_error    TEXT,
+            sincronizado_en TEXT
+        );
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sync_queue_estado ON audit_sync_queue(estado);")
+    conn.commit()
+
+
 def _init_from_schema(conn: sqlite3.Connection, schema_files: list) -> None:
     """Ejecuta los archivos de schema indicados (relativos a schema/) sobre `conn`."""
     schema_dir = "schema"
@@ -154,6 +178,7 @@ def get_connection(db_path: str = "audit_trail.db") -> sqlite3.Connection:
     else:
         _migrate_audit_log(conn)
         _migrate_tokens(conn)
+        _migrate_sync_queue(conn)  # HU-5.8 — solo bases locales
 
     return conn
 

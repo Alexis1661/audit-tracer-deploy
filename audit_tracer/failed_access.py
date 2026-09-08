@@ -27,7 +27,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Callable
 
 from .db import get_connection
-from .models.audit_log import insert_event
+from .models.audit_log import insert_event_and_enqueue_sync
 from .utils.session import detect_environment, get_hostname
 
 
@@ -229,9 +229,16 @@ def log_failed_access(
 
     try:
         conn = get_connection()
-        event_id = insert_event(conn, event)    # CA4: persistencia inmediata / PDGTRAZDSA-65
+        # CA4: persistencia inmediata / PDGTRAZDSA-65.
+        # HU-5.8 CA1: se encola para sincronización en la misma operación.
+        resultado = insert_event_and_enqueue_sync(conn, event)
+        try:
+            from .sync_client import try_sync_event
+            try_sync_event(conn, resultado["event_id"])  # best-effort, nunca lanza
+        except Exception:
+            pass
         conn.close()
-        return event_id
+        return resultado["event_id"]
     except Exception as db_exc:
         # No interrumpir el flujo del usuario si falla la auditoría
         print(f"[AuditTracer] Advertencia: no se pudo registrar ACCESO_FALLIDO — {db_exc}")
