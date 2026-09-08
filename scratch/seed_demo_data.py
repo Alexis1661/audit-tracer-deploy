@@ -15,12 +15,12 @@ import os
 import sys
 sys.path.append(os.getcwd())
 
-from audit_tracer.db import get_connection
+from audit_tracer.db import get_central_connection
 from audit_tracer.models.audit_log import insert_event
 from audit_tracer.auth.registro import register_user
 from audit_tracer.models.usuarios import get_user_by_email
 
-conn = get_connection()
+conn = get_central_connection()
 
 # ── Usuarios de demo (además del admin ya sembrado) ──────────────────────
 DEMO_USERS = [
