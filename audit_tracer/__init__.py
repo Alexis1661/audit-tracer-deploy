@@ -2,6 +2,10 @@
 from .session_tracker import init_tracker, login, logout
 from .data_capture import activate as _activate_data_capture
 from .sync_client import configure_sync, sync_now, sync_status  # HU-5.8
+# HU-5.7: audit_tracer.login() (sin credenciales) ya cubre el login por
+# código de dispositivo — no se reexporta device_login() a nivel de
+# paquete a propósito, para no sombrear el submódulo audit_tracer.device_login
+# con una función del mismo nombre. Uso directo: from audit_tracer.device_login import device_login
 
 # Inicializar rastreo de sesión automático para scripts y Jupyter
 init_tracker()

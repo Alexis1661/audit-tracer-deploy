@@ -363,3 +363,137 @@ otros tests del repo, que sin querer pegan contra `audit_central.db`
 real), y una integración extremo a extremo con un servidor Flask real en
 un hilo (`werkzeug.serving.make_server`, sin mocks) que prueba caída y
 recuperación con sockets reales.
+
+## Login por código de dispositivo (HU-5.7)
+
+### Por qué
+
+`audit_tracer.login(email, password)` (HU-2.5) ya existía, pero obliga a
+escribir la contraseña en texto plano dentro de una celda de notebook —
+mala práctica en un entorno compartido/versionado como Colab, y fricción
+real cada vez que se reinicia el runtime. HU-5.7 agrega un segundo camino,
+sin credenciales: `audit_tracer.login()` — el mismo patrón "device flow"
+de OAuth 2.0 (RFC 8628) que ya usan `gh auth login` o la CLI de Google
+Cloud: un código corto que se confirma en el navegador, mientras la
+librería espera por polling.
+
+Los dos caminos conviven en la misma función (`SessionTracker.login()`):
+si se pasan `email`/`password`, es exactamente el comportamiento de
+HU-2.5, sin cambios. Si no se pasa nada, se dispara el flujo de código.
+
+### Dos secretos, no uno
+
+Cada intento de login genera **dos** valores distintos, con roles
+distintos — el mismo diseño que OAuth Device Authorization Grant:
+
+- `codigo` — 8 caracteres legibles (`XXXX-XXXX`, sin `0/O/1/I` para
+  evitar errores de tecleo). Es lo único que ve un humano; se muestra en
+  el notebook y se escribe en el dashboard.
+- `device_code` — un secreto largo (`secrets.token_urlsafe(32)`) que solo
+  conoce el proceso que llamó a `/iniciar`. Es la credencial real del
+  polling (`/api/auth/dispositivo/estado`).
+
+Si el `codigo` corto alcanzara para consultar el estado, cualquiera que
+lo viera de reojo en la pantalla de otra persona podría hacer polling y
+robarle el token en cuanto lo confirmara. Con dos secretos separados,
+"ver el código" y "poder recuperar el token" son cosas distintas.
+
+### Servidor: `audit_tracer/auth/device_codes.py` + `models/device_codes.py`
+
+Mismo patrón que `auth/tokens.py`/`models/tokens.py` (HU-5.5): tabla
+`codigos_dispositivo` creada de forma perezosa en la conexión que se le
+pase (sin tocar `schema/*.sql` ni las migraciones de `db.py`). No está
+sujeta a los triggers de inmutabilidad de `audit_log` (HU-5.4): esos
+triggers son específicos de esa tabla, y `codigos_dispositivo` — igual
+que `tokens_acceso` — es metadata operativa que necesita mutar
+(`PENDIENTE` → `CONFIRMADO` → `CONSUMIDO`).
+
+- **CA1** — `POST /api/auth/dispositivo/iniciar`: sin autenticación (es
+  el primer paso, antes de que exista cualquier token). Código válido
+  por `CODIGO_EXPIRACION_MINUTOS = 10` — una ventana corta, distinta de
+  los 30 días de vigencia del token que se genera al confirmar.
+- **CA2** — `GET/POST /auth/dispositivo`: requiere sesión de dashboard
+  (`@login_required`). Al confirmar, reutiliza `generar_token()` de
+  HU-5.5 sin modificarlo, y registra `CONFIRMACION_LOGIN_DISPOSITIVO` en
+  auditoría.
+- **CA3** — `GET /api/auth/dispositivo/estado?device_code=...`: sin
+  sesión ni token — el `device_code` largo y secreto ES la credencial.
+  Al reportar `CONFIRMADO` por primera vez, entrega el token y marca el
+  código `CONSUMIDO` de inmediato (`token = NULL`): una segunda consulta
+  con el mismo `device_code` responde `410 Gone`, nunca el token dos
+  veces.
+
+`login_required` (en `app.py`) ahora arma un parámetro `next` con la ruta
+a la que iba el usuario antes de exigirle sesión, y `/login` lo respeta
+al redirigir tras un login exitoso — así, visitar el link de activación
+sin sesión abierta cae en el login normal y, al autenticarse, vuelve
+exactamente a la página de confirmación con el código ya precargado
+(verificado en navegador de punta a punta, no solo con tests).
+
+### Cliente: `audit_tracer/device_login.py`
+
+`device_login(api_url, cache_dir=None, ...)` es una función pura de
+"consíguime un token", sin efectos secundarios sobre `SessionTracker` —
+eso lo orquesta `SessionTracker.login()` por separado (separación de
+responsabilidades, y más fácil de probar cada pieza por su lado):
+
+1. **CA4/CA5** — Si hay un token cacheado, lo valida contra
+   `/api/tokens/validar` (HU-5.5, reutilizado tal cual). Si sigue
+   vigente, retorna de inmediato sin imprimir ningún código
+   (`origen: 'cache'`). Si no (expiró/fue revocado), **descarta el
+   caché y repite el flujo automáticamente** — el usuario no tiene que
+   notar la diferencia ni intervenir.
+2. **CA1** — Si no hay token reusable, pide `/iniciar` e imprime el
+   código + URL de activación en la salida del notebook.
+3. **CA3** — Polling de `/estado` cada `intervalo_polling` segundos
+   (por defecto 5, el mismo valor que sugiere el servidor) hasta
+   `CONFIRMADO`, `EXPIRADO`, o agotar `timeout_seconds` (600s por
+   defecto — la misma ventana que el código en el servidor). Un error de
+   red durante el polling no aborta: se reintenta en el siguiente ciclo.
+4. **CA4** — Al confirmarse, cachea `{token, usuario_id, guardado_en}`
+   en disco.
+
+`_default_cache_dir()` prioriza `/content/drive/MyDrive/.audit_tracer`
+(el punto de montaje estándar de `drive.mount()` en Colab) si existe —
+porque sobrevive al cierre de la sesión de Colab, que es exactamente el
+problema que motiva esta HU. Si no existe (entorno local, script, CI),
+cae a `~/.audit_tracer`.
+
+`SessionTracker.login()` sin credenciales resuelve `api_url` desde el
+parámetro o la variable de entorno `AUDIT_TRACER_API_URL`, llama a
+`device_login()`, actualiza `self.usuario_id` en éxito (igual que el
+camino de HU-2.5, para que los eventos posteriores queden bien
+atribuidos), y además **configura `sync_client` automáticamente** con el
+token recién obtenido — así "un solo comando" deja lista tanto la
+identidad local como la sincronización hacia la central, sin un segundo
+paso manual.
+
+No se reexporta `device_login()` a nivel de paquete (`audit_tracer.device_login`
+sigue siendo el submódulo, no la función): nombrar la función igual que
+su módulo y hacer `from .device_login import device_login` en
+`__init__.py` sombrea `audit_tracer.device_login` con la función,
+rompiendo cualquier `import audit_tracer.device_login as m; m.requests`
+— exactamente el bug que atrapó la primera versión de los tests de esta
+HU. `audit_tracer.login()` ya es el único comando que pide CA1; acceso
+directo a `device_login()` sigue disponible vía
+`from audit_tracer.device_login import device_login`.
+
+### Pruebas
+
+`tests/test_device_login.py` — generación de código (CA1: legible, único,
+`device_code` no adivinable desde el código corto), confirmación (CA2:
+éxito, código inexistente/ya usado/expirado, evento de auditoría),
+consulta de estado (CA3: pendiente, confirmado con entrega única del
+token, expirado, inexistente), los tres endpoints HTTP completos con
+`app.test_client()` (incluido que `GET /auth/dispositivo` sin sesión
+redirige con `next`), `device_login()` con `requests` mockeado (polling
+exitoso, timeout de confirmación, expiración a mitad del polling, caché
+válido evita repetir el flujo, caché inválido dispara uno nuevo, `force=True`,
+sin conexión al iniciar), y una integración extremo a extremo con un
+servidor Flask real en un hilo — un segundo hilo confirma el código
+mientras `device_login()` hace polling real por la red, sin mocks.
+`tests/test_session_tracker.py::TestSessionTrackerLoginPorCodigo` cubre
+la orquestación de `SessionTracker.login()` (actualización de
+`usuario_id`, configuración automática de `sync_client`, resolución de
+`AUDIT_TRACER_API_URL`, y que el camino con `email`/`password` no toca
+`device_login()` en absoluto).

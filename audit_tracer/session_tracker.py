@@ -2,7 +2,7 @@ import atexit
 import os
 import signal
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Optional
 from .db import get_connection
 from .auth.autenticacion import login as _auth_login, logout as _auth_logout
 from .models.audit_log import insert_event_and_enqueue_sync
@@ -66,11 +66,23 @@ class SessionTracker:
             # pero notificamos por consola
             print(f"Audit Tracer Error: No se pudo iniciar la sesión de auditoría: {e}")
 
-    def login(self, email: str, password: str) -> Dict:
+    def login(
+        self,
+        email: Optional[str] = None,
+        password: Optional[str] = None,
+        api_url: Optional[str] = None,
+        cache_dir: Optional[str] = None,
+    ) -> Dict:
         """
-        HU-2.5 CA4 — Autentica al usuario activo del modo librería reutilizando
-        el mismo mecanismo de autenticación que la app web (auth.autenticacion.login),
-        sin generar una sesion_id nueva: se conserva self.sesion_id (CA3).
+        HU-2.5 CA4 / HU-5.7 — Autentica al usuario activo del modo librería.
+        Dos caminos, según los argumentos recibidos:
+
+        - email + password: autenticación directa (HU-2.5), sin cambios de
+          comportamiento respecto a como funcionaba antes de HU-5.7.
+        - sin credenciales: login por código de dispositivo (HU-5.7 CA1-CA5)
+          — genera/reusa un token vía audit_tracer.device_login.device_login(),
+          y además configura la sincronización automática hacia el servidor
+          central con ese token, para que "un solo comando" deje todo listo.
 
         En éxito, self.usuario_id pasa a ser el usuario autenticado y los
         eventos posteriores (CARGA, CONSULTA, EXPORTACION, ...) quedan
@@ -78,23 +90,51 @@ class SessionTracker:
         (permanece DESCONOCIDO si no había login previo).
 
         Args:
-            email (str): Email del usuario.
-            password (str): Contraseña del usuario.
+            email: Email del usuario (camino HU-2.5).
+            password: Contraseña del usuario (camino HU-2.5).
+            api_url: Base URL del servidor central (camino HU-5.7). Si se
+                omite, se usa la variable de entorno AUDIT_TRACER_API_URL.
+            cache_dir: Carpeta donde cachear el token (camino HU-5.7).
 
         Returns:
-            Dict: Resultado de auth.autenticacion.login (success, message, ...).
+            Dict: resultado de autenticación (success, message, ...).
         """
-        conn = self.conn or get_connection()
-        try:
-            result = _auth_login(conn, email, password, self.sesion_id)
-        finally:
-            if conn is not self.conn:
-                conn.close()
+        if email and password:
+            conn = self.conn or get_connection()
+            try:
+                result = _auth_login(conn, email, password, self.sesion_id)
+            finally:
+                if conn is not self.conn:
+                    conn.close()
 
-        if result.get('success'):
-            self.usuario_id = result['usuario_id']
+            if result.get('success'):
+                self.usuario_id = result['usuario_id']
 
-        return result
+            return result
+
+        # HU-5.7: sin credenciales -> login por código de dispositivo.
+        resolved_api_url = api_url or os.environ.get('AUDIT_TRACER_API_URL')
+        if not resolved_api_url:
+            return {
+                'success': False,
+                'message': (
+                    'Debes indicar api_url (o definir la variable de entorno '
+                    'AUDIT_TRACER_API_URL) para el login por código.'
+                ),
+            }
+
+        from .device_login import device_login
+        resultado = device_login(resolved_api_url, cache_dir=cache_dir)
+
+        if resultado.get('success'):
+            self.usuario_id = resultado['usuario_id']
+            try:
+                from .sync_client import configure_sync
+                configure_sync(resolved_api_url, resultado['token'])
+            except Exception:
+                pass  # la identidad local ya quedó establecida aunque falle configurar el sync
+
+        return resultado
 
     def logout(self) -> None:
         """
@@ -148,12 +188,19 @@ def init_tracker():
     tracker.start_session()
 
 
-def login(email: str, password: str) -> Dict:
+def login(
+    email: Optional[str] = None,
+    password: Optional[str] = None,
+    api_url: Optional[str] = None,
+    cache_dir: Optional[str] = None,
+) -> Dict:
     """
-    HU-2.5 CA4 — API pública de modo librería: autentica al usuario activo
-    contra el mismo mecanismo usado por la app web. Ver SessionTracker.login().
+    API pública de modo librería:
+      - audit_tracer.login(email, password) — HU-2.5, autenticación directa.
+      - audit_tracer.login() — HU-5.7, login por código de dispositivo.
+    Ver SessionTracker.login().
     """
-    return SessionTracker.get_instance().login(email, password)
+    return SessionTracker.get_instance().login(email, password, api_url, cache_dir)
 
 
 def logout() -> None:
