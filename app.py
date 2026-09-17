@@ -601,7 +601,8 @@ def api_estado_login_dispositivo():
     return jsonify(resultado), codigos_estado_http.get(resultado['estado'], 200)
 
 
-# ── ENDPOINT RECEPTOR DE EVENTOS (HU-5.8, cierra el hueco de HU-5.6) ───────────
+# ── ENDPOINT RECEPTOR DE EVENTOS (HU-5.6, construido inicialmente dentro ──────
+# ── de HU-5.8 porque su cliente no tenía a dónde sincronizar sin él) ──────────
 
 # Campos NOT NULL en audit_log/audit_log_central: sin ellos el INSERT
 # fallaría con un error de esquema, así que se validan antes de tocar la BD.
@@ -615,20 +616,40 @@ _CAMPOS_EVENTO_ACEPTADOS = _CAMPOS_EVENTO_REQUERIDOS + (
 )
 
 
+def _peticion_es_segura() -> bool:
+    """
+    HU-5.6 CA5 — Exige HTTPS para el endpoint de sincronización, con la
+    misma excepción que ya aplica sync_client.py del lado del cliente
+    (audit_tracer/sync_client.py::_validar_https()): localhost/127.0.0.1
+    se permite sin TLS, únicamente para pruebas y desarrollo local.
+    """
+    if request.is_secure:
+        return True
+    host = (request.host or '').split(':')[0]
+    return host in ('localhost', '127.0.0.1')
+
+
 @app.route('/api/eventos/sincronizar', methods=['POST'])
 def api_sincronizar_evento():
     """
-    HU-5.8 CA1-CA5 — Endpoint receptor de eventos sincronizados desde la
-    librería (Colab u otro entorno). No existía ningún endpoint de
-    ingesta en el repositorio (HU-5.6 estaba pendiente); se implementa
-    aquí porque HU-5.8 no tiene a dónde sincronizar sin él.
+    HU-5.6 CA1-CA5 — Endpoint receptor de eventos sincronizados desde la
+    librería (Colab u otro entorno).
 
-    1. Autentica al emisor con un token personal (HU-5.5, sin tocar
-       validar_token()).
-    2. Valida que el payload traiga los campos NOT NULL del esquema.
-    3. Inserta de forma idempotente por evento_uuid (CA5): reintentar el
-       mismo evento nunca crea una segunda fila.
+    1. CA5: exige HTTPS (excepto localhost, para pruebas/dev).
+    2. CA2: autentica al emisor con un token personal (HU-5.5/HU-6.2, sin
+       tocar validar_token()).
+    3. CA1: valida que el payload traiga los campos NOT NULL del esquema.
+    4. CA3/CA4: inserta de forma idempotente por evento_uuid aplicando el
+       mismo hash de integridad que el modelo local, y confirma con el
+       event_id insertado — reintentar el mismo evento nunca crea una
+       segunda fila.
     """
+    if not _peticion_es_segura():
+        return jsonify({
+            'status': 'error',
+            'mensaje': 'Esta operación requiere HTTPS (excepto en localhost, para pruebas/dev).',
+        }), 426  # 426 Upgrade Required — el código HTTP pensado para exigir un cambio de protocolo
+
     token_str = None
     auth_header = request.headers.get('Authorization', '')
     if auth_header.startswith('Bearer '):

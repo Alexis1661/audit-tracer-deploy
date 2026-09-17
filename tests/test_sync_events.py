@@ -508,6 +508,53 @@ class TestEndpointSincronizarEventos:
         resp = client.post("/api/eventos/sincronizar", json=self._payload())
         assert resp.status_code == 401
 
+    # ── CA5: HTTPS obligatorio (excepto localhost/127.0.0.1) ──
+    def test_peticion_no_https_fuera_de_localhost_responde_426(self, api_client, token_activo):
+        client, db_path = api_client
+        token, user_id = token_activo
+
+        resp = client.post(
+            "/api/eventos/sincronizar",
+            json=self._payload(usuario_id=user_id),
+            headers={"Authorization": f"Bearer {token}"},
+            base_url="http://servidor-remoto.example.org",
+        )
+
+        assert resp.status_code == 426
+        assert resp.get_json()["status"] == "error"
+
+        # No debe haber insertado nada: el rechazo por transporte ocurre
+        # antes de tocar el token o el payload.
+        conn = get_central_connection(db_path)
+        evento = get_event_by_uuid(conn, self._payload()["evento_uuid"])
+        conn.close()
+        assert evento is None
+
+    def test_peticion_no_https_se_rechaza_incluso_sin_token(self, api_client):
+        """CA5 se evalúa antes que CA2: no hace falta un token para que el rechazo por
+        transporte ya responda — así nunca se procesan credenciales sobre un canal inseguro."""
+        client, _ = api_client
+        resp = client.post(
+            "/api/eventos/sincronizar",
+            json=self._payload(),
+            base_url="http://servidor-remoto.example.org",
+        )
+        assert resp.status_code == 426
+
+    def test_peticion_http_en_localhost_se_permite_para_pruebas_y_dev(self, api_client, token_activo):
+        """Misma excepción que ya aplica sync_client.py del lado cliente."""
+        client, db_path = api_client
+        token, user_id = token_activo
+
+        resp = client.post(
+            "/api/eventos/sincronizar",
+            json=self._payload(usuario_id=user_id),
+            headers={"Authorization": f"Bearer {token}"},
+            base_url="http://localhost/",
+        )
+
+        assert resp.status_code == 201
+
     def test_payload_incompleto_responde_400(self, api_client, token_activo):
         client, _ = api_client
         token, user_id = token_activo

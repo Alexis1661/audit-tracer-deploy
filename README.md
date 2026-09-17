@@ -298,15 +298,22 @@ mismos nombres de campo que `schema/audit_log.sql` /
 `filas_exportadas`, `sobrescritura`, `contexto_ejecucion`,
 `motivo_fallo`, `nivel_alerta`, `motivo_alerta`) más `evento_uuid`.
 
-1. **CA4** — Valida el token con `validar_token()` contra la base
+1. **HU-5.6 CA5** — Exige HTTPS antes de tocar el token o el payload
+   (`_peticion_es_segura()`), con la misma excepción que ya usaba
+   `configure_sync()` del lado del cliente: `localhost`/`127.0.0.1` sin
+   TLS, solo para pruebas/dev. Fuera de eso, responde `426 Upgrade
+   Required`. Esta pieza faltaba cuando HU-5.8 construyó el endpoint (el
+   cliente se autorrestringía a HTTPS, pero el servidor aceptaba
+   cualquier conexión); se cerró en la rama de HU-5.6.
+2. **CA4** — Valida el token con `validar_token()` contra la base
    central antes de aceptar nada. Si es inválido, responde `401` y deja
    constancia en `audit_log` central (`tipo_accion =
    'SINCRONIZACION_RECHAZADA'`) sin guardar ni loguear el valor del
    token — solo el motivo (`"Token revocado"`, `"Token expirado"`, etc.).
-2. Valida que el payload traiga los campos `NOT NULL` del esquema
+3. Valida que el payload traiga los campos `NOT NULL` del esquema
    (`evento_uuid`, `usuario_id`, `sesion_id`, `timestamp`, `tipo_accion`)
    — si falta alguno, `400`, nunca `500`.
-3. **CA5** — Inserta con `models/audit_log.py::insert_event_if_new()`.
+4. **CA5** — Inserta con `models/audit_log.py::insert_event_if_new()`.
 
 ### Idempotencia a nivel de base de datos (CA5)
 
