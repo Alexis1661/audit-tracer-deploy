@@ -123,3 +123,110 @@ class TestSessionTrackerLogout:
         tracker, _ = tracker_env
         tracker.logout()  # no debe lanzar excepción
         assert tracker.usuario_id == "DESCONOCIDO"
+
+
+class TestSessionTrackerLoginPorCodigo:
+    """
+    HU-5.7 CA1 — audit_tracer.login() sin credenciales dispara el login por
+    código de dispositivo. Se mockea device_login() (ya probado a fondo en
+    tests/test_device_login.py) para verificar solo la orquestación:
+    actualización de usuario_id y configuración automática de sync_client.
+    """
+
+    def test_login_sin_argumentos_usa_flujo_de_codigo_y_actualiza_usuario_id(self, tracker_env, monkeypatch):
+        import audit_tracer.device_login as device_login_module
+        tracker, _ = tracker_env
+
+        monkeypatch.setattr(
+            device_login_module, "device_login",
+            lambda api_url, cache_dir=None, **k: {
+                "success": True, "usuario_id": "u_device", "token": "tk_x", "origen": "device_flow",
+            },
+        )
+        monkeypatch.setattr("audit_tracer.sync_client.configure_sync", lambda *a, **k: None)
+
+        resultado = tracker.login(api_url="https://central.example.org")
+
+        assert resultado["success"] is True
+        assert tracker.usuario_id == "u_device"
+
+    def test_login_configura_sync_automaticamente_al_confirmar(self, tracker_env, monkeypatch):
+        import audit_tracer.device_login as device_login_module
+        tracker, _ = tracker_env
+
+        monkeypatch.setattr(
+            device_login_module, "device_login",
+            lambda api_url, cache_dir=None, **k: {
+                "success": True, "usuario_id": "u_device", "token": "tk_y", "origen": "device_flow",
+            },
+        )
+        llamadas = []
+        monkeypatch.setattr(
+            "audit_tracer.sync_client.configure_sync",
+            lambda api_url, token, **k: llamadas.append((api_url, token)),
+        )
+
+        tracker.login(api_url="https://central.example.org")
+
+        assert llamadas == [("https://central.example.org", "tk_y")]
+
+    def test_login_sin_api_url_ni_env_var_falla_con_mensaje_claro(self, tracker_env, monkeypatch):
+        tracker, _ = tracker_env
+        monkeypatch.delenv("AUDIT_TRACER_API_URL", raising=False)
+
+        resultado = tracker.login()
+
+        assert resultado["success"] is False
+        assert "api_url" in resultado["message"]
+
+    def test_login_usa_api_url_de_variable_de_entorno(self, tracker_env, monkeypatch):
+        import audit_tracer.device_login as device_login_module
+        tracker, _ = tracker_env
+        monkeypatch.setenv("AUDIT_TRACER_API_URL", "https://desde-env.example.org")
+
+        urls_recibidas = []
+        monkeypatch.setattr(
+            device_login_module, "device_login",
+            lambda api_url, cache_dir=None, **k: (
+                urls_recibidas.append(api_url),
+                {"success": True, "usuario_id": "u1", "token": "tk", "origen": "cache"},
+            )[1],
+        )
+        monkeypatch.setattr("audit_tracer.sync_client.configure_sync", lambda *a, **k: None)
+
+        tracker.login()
+
+        assert urls_recibidas == ["https://desde-env.example.org"]
+
+    def test_login_fallido_por_codigo_no_cambia_la_identidad(self, tracker_env, monkeypatch):
+        import audit_tracer.device_login as device_login_module
+        tracker, _ = tracker_env
+
+        monkeypatch.setattr(
+            device_login_module, "device_login",
+            lambda api_url, cache_dir=None, **k: {
+                "success": False, "motivo": "TIMEOUT", "message": "No se confirmó a tiempo.",
+            },
+        )
+
+        resultado = tracker.login(api_url="https://central.example.org")
+
+        assert resultado["success"] is False
+        assert tracker.usuario_id == "DESCONOCIDO"
+
+    def test_login_con_email_y_password_sigue_usando_el_camino_directo(self, tracker_env, monkeypatch):
+        """No debe tocar device_login() cuando se pasan credenciales (HU-2.5 intacto)."""
+        import audit_tracer.device_login as device_login_module
+        tracker, conn = tracker_env
+        register_user(conn, "directo@test.com", "pwd12345", "CIENTIFICO_DATOS", "admin")
+
+        llamado = []
+        monkeypatch.setattr(
+            device_login_module, "device_login",
+            lambda *a, **k: llamado.append(1),
+        )
+
+        resultado = tracker.login("directo@test.com", "pwd12345")
+
+        assert resultado["success"] is True
+        assert llamado == []

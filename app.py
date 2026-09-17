@@ -20,7 +20,14 @@ from audit_tracer.auth.tokens import (
     revocar_token,
     listar_tokens,
 )
-from audit_tracer.models.usuarios import get_all_users, get_user_by_id
+from audit_tracer.auth.device_codes import (
+    iniciar_login_dispositivo,
+    confirmar_codigo,
+    consultar_estado,
+    CODIGO_EXPIRACION_MINUTOS,
+    INTERVALO_POLLING_SEGUNDOS,
+)
+from audit_tracer.models.usuarios import get_all_users, get_user_by_id, get_user_by_email
 from audit_tracer.utils.session import generate_session_id
 from audit_tracer.models.audit_log import (
     get_events,
@@ -58,6 +65,19 @@ def _categorize_critical_reason(motivo: str) -> str:
 app = Flask(__name__)
 app.secret_key = 'audit_tracer_dev_key_2026'
 
+# HU-5.6/5.7 — Detrás de un proxy inverso real (Railway, Heroku, etc.) Flask
+# ve la conexión interna proxy→contenedor, que es HTTP aunque el cliente sí
+# haya llegado por HTTPS: sin esto, request.is_secure (usado por
+# _peticion_es_segura(), CA5) y url_for(_external=True) (usado para
+# url_activacion, CA1) quedan mal — el primero rechaza tráfico HTTPS legítimo,
+# el segundo genera URLs http://. Se activa solo con TRUST_PROXY_HEADERS=1
+# (puesto en las variables de entorno del despliegue), nunca por defecto: sin
+# un proxy real por delante que sobreescriba X-Forwarded-*, confiar en esos
+# encabezados dejaría que cualquier cliente los falsifique para saltarse CA5.
+if os.environ.get('TRUST_PROXY_HEADERS') == '1':
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_for=1, x_host=1)
+
 # Directorio de trabajo: raíz del proyecto
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -82,7 +102,10 @@ def login_required(f):
     def decorated(*args, **kwargs):
         if 'usuario_id' not in session:
             flash('Debes iniciar sesión para acceder a esta página.', 'warning')
-            return redirect(url_for('login'))
+            # HU-5.7 CA2: conserva a dónde iba (ej. /auth/dispositivo?codigo=...)
+            # para volver ahí mismo después de un login exitoso.
+            destino = request.full_path if request.query_string else request.path
+            return redirect(url_for('login', next=destino))
         return f(*args, **kwargs)
     return decorated
 
@@ -158,12 +181,18 @@ def landing():
 
 # ── LOGIN ────────────────────────────────────────────────────────────────────
 
+def _next_es_seguro(next_url: str) -> bool:
+    """Solo redirige a rutas relativas propias — nunca a una URL externa."""
+    return bool(next_url) and next_url.startswith('/') and not next_url.startswith('//')
+
+
 @app.route('/login', methods=['GET'])
 def login():
     """Muestra el formulario de login."""
+    next_url = request.args.get('next', '')
     if 'usuario_id' in session:
-        return redirect(url_for('dashboard'))
-    return render_template('auth/login.html')
+        return redirect(next_url if _next_es_seguro(next_url) else url_for('dashboard'))
+    return render_template('auth/login.html', next=next_url)
 
 
 @app.route('/login', methods=['POST'])
@@ -171,9 +200,10 @@ def login_post():
     """Procesa el formulario de login."""
     email = request.form.get('email', '').strip()
     password = request.form.get('password', '').strip()
+    next_url = request.form.get('next', '')
 
     if not email or not password:
-        return render_template('auth/login.html', error='Todos los campos son requeridos.')
+        return render_template('auth/login.html', error='Todos los campos son requeridos.', next=next_url)
 
     try:
         conn = get_db()
@@ -181,7 +211,7 @@ def login_post():
         result = auth_login(conn, email, password, sesion_id)
         conn.close()
     except Exception as e:
-        return render_template('auth/login.html', error=f'Error del sistema: {str(e)}')
+        return render_template('auth/login.html', error=f'Error del sistema: {str(e)}', next=next_url)
 
     if result.get('success'):
         session.clear()
@@ -192,9 +222,9 @@ def login_post():
         session['token'] = result.get('token')
         session['token_expiracion'] = result.get('token_expiracion')
         session['login_time'] = datetime.utcnow().isoformat()
-        return redirect(url_for('dashboard'))
+        return redirect(next_url if _next_es_seguro(next_url) else url_for('dashboard'))
     else:
-        return render_template('auth/login.html', error=result.get('message', 'Error desconocido.'))
+        return render_template('auth/login.html', error=result.get('message', 'Error desconocido.'), next=next_url)
 
 
 # ── ADMINISTRACIÓN DE USUARIOS (Solo ADMIN) ─────────────────────────────────
@@ -513,6 +543,75 @@ def api_revocar_token():
 
     status_code = 200 if exito else 404
     return jsonify({'success': exito, 'message': mensaje}), status_code
+
+
+# ── LOGIN POR CÓDIGO DE DISPOSITIVO (HU-5.7) ──────────────────────────────────
+
+@app.route('/api/auth/dispositivo/iniciar', methods=['POST'])
+def api_iniciar_login_dispositivo():
+    """
+    HU-5.7 CA1 — Genera un código corto + URL de activación para que la
+    librería (notebook/script) los muestre. Sin autenticación: es el
+    primer paso del flujo, antes de que exista ningún token.
+    """
+    conn = get_db()
+    datos = iniciar_login_dispositivo(conn)
+    conn.close()
+
+    url_activacion = url_for('confirmar_dispositivo', codigo=datos['codigo'], _external=True)
+    return jsonify({
+        'codigo': datos['codigo'],
+        'device_code': datos['device_code'],
+        'url_activacion': url_activacion,
+        'expira_en_segundos': CODIGO_EXPIRACION_MINUTOS * 60,
+        'intervalo_polling': INTERVALO_POLLING_SEGUNDOS,
+    }), 201
+
+
+@app.route('/auth/dispositivo', methods=['GET'])
+@login_required
+def confirmar_dispositivo():
+    """HU-5.7 CA2 — Página del dashboard para confirmar un código de login por dispositivo."""
+    return render_template('auth/confirmar_dispositivo.html', codigo=request.args.get('codigo', ''))
+
+
+@app.route('/auth/dispositivo', methods=['POST'])
+@login_required
+def confirmar_dispositivo_post():
+    """HU-5.7 CA2 — Procesa la confirmación del código, ya autenticado en el dashboard."""
+    codigo = request.form.get('codigo', '').strip().upper()
+
+    if not codigo:
+        return render_template('auth/confirmar_dispositivo.html', error='Ingresa el código.', codigo='')
+
+    conn = get_db()
+    exito, mensaje = confirmar_codigo(
+        conn, codigo, session['usuario_id'], sesion_id=session.get('sesion_id', 'DEVICE_LOGIN')
+    )
+    conn.close()
+
+    if exito:
+        return render_template('auth/confirmar_dispositivo.html', success=mensaje, codigo='')
+    return render_template('auth/confirmar_dispositivo.html', error=mensaje, codigo=codigo)
+
+
+@app.route('/api/auth/dispositivo/estado', methods=['GET'])
+def api_estado_login_dispositivo():
+    """
+    HU-5.7 CA3 — Polling del estado de un device_code. Sin autenticación
+    por token: el device_code largo y secreto ES la credencial (nunca se
+    muestra al usuario, solo lo conoce el proceso que llamó a /iniciar).
+    """
+    device_code = request.args.get('device_code', '')
+    if not device_code:
+        return jsonify({'estado': 'INVALIDO'}), 400
+
+    conn = get_db()
+    resultado = consultar_estado(conn, device_code)
+    conn.close()
+
+    codigos_estado_http = {'INVALIDO': 404, 'CONSUMIDO': 410}
+    return jsonify(resultado), codigos_estado_http.get(resultado['estado'], 200)
 
 
 # ── ENDPOINT RECEPTOR DE EVENTOS (HU-5.6, construido inicialmente dentro ──────
@@ -966,5 +1065,39 @@ def logout():
 # ARRANQUE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _seed_demo_data_if_requested():
+    """
+    Siembra un admin + usuarios de demo (analista, científico, auditor) en la
+    base central, solo si SEED_DEMO_DATA=1. Pensado para un despliegue de
+    prueba (ej. Railway) donde no hay acceso de shell a la base para correr
+    scratch/seed_admin.py a mano. No hace nada si ya existe admin@audit.com,
+    así que es seguro dejar la variable puesta entre redeploys.
+    """
+    if os.environ.get('SEED_DEMO_DATA') != '1':
+        return
+
+    conn = get_db()
+    try:
+        if get_user_by_email(conn, 'admin@audit.com'):
+            return  # ya sembrado en un arranque anterior
+
+        admin_id = register_user(conn, 'admin@audit.com', 'Admin123*', 'ADMIN', admin_id='SISTEMA')
+        for email, password, rol in [
+            ('analista.garcia@audit.com', 'Analista123*', 'ANALISTA'),
+            ('cientifico.lopez@audit.com', 'Cientifico123*', 'CIENTIFICO_DATOS'),
+            ('auditor.perez@audit.com', 'Auditor123*', 'AUDITOR'),
+        ]:
+            try:
+                register_user(conn, email, password, rol, admin_id=admin_id)
+            except ValueError:
+                pass  # ya existía
+        print('[AuditTracer] SEED_DEMO_DATA=1: usuarios de demo sembrados.')
+    finally:
+        conn.close()
+
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    _seed_demo_data_if_requested()
+    port = int(os.environ.get('PORT', 5000))
+    debug_mode = os.environ.get('FLASK_DEBUG', '1') == '1'
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)
