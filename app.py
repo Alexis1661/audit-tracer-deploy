@@ -27,7 +27,7 @@ from audit_tracer.auth.device_codes import (
     CODIGO_EXPIRACION_MINUTOS,
     INTERVALO_POLLING_SEGUNDOS,
 )
-from audit_tracer.models.usuarios import get_all_users, get_user_by_id
+from audit_tracer.models.usuarios import get_all_users, get_user_by_id, get_user_by_email
 from audit_tracer.utils.session import generate_session_id
 from audit_tracer.models.audit_log import (
     get_events,
@@ -1052,5 +1052,39 @@ def logout():
 # ARRANQUE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _seed_demo_data_if_requested():
+    """
+    Siembra un admin + usuarios de demo (analista, científico, auditor) en la
+    base central, solo si SEED_DEMO_DATA=1. Pensado para un despliegue de
+    prueba (ej. Railway) donde no hay acceso de shell a la base para correr
+    scratch/seed_admin.py a mano. No hace nada si ya existe admin@audit.com,
+    así que es seguro dejar la variable puesta entre redeploys.
+    """
+    if os.environ.get('SEED_DEMO_DATA') != '1':
+        return
+
+    conn = get_db()
+    try:
+        if get_user_by_email(conn, 'admin@audit.com'):
+            return  # ya sembrado en un arranque anterior
+
+        admin_id = register_user(conn, 'admin@audit.com', 'Admin123*', 'ADMIN', admin_id='SISTEMA')
+        for email, password, rol in [
+            ('analista.garcia@audit.com', 'Analista123*', 'ANALISTA'),
+            ('cientifico.lopez@audit.com', 'Cientifico123*', 'CIENTIFICO_DATOS'),
+            ('auditor.perez@audit.com', 'Auditor123*', 'AUDITOR'),
+        ]:
+            try:
+                register_user(conn, email, password, rol, admin_id=admin_id)
+            except ValueError:
+                pass  # ya existía
+        print('[AuditTracer] SEED_DEMO_DATA=1: usuarios de demo sembrados.')
+    finally:
+        conn.close()
+
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    _seed_demo_data_if_requested()
+    port = int(os.environ.get('PORT', 5000))
+    debug_mode = os.environ.get('FLASK_DEBUG', '1') == '1'
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)
