@@ -65,6 +65,19 @@ def _categorize_critical_reason(motivo: str) -> str:
 app = Flask(__name__)
 app.secret_key = 'audit_tracer_dev_key_2026'
 
+# HU-5.6/5.7 — Detrás de un proxy inverso real (Railway, Heroku, etc.) Flask
+# ve la conexión interna proxy→contenedor, que es HTTP aunque el cliente sí
+# haya llegado por HTTPS: sin esto, request.is_secure (usado por
+# _peticion_es_segura(), CA5) y url_for(_external=True) (usado para
+# url_activacion, CA1) quedan mal — el primero rechaza tráfico HTTPS legítimo,
+# el segundo genera URLs http://. Se activa solo con TRUST_PROXY_HEADERS=1
+# (puesto en las variables de entorno del despliegue), nunca por defecto: sin
+# un proxy real por delante que sobreescriba X-Forwarded-*, confiar en esos
+# encabezados dejaría que cualquier cliente los falsifique para saltarse CA5.
+if os.environ.get('TRUST_PROXY_HEADERS') == '1':
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_for=1, x_host=1)
+
 # Directorio de trabajo: raíz del proyecto
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
