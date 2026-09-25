@@ -229,11 +229,45 @@
         {# ── SECCIÓN 3: SEGURIDAD E INTEGRIDAD ── #}
         <div class="detail-card">
             <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">3. Trazabilidad e Integridad Criptográfica</h3>
-            <div class="detail-item">
-                <span class="detail-label">Hash de Integridad SHA-256</span>
-                <span class="detail-value detail-value--code" style="word-break: break-all;">
-                    {{ evento.hash_integridad or 'No generado' }}
-                </span>
+            
+            <div class="detail-grid">
+                <div class="detail-item" style="grid-column: 1 / -1;">
+                    <span class="detail-label">Hash de Integridad SHA-256</span>
+                    <span class="detail-value detail-value--code" style="word-break: break-all;">
+                        {{ evento.hash_integridad or 'No generado' }}
+                    </span>
+                </div>
+                
+                <div class="detail-item" style="grid-column: 1 / -1;">
+                    <span class="detail-label">Firma Digital Ed25519 (No Repudio)</span>
+                    <span class="detail-value detail-value--code" style="word-break: break-all; margin-bottom: 8px;">
+                        {{ evento.firma_digital or 'Sin firma' }}
+                    </span>
+                    
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                        {% if estado_firma.presente %}
+                            {% if estado_firma.valida %}
+                                <span class="badge" style="background: #ECFDF5; color: #059669; display: inline-flex; align-items: center; gap: 4px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                    Firma Válida
+                                </span>
+                            {% else %}
+                                <span class="badge" style="background: #FEF2F2; color: #DC2626; display: inline-flex; align-items: center; gap: 4px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                    Firma Inválida
+                                </span>
+                            {% endif %}
+                            <span style="font-size: 12px; color: var(--clr-text-muted);">
+                                {{ estado_firma.mensaje }}
+                            </span>
+                        {% else %}
+                            <span class="badge" style="background: #F3F4F6; color: #6B7280;">NO FIRMADO</span>
+                            <span style="font-size: 12px; color: var(--clr-text-muted);">
+                                Evento generado sin firma digital.
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
 

@@ -68,7 +68,8 @@ def _prepare_event(event: Dict) -> Dict:
 
 def _execute_insert(conn: sqlite3.Connection, prepared_event: Dict) -> int:
     """Ejecuta el INSERT de un evento ya preparado por _prepare_event() en `conn`."""
-    columns = _HASHED_COLUMNS + ['evento_uuid', 'hash_integridad']
+    # HU-6.1 CA4: incluye firma_digital si el evento la trae; None si no.
+    columns = _HASHED_COLUMNS + ['evento_uuid', 'hash_integridad', 'firma_digital']
     placeholders = ', '.join(['?'] * len(columns))
     query = f"INSERT INTO audit_log ({', '.join(columns)}) VALUES ({placeholders})"
     values = [prepared_event.get(col) for col in columns]
@@ -509,29 +510,44 @@ def insert_event_and_enqueue_sync(conn: sqlite3.Connection, event: Dict) -> Dict
     Este es el único punto que usan los interceptores de captura
     (data_capture.py, export_capture.py, failed_access.py,
     session_tracker.py): garantiza que ningún evento capturado quede sin
-    persistir localmente antes de que se intente cualquier envío HTTP —
-    la llamada de red, si ocurre, siempre sucede DESPUÉS de que esta
-    función retorna.
-
-    Args:
-        conn:  Conexión a la base LOCAL (no la central: la central no
-               tiene tabla audit_sync_queue).
-        event: Mismo formato que insert_event().
-
-    Returns:
-        Dict: {'event_id', 'evento_uuid', 'hash_integridad'} del evento
-        ya persistido y encolado.
+    persistir localmente antes de que se intente cualquier envío HTTP.
+    
+    HU-6.1 CA2 — Antes de persistir y encolar el evento, se firma 
+    digitalmente con la llave privada Ed25519 del usuario local.
     """
-    event_id = insert_event(conn, event)
+    # 1. Preparar el evento (asigna UUID, fechas, y calcula hash_integridad)
+    prepared = _prepare_event(event)
+    
+    # 2. Firmar el evento (HU-6.1 CA2)
+    try:
+        from audit_tracer.digital_signatures import get_or_create_user_keypair, add_signature_to_event
+        private_key, _ = get_or_create_user_keypair()
+        prepared = add_signature_to_event(prepared, private_key)
+    except Exception as e:
+        import logging
+        logging.warning(f"AuditTracer: No se pudo firmar el evento local: {e}")
+
+    # 3. Persistir en base local
+    event_id = _execute_insert(conn, prepared)
+    
+    # 4. Encolar para sincronización
     conn.execute(
         "INSERT INTO audit_sync_queue (event_id, evento_uuid, estado) VALUES (?, ?, 'PENDIENTE')",
-        (event_id, event["evento_uuid"]),
+        (event_id, prepared["evento_uuid"]),
     )
     conn.commit()
+    
+    # Preservar el comportamiento histórico en el dict original
+    event['hash_integridad'] = prepared['hash_integridad']
+    event['evento_uuid'] = prepared['evento_uuid']
+    if 'firma_digital' in prepared:
+        event['firma_digital'] = prepared['firma_digital']
+
     return {
         "event_id": event_id,
-        "evento_uuid": event["evento_uuid"],
-        "hash_integridad": event["hash_integridad"],
+        "evento_uuid": prepared["evento_uuid"],
+        "hash_integridad": prepared["hash_integridad"],
+        "firma_digital": prepared.get("firma_digital"),
     }
 
 
