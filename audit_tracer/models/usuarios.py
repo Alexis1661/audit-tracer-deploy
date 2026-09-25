@@ -125,3 +125,50 @@ def count_active_admins(conn: sqlite3.Connection) -> int:
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM usuarios WHERE rol = 'ADMIN' AND activo = 1")
     return cursor.fetchone()[0]
+
+
+# ──────────────────────────────────────────────────────────────
+# HU-6.1 CA1/CA3 — Gestión de llaves públicas Ed25519
+# ──────────────────────────────────────────────────────────────
+
+def set_user_public_key(conn: sqlite3.Connection, usuario_id: str, public_key_pem: str) -> None:
+    """
+    HU-6.1 CA1/CA3 — Registra o actualiza la llave pública Ed25519 del usuario.
+
+    La llama la librería cliente justo después de autenticarse (CA1), de forma
+    que el servidor central disponga de la llave pública para validar firmas
+    en cada evento recibido (CA3).
+
+    Args:
+        conn:           Conexión SQLite a la base central.
+        usuario_id:     ID del usuario propietario de la llave.
+        public_key_pem: PEM de la llave pública Ed25519 (SubjectPublicKeyInfo).
+    """
+    conn.execute(
+        "UPDATE usuarios SET llave_publica = ? WHERE usuario_id = ?",
+        (public_key_pem, usuario_id),
+    )
+    conn.commit()
+
+
+def get_user_public_key(conn: sqlite3.Connection, usuario_id: str) -> Optional[str]:
+    """
+    HU-6.1 CA3 — Recupera la llave pública PEM del usuario.
+
+    El endpoint receptor usa esta función para obtener la llave con la que
+    debe verificar la firma del evento antes de persistirlo.
+
+    Args:
+        conn:       Conexión SQLite a la base central.
+        usuario_id: ID del usuario.
+
+    Returns:
+        PEM de la llave pública como string, o None si el usuario no tiene
+        llave pública registrada (nunca se autenticó con la librería HU-6.1).
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT llave_publica FROM usuarios WHERE usuario_id = ?", (usuario_id,))
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return row[0]  # puede ser None si la columna es NULL

@@ -56,6 +56,7 @@ _CAMPOS_PAYLOAD = [
     "dataset_nombre", "columnas_afectadas", "ruta_destino", "filas_exportadas",
     "sobrescritura", "contexto_ejecucion", "motivo_fallo", "nivel_alerta",
     "motivo_alerta",
+    "firma_digital",   # HU-6.1 CA2 — la firma viaja junto al evento
 ]
 
 _config: Dict[str, Optional[str]] = {"api_url": None, "token": None}
@@ -88,8 +89,27 @@ def configure_sync(api_url: str, token: str, auto: bool = True) -> None:
                  el servidor vuelve a estar disponible, sin acción manual.
     """
     _validar_https(api_url)
-    _config["api_url"] = api_url.rstrip("/")
+    api_url = api_url.rstrip("/")
+    _config["api_url"] = api_url
     _config["token"] = token
+    
+    # HU-6.1 CA1: Registrar llave pública en el servidor central al configurar.
+    try:
+        from audit_tracer.digital_signatures import get_or_create_user_keypair, public_key_to_pem
+        _, public_key = get_or_create_user_keypair()
+        pem = public_key_to_pem(public_key)
+        
+        # Enviar llave al servidor
+        requests.post(
+            f"{api_url}/api/usuarios/llave-publica",
+            json={"llave_publica": pem},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5
+        )
+    except Exception as e:
+        import logging
+        logging.warning(f"AuditTracer: No se pudo registrar la llave pública en el servidor: {e}")
+
     if auto:
         _start_background_sync()
 

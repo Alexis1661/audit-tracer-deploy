@@ -27,7 +27,7 @@ from audit_tracer.auth.device_codes import (
     CODIGO_EXPIRACION_MINUTOS,
     INTERVALO_POLLING_SEGUNDOS,
 )
-from audit_tracer.models.usuarios import get_all_users, get_user_by_id, get_user_by_email
+from audit_tracer.models.usuarios import get_all_users, get_user_by_id, get_user_by_email, set_user_public_key, get_user_public_key
 from audit_tracer.utils.session import generate_session_id
 from audit_tracer.models.audit_log import (
     get_events,
@@ -42,6 +42,7 @@ from audit_tracer.models.audit_log import (
     insert_event_if_new,       # HU-5.8
     get_sync_queue_summary,    # HU-5.8
 )
+from audit_tracer.digital_signatures import verify_event_signature  # HU-6.1
 from audit_tracer.auth.control_acceso import has_permission  # HU-1.4
 from datetime import datetime, timedelta
 
@@ -626,6 +627,7 @@ _CAMPOS_EVENTO_REQUERIDOS = ('evento_uuid', 'usuario_id', 'sesion_id', 'timestam
 _CAMPOS_EVENTO_ACEPTADOS = _CAMPOS_EVENTO_REQUERIDOS + (
     'dataset_nombre', 'columnas_afectadas', 'ruta_destino', 'filas_exportadas',
     'sobrescritura', 'contexto_ejecucion', 'motivo_fallo', 'nivel_alerta', 'motivo_alerta',
+    'firma_digital',  # HU-6.1 CA2/CA4 — la firma viaja y se persiste junto al evento
 )
 
 
@@ -701,6 +703,44 @@ def api_sincronizar_evento():
             'mensaje': f"Campos requeridos faltantes: {', '.join(faltantes)}",
         }), 400
 
+    # HU-6.1 CA3 — Validar firma digital antes de persistir el evento.
+    # Si el evento trae firma_digital, la verificamos con la llave pública
+    # del usuario. Un evento firmado con firma inválida se rechaza (422).
+    # Eventos sin firma (firmware antiguo o módulo desactivado) se aceptan
+    # sin firmar para mantener compatibilidad hacia atrás.
+    if evento.get('firma_digital'):
+        llave_publica_pem = get_user_public_key(conn, token_data['usuario_id'])
+        if llave_publica_pem is None:
+            conn.close()
+            return jsonify({
+                'status': 'error',
+                'mensaje': (
+                    'El usuario no tiene llave pública registrada en el servidor. '
+                    'La librería debe registrar la llave al autenticarse (HU-6.1 CA1).'
+                ),
+            }), 422
+        if not verify_event_signature(evento, llave_publica_pem):
+            # Dejar constancia del intento con firma inválida.
+            try:
+                insert_event(conn, {
+                    'usuario_id': token_data['usuario_id'],
+                    'sesion_id': 'SINCRONIZACION',
+                    'timestamp': datetime.utcnow().isoformat(),
+                    'tipo_accion': 'FIRMA_INVALIDA',
+                    'motivo_fallo': f"Firma inválida para evento_uuid={evento.get('evento_uuid')}",
+                    'nivel_alerta': 'CRITICO',
+                })
+            except Exception:
+                pass
+            conn.close()
+            return jsonify({
+                'status': 'error',
+                'mensaje': (
+                    'Firma digital inválida: el evento fue manipulado tras la firma '
+                    'o la firma no corresponde al usuario indicado.'
+                ),
+            }), 422
+
     try:
         registro, creado = insert_event_if_new(conn, evento)
     except sqlite3.IntegrityError as exc:
@@ -713,6 +753,72 @@ def api_sincronizar_evento():
         'event_id': registro['event_id'],
         'evento_uuid': registro['evento_uuid'],
     }), 201 if creado else 200
+
+
+# ── REGISTRO DE LLAVE PÚBI CA (HU-6.1 CA1) ─────────────────────────────────
+
+@app.route('/api/usuarios/llave-publica', methods=['POST'])
+def api_registrar_llave_publica():
+    """
+    HU-6.1 CA1 — La librería llama a este endpoint justo después de
+    autenticarse para registrar su llave pública Ed25519 en el servidor.
+    Con esa llave, el servidor podrá verificar las firmas de todos los
+    eventos enviados posteriormente por este usuario (CA3).
+
+    Autenticación: misma que /api/eventos/sincronizar — Bearer token.
+    Cuerpo JSON: { "llave_publica": "<PEM Ed25519 SubjectPublicKeyInfo>" }
+
+    Returns 200 si la llave fue registrada/actualizada correctamente.
+    Returns 400 si falta el campo llave_publica.
+    Returns 401 si el token es inválido o está expirado.
+    """
+    if not _peticion_es_segura():
+        return jsonify({
+            'status': 'error',
+            'mensaje': 'Esta operación requiere HTTPS (excepto en localhost, para pruebas/dev).',
+        }), 426
+
+    token_str = None
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token_str = auth_header.split(' ', 1)[1].strip()
+
+    conn = get_db()
+    valido, mensaje, token_data = validar_token(conn, token_str)
+    if not valido:
+        conn.close()
+        return jsonify({'status': 'error', 'mensaje': mensaje}), 401
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data.get('llave_publica'):
+        conn.close()
+        return jsonify({
+            'status': 'error',
+            'mensaje': 'Se esperaba un cuerpo JSON con el campo llave_publica (PEM Ed25519).',
+        }), 400
+
+    llave_publica_pem = data['llave_publica']
+
+    # Validar que el PEM sea realmente una llave Ed25519 válida
+    # antes de guardarlo (evita guardar strings malformados).
+    try:
+        from audit_tracer.digital_signatures import public_key_from_pem
+        public_key_from_pem(llave_publica_pem)
+    except Exception:
+        conn.close()
+        return jsonify({
+            'status': 'error',
+            'mensaje': 'El campo llave_publica no es un PEM Ed25519 válido.',
+        }), 400
+
+    set_user_public_key(conn, token_data['usuario_id'], llave_publica_pem)
+    conn.close()
+
+    return jsonify({
+        'status': 'ok',
+        'mensaje': 'Llave pública registrada correctamente.',
+        'usuario_id': token_data['usuario_id'],
+    }), 200
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -980,20 +1086,51 @@ def detalle_evento(event_id):
     """
     HU-4.3 — Visualización de detalle de evento (CA1-CA4).
     Muestra todos los datos asociados a un evento específico por su event_id.
+    HU-6.1 CA5 — Incluye validación de la firma digital (PDGTRAZDSA-144).
     """
     conn = get_db()
     evento = get_event_by_id(conn, event_id)
-    conn.close()
-
+    
     if not evento:
+        conn.close()
         flash(f'Evento #{event_id} no encontrado.', 'error')
         return redirect(url_for('eventos'))
+        
+    # Verificar firma si existe
+    estado_firma = None
+    if evento.get('firma_digital'):
+        llave_publica = get_user_public_key(conn, evento['usuario_id'])
+        if llave_publica:
+            es_valida = verify_event_signature(evento, llave_publica)
+            estado_firma = {
+                'presente': True,
+                'valida': es_valida,
+                'mensaje': 'Firma válida y verificada.' if es_valida else 'Firma inválida o corrupta.',
+                'llave_disponible': True
+            }
+        else:
+            estado_firma = {
+                'presente': True,
+                'valida': False,
+                'mensaje': 'El usuario no tiene llave pública registrada.',
+                'llave_disponible': False
+            }
+    else:
+        estado_firma = {
+            'presente': False,
+            'valida': False,
+            'mensaje': 'El evento no tiene firma digital.',
+            'llave_disponible': False
+        }
+
+    conn.close()
 
     return render_template(
         'dashboard/detalle_evento.html',
         nombre=session.get('nombre', 'Usuario'),
         rol=session.get('rol', 'N/A'),
         evento=evento,
+        estado_firma=estado_firma,
     )
 
 
