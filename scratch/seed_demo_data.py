@@ -6,6 +6,8 @@ Siembra datos de demo en audit_trail.db para probar en la UI:
   - HU-4.2: filtros combinados por usuario, fecha, dataset y tipo de acción
   - HU-4.4: eventos críticos (intentos fallidos en ventana, exportación
     masiva, acceso fuera de horario laboral) + exportación a CSV
+  - HU-7.1: caso de linaje de varios pasos (carga → transformaciones →
+    modelado → exportación) sobre vitals_icu.csv
 
 No borra datos existentes; solo agrega. Ejecutar desde la raíz del repo:
     python scratch/seed_demo_data.py
@@ -111,10 +113,45 @@ ev(usuario_id="DESCONOCIDO", sesion_id="s-anon-1", tipo_accion="CONSULTA",
    dataset_nombre="labs.csv", timestamp="2026-08-20T13:00:00",
    nivel_alerta="CRITICO", motivo_alerta="Operación ejecutada por usuario no identificado")
 
+# ── HU-7.1: linaje de varios pasos sobre un mismo dataset ────────────────
+# Sesión s-cie-linaje-1: carga → dropna → fillna → modelado → exportación.
+# Las TRANSFORMACION usan el mismo formato de motivo_fallo que el
+# interceptor de HU-2.2 ("[TIPO] operación"). El MODELADO es un dato de
+# DEMO: todavía no existe un interceptor de model.fit() que lo capture.
+# Los eventos se insertan a propósito fuera de orden: el grafo debe
+# ordenarlos por timestamp, no por event_id ni por orden de inserción.
+L = "s-cie-linaje-1"
+ev(usuario_id=u_cientifico, sesion_id=L, tipo_accion="EXPORTACION",
+   dataset_nombre="vitals_icu.csv", ruta_destino="outputs/vitals_icu_clean.csv",
+   filas_exportadas=842, sobrescritura=0, timestamp="2026-08-21T10:40:00")
+ev(usuario_id=u_cientifico, sesion_id=L, tipo_accion="CARGA",
+   dataset_nombre="vitals_icu.csv",
+   columnas_afectadas='["subject_id", "heart_rate", "spo2", "temp"]',
+   timestamp="2026-08-21T10:00:00")
+ev(usuario_id=u_cientifico, sesion_id=L, tipo_accion="TRANSFORMACION",
+   dataset_nombre="vitals_icu.csv", columnas_afectadas='["heart_rate", "spo2"]',
+   motivo_fallo="[ELIMINACION_FILAS] dropna(axis=0, how='any', subset=['heart_rate', 'spo2'])",
+   timestamp="2026-08-21T10:12:00")
+ev(usuario_id=u_cientifico, sesion_id=L, tipo_accion="TRANSFORMACION",
+   dataset_nombre="vitals_icu.csv", columnas_afectadas='["temp"]',
+   motivo_fallo="[IMPUTACION] fillna(value=dict(['temp']))",
+   timestamp="2026-08-21T10:20:00")
+ev(usuario_id=u_cientifico, sesion_id=L, tipo_accion="MODELADO",
+   dataset_nombre="vitals_icu.csv", columnas_afectadas='["heart_rate", "spo2", "temp"]',
+   contexto_ejecucion="DEMO | Script: sepsis_model.ipynb | Modelo: LogisticRegression",
+   timestamp="2026-08-21T10:31:00")
+
+# Otra sesión independiente sobre el mismo dataset: carga → exportación.
+ev(usuario_id=u_analista, sesion_id="s-ana-linaje-2", tipo_accion="CARGA",
+   dataset_nombre="vitals_icu.csv", timestamp="2026-08-22T09:05:00")
+ev(usuario_id=u_analista, sesion_id="s-ana-linaje-2", tipo_accion="EXPORTACION",
+   dataset_nombre="vitals_icu.csv", ruta_destino="outputs/vitals_icu_resumen.xlsx",
+   filas_exportadas=120, sobrescritura=0, timestamp="2026-08-22T09:30:00")
+
 conn.close()
 
 print("\nListo. Usuarios de prueba:")
 for email, pwd, rol in DEMO_USERS:
     print(f"  {email} / {pwd}  ({rol})")
-print("\nDatasets sembrados: PATIENTS.csv, admissions.xlsx, labs.csv")
-print("Rango de fechas: 2026-08-10 a 2026-08-20")
+print("\nDatasets sembrados: PATIENTS.csv, admissions.xlsx, labs.csv, vitals_icu.csv (linaje HU-7.1)")
+print("Rango de fechas: 2026-08-10 a 2026-08-22")
