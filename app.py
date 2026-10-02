@@ -43,6 +43,7 @@ from audit_tracer.models.audit_log import (
     get_sync_queue_summary,    # HU-5.8
 )
 from audit_tracer.digital_signatures import verify_event_signature  # HU-6.1
+from audit_tracer.event_explainer import enrich_event_detail  # HU-7.4
 from audit_tracer.auth.control_acceso import has_permission  # HU-1.4
 from datetime import datetime, timedelta
 
@@ -1123,6 +1124,9 @@ def detalle_evento(event_id):
             'llave_disponible': False
         }
 
+    # HU-7.4 — Enriquecimiento contextual, identidad de usuario y recomendaciones
+    contexto_enriquecido = enrich_event_detail(conn, evento, estado_firma)
+
     conn.close()
 
     return render_template(
@@ -1131,6 +1135,11 @@ def detalle_evento(event_id):
         rol=session.get('rol', 'N/A'),
         evento=evento,
         estado_firma=estado_firma,
+        usuario_info=contexto_enriquecido['usuario_info'],
+        explicacion=contexto_enriquecido['explicacion'],
+        diagnostico=contexto_enriquecido['diagnostico'],
+        recomendaciones=contexto_enriquecido['recomendaciones'],
+        resumen_copiable=contexto_enriquecido['resumen_copiable'],
     )
 
 
