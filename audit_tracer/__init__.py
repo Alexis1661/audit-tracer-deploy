@@ -18,3 +18,6 @@ _activate_data_capture()
 # HU-2.3: Activar interceptor automático de exportación de datos
 # Intercepta df.to_csv, df.to_excel, df.to_json, df.to_parquet
 _activate_export_capture()
+
+from .transform_capture import activate as _activate_transform_capture
+_activate_transform_capture()
