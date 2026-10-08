@@ -10,6 +10,8 @@ _AUDIT_LOG_MIGRATIONS = [
     ("filas_exportadas", "ALTER TABLE audit_log ADD COLUMN filas_exportadas INTEGER"),
     ("sobrescritura", "ALTER TABLE audit_log ADD COLUMN sobrescritura INTEGER"),
     ("evento_uuid", "ALTER TABLE audit_log ADD COLUMN evento_uuid TEXT"),
+    # HU-6.1 CA4 — Firma digital Ed25519 del usuario que generó el evento.
+    ("firma_digital", "ALTER TABLE audit_log ADD COLUMN firma_digital TEXT"),
 ]
 
 # HU-5.4 CA3 — Infraestructura de inmutabilidad: bloquea UPDATE/DELETE sobre

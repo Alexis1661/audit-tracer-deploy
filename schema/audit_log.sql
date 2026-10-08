@@ -97,11 +97,14 @@ CREATE TABLE IF NOT EXISTS audit_log (
     -- Ejemplo: '3 intentos fallidos en 4 minutos'
 
     -- INTEGRIDAD DEL REGISTRO
-    hash_integridad   TEXT     NOT NULL
+    hash_integridad   TEXT     NOT NULL,
     -- Hash SHA-256 calculado sobre los campos del evento.
     -- Permite detectar alteraciones posteriores al registro.
     -- Exigido por HIPAA §164.312(c)(1)
 
+    firma_digital     TEXT
+    -- HU-6.1 CA4: Firma digital Ed25519 generada por la llave privada del usuario.
+    -- Base64url sin padding, ~86 caracteres. Almacenada para verificación forense.
 );
 
 -- ============================================================

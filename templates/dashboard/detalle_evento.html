@@ -10,13 +10,14 @@
         border-radius: 20px;
         border: 1px solid var(--clr-border);
         box-shadow: var(--shadow-sm);
-        padding: 32px;
+        padding: 28px 32px;
         margin-bottom: 24px;
+        position: relative;
     }
     
     .detail-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
         gap: 24px;
     }
 
@@ -45,9 +46,10 @@
         font-family: 'SF Mono', 'Fira Code', monospace;
         font-size: 13px;
         background: #F5F5F7;
-        padding: 8px 12px;
+        padding: 10px 14px;
         border-radius: 8px;
         border: 1px solid var(--clr-border);
+        color: #1F2937;
     }
 
     .badge {
@@ -56,12 +58,141 @@
         font-size: 11px;
         font-weight: 700;
         text-transform: uppercase;
-        display: inline-block;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         width: fit-content;
     }
-    .badge-normal { background: #F5F5F7; color: var(--clr-text-muted); }
+    .badge-normal { background: #F3F4F6; color: var(--clr-text-muted); }
     .badge-advertencia { background: #FFF9E6; color: #D97706; }
     .badge-critico { background: #FEF2F2; color: #DC2626; }
+
+    /* HU-7.4: Estilos para tarjetas de explicación y recomendaciones */
+    .narrative-card {
+        background: linear-gradient(180deg, #FFFFFF 0%, #FAFAFC 100%);
+        border: 1px solid #E5E7EB;
+        border-left: 4px solid var(--clr-accent-blue);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    .narrative-card.is-critico {
+        border-left-color: #DC2626;
+        background: linear-gradient(180deg, #FFFFFF 0%, #FFF5F5 100%);
+    }
+    .narrative-card.is-advertencia {
+        border-left-color: #D97706;
+        background: linear-gradient(180deg, #FFFFFF 0%, #FFFDF5 100%);
+    }
+
+    .impact-box {
+        margin-top: 16px;
+        padding: 14px 18px;
+        border-radius: 10px;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .impact-box.alert-critica {
+        background: #FEF2F2;
+        border: 1px solid #FECACA;
+        color: #991B1B;
+    }
+    .impact-box.alert-advertencia {
+        background: #FFFBEB;
+        border: 1px solid #FDE68A;
+        color: #92400E;
+    }
+    .impact-box.alert-normal {
+        background: #F0FDF4;
+        border: 1px solid #BBF7D0;
+        color: #166534;
+    }
+
+    .recommendations-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+    }
+    .rec-item {
+        background: #F9FAFB;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .rec-item--urgente {
+        border-left: 3px solid #DC2626;
+        background: #FFFBFB;
+    }
+    .rec-item--seguridad {
+        border-left: 3px solid #D97706;
+        background: #FFFCF7;
+    }
+    .rec-item--info {
+        border-left: 3px solid var(--clr-accent-blue);
+    }
+    .rec-item--mejora {
+        border-left: 3px solid #10B981;
+    }
+
+    .user-profile-badge {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: #F9FAFB;
+        border: 1px solid #E5E7EB;
+        border-radius: 14px;
+        padding: 14px 18px;
+    }
+    .user-avatar-lg {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--clr-accent-blue);
+        color: white;
+        font-weight: 700;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .quick-action-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--clr-accent-blue);
+        text-decoration: none;
+        margin-top: 6px;
+    }
+    .quick-action-link:hover {
+        text-decoration: underline;
+    }
+
+    .btn-copy {
+        background: white;
+        border: 1px solid var(--clr-border);
+        padding: 8px 14px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--clr-text-main);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s ease;
+    }
+    .btn-copy:hover {
+        background: #F3F4F6;
+        border-color: #D1D5DB;
+    }
 </style>
 {% endblock %}
 
@@ -143,55 +274,133 @@
                     Volver a Eventos
                 </a>
                 <h1>Detalle del Evento #{{ evento.event_id }}</h1>
-                <p>Información completa y trazabilidad almacenada en audit_log (HU-4.3).</p>
+                <p>Trazabilidad clínica y análisis forense contextual (HU-7.4).</p>
             </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; gap: 10px; align-items: center;">
                 {# HU-7.1 CA2: acceso al grafo de linaje del evento #}
                 {% if evento.dataset_nombre %}
                 <a href="{{ url_for('linaje', event_id=evento.event_id) }}" class="btn btn-outline">Ver linaje</a>
                 {% endif %}
+                <button type="button" class="btn-copy" onclick="copiarResumenAuditoria()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="copy-icon"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    <span id="copy-text">Copiar Resumen Forense</span>
+                </button>
                 <span class="badge badge-{{ evento.nivel_alerta | lower }}">{{ evento.nivel_alerta or 'NORMAL' }}</span>
             </div>
         </header>
 
-        {# ── SECCIÓN 1: INFORMACIÓN PRINCIPAL ── #}
+        {# ── TARJETA EXPLICATIVA Y NARRATIVA (HU-7.4 CA2 & CA3) ── #}
+        <div class="narrative-card {% if diagnostico.es_critico %}is-critico{% elif diagnostico.es_advertencia %}is-advertencia{% endif %}">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <span style="font-size: 18px; font-weight: 800; color: var(--clr-text-main);">
+                            {{ explicacion.titulo }}
+                        </span>
+                        <span class="badge badge-{{ diagnostico.nivel | lower }}">
+                            {{ diagnostico.categoria_alerta }}
+                        </span>
+                    </div>
+                    <p style="font-size: 14px; color: #374151; line-height: 1.6; margin: 0;">
+                        {{ explicacion.descripcion | safe }}
+                    </p>
+                </div>
+            </div>
+
+            {% if diagnostico.es_alerta %}
+            <div class="impact-box {{ diagnostico.clase_css }}">
+                <div style="font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    Diagnóstico de Alerta: {{ diagnostico.motivo }}
+                </div>
+                <div><strong>Impacto Estimado:</strong> {{ diagnostico.impacto }}</div>
+            </div>
+            {% endif %}
+        </div>
+
+        {# ── RECOMENDACIONES Y GUÍA DE MITIGACIÓN (HU-7.4 CA4) ── #}
         <div class="detail-card">
-            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">1. Información General del Evento</h3>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 16px; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--clr-accent-blue);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    Recomendaciones y Guía de Mitigación para el Auditor
+                </h3>
+            </div>
+            <div class="recommendations-grid">
+                {% for rec in recomendaciones %}
+                <div class="rec-item rec-item--{{ rec.tipo }}">
+                    <div style="font-size: 13px; font-weight: 700; color: var(--clr-text-main);">
+                        {{ rec.titulo }}
+                    </div>
+                    <div style="font-size: 12px; color: var(--clr-text-muted); line-height: 1.5;">
+                        {{ rec.detalle }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# ── SECCIÓN 1: IDENTIDAD DEL USUARIO Y CONTEXTO (HU-7.4 CA1 & CA5) ── #}
+        <div class="detail-card">
+            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">1. Información del Usuario y Sesión</h3>
+            
+            <div class="user-profile-badge" style="margin-bottom: 24px;">
+                <div class="user-avatar-lg">{{ usuario_info.avatar_letra }}</div>
+                <div style="flex: 1;">
+                    <div style="font-size: 16px; font-weight: 700; color: var(--clr-text-main);">
+                        {{ usuario_info.nombre }}
+                    </div>
+                    <div style="font-size: 13px; color: var(--clr-text-muted); display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                        <span>{{ usuario_info.email }}</span>
+                        <span>•</span>
+                        <span class="badge {{ usuario_info.rol_badge_class }}">{{ usuario_info.rol }}</span>
+                        {% if usuario_info.activo is not none %}
+                            <span>•</span>
+                            <span style="font-size: 11px; font-weight: 700; color: {{ '#059669' if usuario_info.activo else '#DC2626' }};">
+                                {{ 'Cuenta Activa' if usuario_info.activo else 'Cuenta Inactiva / Bloqueada' }}
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if not usuario_info.es_desconocido %}
+                <a href="{{ url_for('eventos', usuario_id=usuario_info.usuario_id) }}" class="btn btn-outline" style="font-size: 12px; padding: 6px 14px;">
+                    Ver eventos de este usuario →
+                </a>
+                {% endif %}
+            </div>
+
             <div class="detail-grid">
                 <div class="detail-item">
-                    <span class="detail-label">ID Evento (event_id)</span>
-                    <span class="detail-value">#{{ evento.event_id }}</span>
+                    <span class="detail-label">ID Usuario (Técnico)</span>
+                    <span class="detail-value detail-value--code" style="font-size: 12px;">{{ usuario_info.usuario_id }}</span>
                 </div>
                 <div class="detail-item">
                     <span class="detail-label">Tipo de Acción</span>
-                    <span class="detail-value" style="color: var(--clr-accent-blue);">{{ evento.tipo_accion }}</span>
+                    <span class="detail-value" style="color: var(--clr-accent-blue); font-weight: 700;">{{ evento.tipo_accion }}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">Fecha y Hora (Timestamp)</span>
+                    <span class="detail-label">Fecha y Hora (Timestamp UTC)</span>
                     <span class="detail-value">{{ evento.timestamp.replace('T', ' ') if evento.timestamp else '—' }}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">ID Usuario</span>
-                    <span class="detail-value">{{ evento.usuario_id or 'DESCONOCIDO' }}</span>
-                </div>
-                <div class="detail-item">
                     <span class="detail-label">ID Sesión</span>
-                    <span class="detail-value">{{ evento.sesion_id or '—' }}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Nivel de Alerta</span>
-                    <span class="badge badge-{{ evento.nivel_alerta | lower }}">{{ evento.nivel_alerta or 'NORMAL' }}</span>
+                    <span class="detail-value detail-value--code" style="font-size: 12px;">{{ evento.sesion_id or '—' }}</span>
                 </div>
             </div>
         </div>
 
-        {# ── SECCIÓN 2: DETALLES DE EJECUCIÓN Y DATOS ── #}
+        {# ── SECCIÓN 2: DETALLES DEL DATASET Y EJECUCIÓN ── #}
         <div class="detail-card">
-            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">2. Detalles del Dataset y Ejecución</h3>
+            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">2. Detalles del Dataset y Entorno de Ejecución</h3>
             <div class="detail-grid">
                 <div class="detail-item">
                     <span class="detail-label">Nombre del Dataset</span>
                     <span class="detail-value">{{ evento.dataset_nombre or '—' }}</span>
+                    {% if evento.dataset_nombre %}
+                    <a href="{{ url_for('eventos', dataset_nombre=evento.dataset_nombre) }}" class="quick-action-link">
+                        Ver historial de este dataset →
+                    </a>
+                    {% endif %}
                 </div>
                 <div class="detail-item">
                     <span class="detail-label">Columnas Afectadas</span>
@@ -209,7 +418,7 @@
                     <span class="detail-label">Sobrescritura</span>
                     <span class="detail-value">
                         {% if evento.sobrescritura is not none %}
-                            {{ 'Sí' if evento.sobrescritura else 'No' }}
+                            {{ 'Sí (Archivo Reemplazado)' if evento.sobrescritura else 'No' }}
                         {% else %}
                             —
                         {% endif %}
@@ -217,34 +426,102 @@
                 </div>
                 <div class="detail-item">
                     <span class="detail-label">Motivo de Fallo (si aplica)</span>
-                    <span class="detail-value" style="color: #DC2626;">{{ evento.motivo_fallo or '—' }}</span>
+                    <span class="detail-value" style="color: #DC2626; font-weight: 700;">{{ evento.motivo_fallo or '—' }}</span>
                 </div>
             </div>
 
             <div style="margin-top: 24px;" class="detail-item">
-                <span class="detail-label">Contexto de Ejecución</span>
+                <span class="detail-label">Entorno y Contexto de Ejecución</span>
+                <div style="font-size: 13px; font-weight: 600; color: var(--clr-text-main); margin-bottom: 6px;">
+                    {{ explicacion.entorno_desc }}
+                </div>
                 <span class="detail-value detail-value--code">{{ evento.contexto_ejecucion or '—' }}</span>
             </div>
-
-            {% if evento.motivo_alerta %}
-            <div style="margin-top: 20px;" class="detail-item">
-                <span class="detail-label">Motivo de Alerta</span>
-                <span class="detail-value" style="color: #D97706; font-weight: 700;">{{ evento.motivo_alerta }}</span>
-            </div>
-            {% endif %}
         </div>
 
-        {# ── SECCIÓN 3: SEGURIDAD E INTEGRIDAD ── #}
+        {# ── SECCIÓN 3: SEGURIDAD E INTEGRIDAD CRIPTOGRÁFICA (HU-6.1) ── #}
         <div class="detail-card">
-            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">3. Trazabilidad e Integridad Criptográfica</h3>
-            <div class="detail-item">
-                <span class="detail-label">Hash de Integridad SHA-256</span>
-                <span class="detail-value detail-value--code" style="word-break: break-all;">
-                    {{ evento.hash_integridad or 'No generado' }}
-                </span>
+            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">3. Trazabilidad Criptográfica e Inmutabilidad</h3>
+            
+            <div class="detail-grid">
+                <div class="detail-item" style="grid-column: 1 / -1;">
+                    <span class="detail-label">Hash de Integridad SHA-256</span>
+                    <span class="detail-value detail-value--code" style="word-break: break-all;">
+                        {{ evento.hash_integridad or 'No generado' }}
+                    </span>
+                </div>
+                
+                <div class="detail-item" style="grid-column: 1 / -1;">
+                    <span class="detail-label">Firma Digital Ed25519 (Garantía de No Repudio)</span>
+                    <span class="detail-value detail-value--code" style="word-break: break-all; margin-bottom: 8px;">
+                        {{ evento.firma_digital or 'Sin firma' }}
+                    </span>
+                    
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                        {% if estado_firma.presente %}
+                            {% if estado_firma.valida %}
+                                <span class="badge" style="background: #ECFDF5; color: #059669; display: inline-flex; align-items: center; gap: 4px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                    Firma Válida y Verificada
+                                </span>
+                            {% else %}
+                                <span class="badge" style="background: #FEF2F2; color: #DC2626; display: inline-flex; align-items: center; gap: 4px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                    Firma Inválida o Corrupta
+                                </span>
+                            {% endif %}
+                            <span style="font-size: 12px; color: var(--clr-text-muted);">
+                                {{ estado_firma.mensaje }}
+                            </span>
+                        {% else %}
+                            <span class="badge" style="background: #F3F4F6; color: #6B7280;">NO FIRMADO</span>
+                            <span style="font-size: 12px; color: var(--clr-text-muted);">
+                                Evento generado sin firma digital asimétrica.
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
 
     </main>
 </div>
+
+{# ── SCRIPT PARA COPIAR RESUMEN FORENSE ── #}
+<script>
+    const textoResumenForense = {{ resumen_copiable | tojson }};
+
+    function copiarResumenAuditoria() {
+        if (!navigator.clipboard) {
+            const textarea = document.createElement('textarea');
+            textarea.value = textoResumenForense;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            mostrarFeedbackCopiado();
+            return;
+        }
+
+        navigator.clipboard.writeText(textoResumenForense).then(() => {
+            mostrarFeedbackCopiado();
+        }).catch(err => {
+            console.error('Error al copiar:', err);
+        });
+    }
+
+    function mostrarFeedbackCopiado() {
+        const copyText = document.getElementById('copy-text');
+        const copyIcon = document.getElementById('copy-icon');
+        const originalText = copyText.innerText;
+
+        copyText.innerText = '¡Copiado al Portapapeles!';
+        copyText.style.color = '#059669';
+
+        setTimeout(() => {
+            copyText.innerText = originalText;
+            copyText.style.color = '';
+        }, 2200);
+    }
+</script>
 {% endblock %}

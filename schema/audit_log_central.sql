@@ -85,12 +85,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
     motivo_alerta     TEXT,
 
     -- INTEGRIDAD DEL REGISTRO (HU-5.4 CA3 — mismo mecanismo que el local)
-    hash_integridad   TEXT     NOT NULL
+    hash_integridad   TEXT     NOT NULL,
     -- SHA-256 calculado en Python (hash_event()) sobre los 13 campos
     -- funcionales. evento_uuid y event_id quedan fuera del cálculo,
     -- igual que en el audit_log local — así el hash de un evento es
     -- idéntico sin importar en qué base se calculó o insertó.
 
+    firma_digital     TEXT
+    -- HU-6.1 CA4: Firma digital Ed25519 generada por la llave privada del usuario.
+    -- Base64url sin padding, ~86 caracteres. Almacenada para verificación forense.
 );
 
 -- ============================================================
