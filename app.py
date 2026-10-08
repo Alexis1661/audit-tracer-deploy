@@ -45,6 +45,7 @@ from audit_tracer.models.audit_log import (
 from audit_tracer.digital_signatures import verify_event_signature  # HU-6.1
 from audit_tracer.event_explainer import enrich_event_detail  # HU-7.4
 from audit_tracer.auth.control_acceso import has_permission  # HU-1.4
+from audit_tracer.lineage import build_lineage_graph, list_lineage_datasets  # HU-7.1
 from datetime import datetime, timedelta
 
 
@@ -1141,6 +1142,50 @@ def detalle_evento(event_id):
         recomendaciones=contexto_enriquecido['recomendaciones'],
         resumen_copiable=contexto_enriquecido['resumen_copiable'],
     )
+
+
+def _grafo_linaje_desde_request():
+    """
+    HU-7.1 — Lee el alcance (?event_id= o ?dataset=) y construye el grafo.
+    Cada nodo asociado a un evento lleva detalle_url hacia el detalle de
+    HU-4.3 (/eventos/<event_id>): el grafo no tiene un detalle propio (CA4).
+    """
+    event_id = request.args.get('event_id', type=int)
+    dataset_nombre = request.args.get('dataset') or None
+
+    conn = get_db()
+    grafo = build_lineage_graph(conn, dataset_nombre=dataset_nombre, event_id=event_id)
+    datasets = list_lineage_datasets(conn)
+    conn.close()
+
+    for nodo in grafo['nodes']:
+        if nodo.get('event_id') is not None:
+            nodo['detalle_url'] = url_for('detalle_evento', event_id=nodo['event_id'])
+    return grafo, datasets
+
+
+@app.route('/linaje')
+@login_required
+@modulo_required('consulta_reportes')  # HU-1.4 — mismo módulo que /eventos
+def linaje():
+    """HU-7.1 CA2 — Grafo de linaje de un dataset o de un evento."""
+    grafo, datasets = _grafo_linaje_desde_request()
+    return render_template(
+        'dashboard/linaje.html',
+        nombre=session.get('nombre', 'Usuario'),
+        rol=session.get('rol', 'N/A'),
+        grafo=grafo,
+        datasets=datasets,
+    )
+
+
+@app.route('/api/linaje')
+@login_required
+@modulo_required('consulta_reportes')
+def api_linaje():
+    """HU-7.1 — Mismo grafo que /linaje, en JSON."""
+    grafo, _ = _grafo_linaje_desde_request()
+    return jsonify(grafo)
 
 
 @app.route('/eventos/criticos/exportar')

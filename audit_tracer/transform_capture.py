@@ -35,7 +35,7 @@ from typing import Optional
 import pandas as pd
 
 from .db import get_connection
-from .models.audit_log import insert_event
+from .models.audit_log import insert_event_and_enqueue_sync
 from .utils.session import detect_environment, get_hostname
 
 # ──────────────────────────────────────────────────────────────
@@ -155,7 +155,14 @@ def _log_transform(
 
     try:
         conn = get_connection()
-        insert_event(conn, event)   # CA4: persistencia inmediata e independiente
+        # CA4: persistencia inmediata e independiente. HU-5.8: se encola
+        # para sincronización en la misma operación, igual que data_capture.
+        resultado = insert_event_and_enqueue_sync(conn, event)
+        try:
+            from .sync_client import try_sync_event
+            try_sync_event(conn, resultado["event_id"])  # best-effort, nunca lanza
+        except Exception:
+            pass
         conn.close()
     except Exception as exc:
         print(f"[AuditTracer] Advertencia: no se pudo registrar transformación — {exc}")

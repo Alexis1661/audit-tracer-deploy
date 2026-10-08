@@ -504,3 +504,74 @@ la orquestación de `SessionTracker.login()` (actualización de
 `usuario_id`, configuración automática de `sync_client`, resolución de
 `AUDIT_TRACER_API_URL`, y que el camino con `email`/`password` no toca
 `device_login()` en absoluto).
+
+## Visualización de linaje de datos en grafo (HU-7.1)
+
+### Qué encontró esta HU al empezar
+
+`audit_log` **no tiene ningún campo explícito de linaje** (evento padre,
+dataset origen, etc.), y el Definition of Ready no se cumplía del todo:
+
+- **TRANSFORMACION** no se captura en `main`: el interceptor existe en la
+  rama `feature/HU-2.2-...` (commit `759c1e7`), que nunca se mergeó.
+- **MODELADO** no tiene interceptor en ninguna rama.
+- Una exportación real después de `pd.read_csv()` + transformaciones queda
+  con `dataset_nombre='dataset_desconocido'` salvo que se use
+  `wrap_for_export()`: `read_csv()` no etiqueta el DataFrame y pandas no
+  propaga `_dataset_nombre` entre operaciones.
+
+Por eso el grafo se construye **solo con relaciones deducibles de campos
+ya almacenados** — sin cambiar el esquema, el hash ni la sincronización —
+y soporta TRANSFORMACION/MODELADO en cuanto existan esos eventos.
+
+### Reglas de linaje (`audit_tracer/lineage.py`)
+
+- **Eventos de linaje**: `CARGA`, `TRANSFORMACION`, `MODELADO`,
+  `MODELADO_FALLIDO`, `EXPORTACION`. `CONSULTA` queda fuera (lee, no
+  cambia el dato), igual que los eventos de sesión/usuario/acceso.
+- **Nodos (CA1)**: dataset (carga), transformación, modelo, exportación, y
+  un nodo *archivo exportado* por cada `ruta_destino`.
+- **E1 — secuencia**: dentro de un mismo `(sesion_id, dataset_nombre)`,
+  cada paso se enlaza con el siguiente. `sesion_id` es lo que vincula los
+  eventos de una misma ejecución; sesiones distintas **no** se enlazan.
+- **E2 — exportado_a**: `EXPORTACION` → su `ruta_destino` (explícito en el
+  evento).
+- **No se enlaza** una exportación con una carga posterior del mismo
+  nombre de archivo: la coincidencia de nombre no prueba que sea el mismo
+  archivo.
+- Nombres no identificables (`dataset_desconocido`, `buffer_*`, …) no se
+  enlazan entre sí y el grafo lo advierte explícitamente.
+- **Orden (CA3)**: `timestamp` ascendente; `event_id` solo desempata
+  timestamps idénticos. El orden se recalcula en Python, no depende del
+  orden de la consulta. Visualmente, el eje X del grafo es el paso
+  temporal (layout `preset` con posiciones calculadas en el servidor) y
+  debajo hay una tabla de reconstrucción temporal por sesión.
+
+### Dashboard
+
+- `GET /linaje?dataset=<nombre>` o `GET /linaje?event_id=<id>` — página con
+  selector de datasets (CA2); `GET /api/linaje` devuelve el mismo grafo en
+  JSON. Ambas usan `@modulo_required('consulta_reportes')` (mismo permiso
+  que `/eventos`: ADMIN, ANALISTA y AUDITOR).
+- Puntos de entrada: enlace *Linaje* en el sidebar, botón *Linaje* en cada
+  fila de `/eventos` con dataset, y botón *Ver linaje* en el detalle del
+  evento.
+- **CA4**: el clic en un nodo abre `/eventos/<event_id>` — el detalle
+  existente de HU-4.3; no hay un segundo sistema de detalle.
+- Render con Cytoscape.js (cdnjs, mismo patrón que GSAP en `base.html`).
+
+### Demo y pruebas
+
+`scratch/seed_demo_data.py` siembra `vitals_icu.csv`: sesión
+`s-cie-linaje-1` con carga → dropna → fillna → modelado → exportación
+(insertada fuera de orden a propósito) y una segunda sesión independiente
+carga → exportación. El evento `MODELADO` es un **dato de demo** (su
+`contexto_ejecucion` empieza con `DEMO`), porque aún no hay interceptor que
+lo capture.
+
+`tests/test_lineage.py` — construcción del grafo (tipos de nodo, aristas,
+aislamiento entre sesiones y datasets, nombres no identificables), orden
+por timestamp frente a inserción desordenada, selección por dataset y por
+evento, una integración con los interceptores reales (`pd.read_csv` →
+`to_csv`) y las rutas con una base central aislada (permisos, enlace al
+detalle de HU-4.3).
