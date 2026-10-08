@@ -2,14 +2,16 @@
 audit_tracer/data_capture.py
 ============================
 HU-2.1 — Registrar eventos de acceso a datos clínicos
+HU-2.4 — Registrar intentos fallidos de acceso a datos clínicos
 
 Intercepta automáticamente operaciones de carga y consulta sobre
 DataFrames de pandas, generando registros en audit_log sin intervención
 manual del usuario.
 
 Operaciones interceptadas:
-  CARGA    → pd.read_csv(), pd.read_excel()
-  CONSULTA → df[columna/s], df.query()
+  CARGA          → pd.read_csv(), pd.read_excel()
+  CONSULTA       → df[columna/s], df.query()
+  ACCESO_FALLIDO → FileNotFoundError, PermissionError, OSError, IsADirectoryError
 
 Normas: HIPAA §164.312(b) · Ley 1581/2012 · ISO/IEC 27001
 """
@@ -24,8 +26,10 @@ from typing import Optional
 import pandas as pd
 
 from .db import get_connection
-from .models.audit_log import insert_event
+from .models.audit_log import insert_event_and_enqueue_sync
 from .utils.session import detect_environment, get_hostname
+from .failed_access import log_failed_access, ACCESS_FAILURE_EXCEPTIONS   # HU-2.4
+from .utils.horario import es_horario_laboral, HORA_INICIO_LABORAL, HORA_FIN_LABORAL  # HU-4.4
 
 
 # ──────────────────────────────────────────────────────────────
@@ -100,17 +104,25 @@ def _resolve_dataset_nombre(filepath: Optional[str], default: str = "dataset_des
     return default
 
 
-def _determine_alert(usuario_id: str) -> tuple[str, Optional[str]]:
+def _determine_alert(usuario_id: str, ahora: datetime) -> tuple[str, Optional[str]]:
     """
     Determina el nivel de alerta y su motivo.
 
-    CA3: si usuario_id == DESCONOCIDO → nivel_alerta = CRITICO, flag_alerta = True.
+    CA3 (HU-2.1): si usuario_id == DESCONOCIDO → nivel_alerta = CRITICO.
+    CA1-c (HU-4.4): acceso a datos fuera del horario laboral configurado
+    → nivel_alerta = CRITICO.
 
     Returns:
         tuple[str, str | None]: (nivel_alerta, motivo_alerta)
     """
     if usuario_id == "DESCONOCIDO":
         return "CRITICO", "Operación ejecutada por usuario no identificado"
+    if not es_horario_laboral(ahora):
+        return "CRITICO", (
+            f"Acceso fuera de horario laboral "
+            f"({HORA_INICIO_LABORAL:02d}:00-{HORA_FIN_LABORAL:02d}:00 UTC): "
+            f"{ahora.strftime('%H:%M')}"
+        )
     return "NORMAL", None
 
 
@@ -128,12 +140,13 @@ def _log_event(
         columnas_afectadas: Lista de columnas como JSON string (opcional).
     """
     usuario_id, sesion_id = _get_session()
-    nivel_alerta, motivo_alerta = _determine_alert(usuario_id)
+    ahora = datetime.utcnow()
+    nivel_alerta, motivo_alerta = _determine_alert(usuario_id, ahora)
 
     event = {
         "usuario_id": usuario_id,                       # CA1, CA3
         "sesion_id": sesion_id,                          # CA5
-        "timestamp": datetime.utcnow().isoformat(),      # CA1
+        "timestamp": ahora.isoformat(),                  # CA1
         "tipo_accion": tipo_accion,                      # CA1
         "dataset_nombre": dataset_nombre,                # CA1
         "columnas_afectadas": columnas_afectadas,
@@ -144,7 +157,15 @@ def _log_event(
 
     try:
         conn = get_connection()
-        insert_event(conn, event)           # CA4: persistencia inmediata
+        # CA4: persistencia inmediata. HU-5.8 CA1: se encola para
+        # sincronización en la misma operación — el envío HTTP, si se
+        # intenta, siempre sucede DESPUÉS de este insert, nunca antes.
+        resultado = insert_event_and_enqueue_sync(conn, event)
+        try:
+            from .sync_client import try_sync_event
+            try_sync_event(conn, resultado["event_id"])  # best-effort, nunca lanza
+        except Exception:
+            pass
         conn.close()
     except Exception as exc:
         # No interrumpir la operación del usuario si falla la auditoría
@@ -158,13 +179,19 @@ def _log_event(
 def _audited_read_csv(filepath_or_buffer=None, *args, **kwargs) -> pd.DataFrame:
     """
     Reemplazo auditado de pd.read_csv().
-    Registra tipo_accion = 'CARGA' antes de devolver el DataFrame.
+    Registra tipo_accion = 'CARGA' en caso de éxito.
+    Registra tipo_accion = 'ACCESO_FALLIDO' si ocurre un error de acceso (HU-2.4).
     """
     dataset_nombre = _resolve_dataset_nombre(
         filepath_or_buffer, default="buffer_csv"
     )
 
-    df = _original_read_csv(filepath_or_buffer, *args, **kwargs)
+    try:
+        df = _original_read_csv(filepath_or_buffer, *args, **kwargs)
+    except ACCESS_FAILURE_EXCEPTIONS as exc:
+        # HU-2.4 CA1: registrar fallo y relanzar la excepción
+        log_failed_access(dataset_nombre=dataset_nombre, exc=exc)
+        raise
 
     _log_event(
         tipo_accion="CARGA",
@@ -177,11 +204,17 @@ def _audited_read_csv(filepath_or_buffer=None, *args, **kwargs) -> pd.DataFrame:
 def _audited_read_excel(io=None, *args, **kwargs) -> pd.DataFrame:
     """
     Reemplazo auditado de pd.read_excel().
-    Registra tipo_accion = 'CARGA' antes de devolver el DataFrame.
+    Registra tipo_accion = 'CARGA' en caso de éxito.
+    Registra tipo_accion = 'ACCESO_FALLIDO' si ocurre un error de acceso (HU-2.4).
     """
     dataset_nombre = _resolve_dataset_nombre(io, default="buffer_excel")
 
-    df = _original_read_excel(io, *args, **kwargs)
+    try:
+        df = _original_read_excel(io, *args, **kwargs)
+    except ACCESS_FAILURE_EXCEPTIONS as exc:
+        # HU-2.4 CA1: registrar fallo y relanzar la excepción
+        log_failed_access(dataset_nombre=dataset_nombre, exc=exc)
+        raise
 
     _log_event(
         tipo_accion="CARGA",

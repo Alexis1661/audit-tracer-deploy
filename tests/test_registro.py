@@ -8,9 +8,7 @@ from audit_tracer.utils.hashing import verify_password
 
 @pytest.fixture
 def db_conn():
-    if os.path.exists("audit_trail.db"):
-        os.remove("audit_trail.db")
-    conn = get_connection()
+    conn = get_connection(":memory:")
     yield conn
     conn.close()
 

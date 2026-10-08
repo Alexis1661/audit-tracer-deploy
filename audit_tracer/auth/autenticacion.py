@@ -1,10 +1,17 @@
 import sqlite3
 from typing import Dict
 from ..models.usuarios import get_user_by_email, increment_failed_attempts, reset_failed_attempts, block_user
-from ..models.audit_log import insert_event
+from ..models.audit_log import insert_event, contar_intentos_fallidos_recientes
 from ..utils.hashing import verify_password
 from ..utils.session import get_hostname, detect_environment
 from datetime import datetime
+
+from .tokens import generar_token
+
+# HU-4.4 CA1-a: más de este número de intentos fallidos del mismo usuario en
+# menos de VENTANA_INTENTOS_FALLIDOS_MIN minutos se clasifica como CRITICO.
+UMBRAL_INTENTOS_FALLIDOS = 3
+VENTANA_INTENTOS_FALLIDOS_MIN = 5
 
 def login(conn: sqlite3.Connection, email: str, password: str, sesion_id: str) -> Dict:
     """
@@ -55,25 +62,47 @@ def login(conn: sqlite3.Connection, email: str, password: str, sesion_id: str) -
             'contexto_ejecucion': f"Env: {detect_environment()} | Host: {get_hostname()}",
             'nivel_alerta': 'NORMAL'
         })
+
+        # Generar token único por usuario al completar login (HU-5.5 CA1)
+        token_info = generar_token(
+            conn, user_id, dias_expiracion=30, creado_por='LOGIN', sesion_id=sesion_id
+        )
         
         return {
             'success': True, 
             'usuario_id': user_id, 
             'rol': user['rol'], 
-            'sesion_id': sesion_id
+            'sesion_id': sesion_id,
+            'token': token_info['token'],
+            'token_id': token_info['token_id'],
+            'token_expiracion': token_info['fecha_expiracion']
         }
     else:
         # Login failed
         attempts = increment_failed_attempts(conn, user_id)
-        
+        ahora = datetime.utcnow()
+
+        # HU-4.4 CA1-a: intentos fallidos recientes del usuario (ventana de tiempo),
+        # independiente del contador acumulado usado para el bloqueo de cuenta.
+        intentos_recientes = contar_intentos_fallidos_recientes(
+            conn, user_id, ahora, ventana_minutos=VENTANA_INTENTOS_FALLIDOS_MIN
+        ) + 1  # +1: incluye el intento actual, que todavía no está insertado
+
         nivel_alerta = 'NORMAL'
         motivo_alerta = None
-        
+
         if attempts >= 5:
             nivel_alerta = 'CRITICO'
             motivo_alerta = '5 intentos fallidos consecutivos'
             block_user(conn, user_id)
             message = 'Cuenta bloqueada por seguridad tras 5 intentos fallidos.'
+        elif intentos_recientes > UMBRAL_INTENTOS_FALLIDOS:
+            nivel_alerta = 'CRITICO'
+            motivo_alerta = (
+                f'{intentos_recientes} intentos fallidos en menos de '
+                f'{VENTANA_INTENTOS_FALLIDOS_MIN} minutos'
+            )
+            message = 'Credenciales inválidas'
         elif attempts >= 3:
             nivel_alerta = 'ADVERTENCIA'
             motivo_alerta = f'{attempts} intentos fallidos'
@@ -84,13 +113,13 @@ def login(conn: sqlite3.Connection, email: str, password: str, sesion_id: str) -
         insert_event(conn, {
             'usuario_id': user_id,
             'sesion_id': sesion_id,
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': ahora.isoformat(),
             'tipo_accion': 'ACCESO_FALLIDO',
             'motivo_fallo': 'Credenciales inválidas',
             'nivel_alerta': nivel_alerta,
             'motivo_alerta': motivo_alerta
         })
-        
+
         return {'success': False, 'message': message}
 
 def logout(conn: sqlite3.Connection, usuario_id: str, sesion_id: str, start_time_iso: str = None):

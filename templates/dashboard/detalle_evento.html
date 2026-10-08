@@ -1,0 +1,519 @@
+{% extends "base.html" %}
+
+{% block title %}Detalle de Evento #{{ evento.event_id }} — Audit Tracer{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+    .detail-card {
+        background: white;
+        border-radius: 20px;
+        border: 1px solid var(--clr-border);
+        box-shadow: var(--shadow-sm);
+        padding: 28px 32px;
+        margin-bottom: 24px;
+        position: relative;
+    }
+    
+    .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 24px;
+    }
+
+    .detail-item {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .detail-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--clr-text-muted);
+    }
+
+    .detail-value {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--clr-text-main);
+        word-break: break-word;
+    }
+
+    .detail-value--code {
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        font-size: 13px;
+        background: #F5F5F7;
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--clr-border);
+        color: #1F2937;
+    }
+
+    .badge {
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        width: fit-content;
+    }
+    .badge-normal { background: #F3F4F6; color: var(--clr-text-muted); }
+    .badge-advertencia { background: #FFF9E6; color: #D97706; }
+    .badge-critico { background: #FEF2F2; color: #DC2626; }
+
+    /* HU-7.4: Estilos para tarjetas de explicación y recomendaciones */
+    .narrative-card {
+        background: linear-gradient(180deg, #FFFFFF 0%, #FAFAFC 100%);
+        border: 1px solid #E5E7EB;
+        border-left: 4px solid var(--clr-accent-blue);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    .narrative-card.is-critico {
+        border-left-color: #DC2626;
+        background: linear-gradient(180deg, #FFFFFF 0%, #FFF5F5 100%);
+    }
+    .narrative-card.is-advertencia {
+        border-left-color: #D97706;
+        background: linear-gradient(180deg, #FFFFFF 0%, #FFFDF5 100%);
+    }
+
+    .impact-box {
+        margin-top: 16px;
+        padding: 14px 18px;
+        border-radius: 10px;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .impact-box.alert-critica {
+        background: #FEF2F2;
+        border: 1px solid #FECACA;
+        color: #991B1B;
+    }
+    .impact-box.alert-advertencia {
+        background: #FFFBEB;
+        border: 1px solid #FDE68A;
+        color: #92400E;
+    }
+    .impact-box.alert-normal {
+        background: #F0FDF4;
+        border: 1px solid #BBF7D0;
+        color: #166534;
+    }
+
+    .recommendations-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+    }
+    .rec-item {
+        background: #F9FAFB;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .rec-item--urgente {
+        border-left: 3px solid #DC2626;
+        background: #FFFBFB;
+    }
+    .rec-item--seguridad {
+        border-left: 3px solid #D97706;
+        background: #FFFCF7;
+    }
+    .rec-item--info {
+        border-left: 3px solid var(--clr-accent-blue);
+    }
+    .rec-item--mejora {
+        border-left: 3px solid #10B981;
+    }
+
+    .user-profile-badge {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: #F9FAFB;
+        border: 1px solid #E5E7EB;
+        border-radius: 14px;
+        padding: 14px 18px;
+    }
+    .user-avatar-lg {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--clr-accent-blue);
+        color: white;
+        font-weight: 700;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .quick-action-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--clr-accent-blue);
+        text-decoration: none;
+        margin-top: 6px;
+    }
+    .quick-action-link:hover {
+        text-decoration: underline;
+    }
+
+    .btn-copy {
+        background: white;
+        border: 1px solid var(--clr-border);
+        padding: 8px 14px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--clr-text-main);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s ease;
+    }
+    .btn-copy:hover {
+        background: #F3F4F6;
+        border-color: #D1D5DB;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-layout">
+    
+    {# ── SIDEBAR ── #}
+    <aside class="sidebar">
+        <a href="{{ url_for('landing') }}" class="sidebar__brand">
+            <div class="sidebar__brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            </div>
+            Audit Tracer
+        </a>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Principal</div>
+            <a href="{{ url_for('dashboard') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                Dashboard
+            </a>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Auditoría</div>
+            <a href="{{ url_for('eventos') }}" class="nav-item active">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                Eventos
+            </a>
+            <a href="{{ url_for('reportes') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                Reportes
+            </a>
+        </div>
+
+        {% if session.get('rol') == 'ADMIN' %}
+        <div class="nav-section">
+            <div class="nav-section__title">Administración</div>
+            <a href="{{ url_for('lista_usuarios') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                Usuarios
+            </a>
+            <a href="{{ url_for('lista_tokens') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                Tokens
+            </a>
+            <a href="{{ url_for('admin_sincronizacion') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                Sincronización
+            </a>
+        </div>
+        {% endif %}
+
+        <div class="sidebar__footer">
+            <div class="user-profile">
+                <div class="user-avatar">{{ session.get('nombre', 'U')[0] | upper }}</div>
+                <div style="flex: 1;">
+                    <div style="font-size: 13px; font-weight: 700;">{{ session.get('nombre', 'Usuario') }}</div>
+                    <div style="font-size: 11px; color: var(--clr-text-muted);">{{ session.get('rol', 'Personal') }}</div>
+                </div>
+            </div>
+            <a href="{{ url_for('logout') }}" class="logout-link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                Cerrar sesión
+            </a>
+        </div>
+    </aside>
+
+    {# ── MAIN CONTENT ── #}
+    <main class="main-content">
+        <header class="header" style="margin-bottom: 24px;">
+            <div class="header__title">
+                <a href="{{ url_for('eventos') }}" class="btn btn-outline" style="margin-bottom: 16px; width: fit-content;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                    Volver a Eventos
+                </a>
+                <h1>Detalle del Evento #{{ evento.event_id }}</h1>
+                <p>Trazabilidad clínica y análisis forense contextual (HU-7.4).</p>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button type="button" class="btn-copy" onclick="copiarResumenAuditoria()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="copy-icon"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    <span id="copy-text">Copiar Resumen Forense</span>
+                </button>
+                <span class="badge badge-{{ evento.nivel_alerta | lower }}">{{ evento.nivel_alerta or 'NORMAL' }}</span>
+            </div>
+        </header>
+
+        {# ── TARJETA EXPLICATIVA Y NARRATIVA (HU-7.4 CA2 & CA3) ── #}
+        <div class="narrative-card {% if diagnostico.es_critico %}is-critico{% elif diagnostico.es_advertencia %}is-advertencia{% endif %}">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <span style="font-size: 18px; font-weight: 800; color: var(--clr-text-main);">
+                            {{ explicacion.titulo }}
+                        </span>
+                        <span class="badge badge-{{ diagnostico.nivel | lower }}">
+                            {{ diagnostico.categoria_alerta }}
+                        </span>
+                    </div>
+                    <p style="font-size: 14px; color: #374151; line-height: 1.6; margin: 0;">
+                        {{ explicacion.descripcion | safe }}
+                    </p>
+                </div>
+            </div>
+
+            {% if diagnostico.es_alerta %}
+            <div class="impact-box {{ diagnostico.clase_css }}">
+                <div style="font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    Diagnóstico de Alerta: {{ diagnostico.motivo }}
+                </div>
+                <div><strong>Impacto Estimado:</strong> {{ diagnostico.impacto }}</div>
+            </div>
+            {% endif %}
+        </div>
+
+        {# ── RECOMENDACIONES Y GUÍA DE MITIGACIÓN (HU-7.4 CA4) ── #}
+        <div class="detail-card">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 16px; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--clr-accent-blue);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    Recomendaciones y Guía de Mitigación para el Auditor
+                </h3>
+            </div>
+            <div class="recommendations-grid">
+                {% for rec in recomendaciones %}
+                <div class="rec-item rec-item--{{ rec.tipo }}">
+                    <div style="font-size: 13px; font-weight: 700; color: var(--clr-text-main);">
+                        {{ rec.titulo }}
+                    </div>
+                    <div style="font-size: 12px; color: var(--clr-text-muted); line-height: 1.5;">
+                        {{ rec.detalle }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# ── SECCIÓN 1: IDENTIDAD DEL USUARIO Y CONTEXTO (HU-7.4 CA1 & CA5) ── #}
+        <div class="detail-card">
+            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">1. Información del Usuario y Sesión</h3>
+            
+            <div class="user-profile-badge" style="margin-bottom: 24px;">
+                <div class="user-avatar-lg">{{ usuario_info.avatar_letra }}</div>
+                <div style="flex: 1;">
+                    <div style="font-size: 16px; font-weight: 700; color: var(--clr-text-main);">
+                        {{ usuario_info.nombre }}
+                    </div>
+                    <div style="font-size: 13px; color: var(--clr-text-muted); display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                        <span>{{ usuario_info.email }}</span>
+                        <span>•</span>
+                        <span class="badge {{ usuario_info.rol_badge_class }}">{{ usuario_info.rol }}</span>
+                        {% if usuario_info.activo is not none %}
+                            <span>•</span>
+                            <span style="font-size: 11px; font-weight: 700; color: {{ '#059669' if usuario_info.activo else '#DC2626' }};">
+                                {{ 'Cuenta Activa' if usuario_info.activo else 'Cuenta Inactiva / Bloqueada' }}
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if not usuario_info.es_desconocido %}
+                <a href="{{ url_for('eventos', usuario_id=usuario_info.usuario_id) }}" class="btn btn-outline" style="font-size: 12px; padding: 6px 14px;">
+                    Ver eventos de este usuario →
+                </a>
+                {% endif %}
+            </div>
+
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <span class="detail-label">ID Usuario (Técnico)</span>
+                    <span class="detail-value detail-value--code" style="font-size: 12px;">{{ usuario_info.usuario_id }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Tipo de Acción</span>
+                    <span class="detail-value" style="color: var(--clr-accent-blue); font-weight: 700;">{{ evento.tipo_accion }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Fecha y Hora (Timestamp UTC)</span>
+                    <span class="detail-value">{{ evento.timestamp.replace('T', ' ') if evento.timestamp else '—' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">ID Sesión</span>
+                    <span class="detail-value detail-value--code" style="font-size: 12px;">{{ evento.sesion_id or '—' }}</span>
+                </div>
+            </div>
+        </div>
+
+        {# ── SECCIÓN 2: DETALLES DEL DATASET Y EJECUCIÓN ── #}
+        <div class="detail-card">
+            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">2. Detalles del Dataset y Entorno de Ejecución</h3>
+            <div class="detail-grid">
+                <div class="detail-item">
+                    <span class="detail-label">Nombre del Dataset</span>
+                    <span class="detail-value">{{ evento.dataset_nombre or '—' }}</span>
+                    {% if evento.dataset_nombre %}
+                    <a href="{{ url_for('eventos', dataset_nombre=evento.dataset_nombre) }}" class="quick-action-link">
+                        Ver historial de este dataset →
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Columnas Afectadas</span>
+                    <span class="detail-value">{{ evento.columnas_afectadas or '—' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Ruta Destino (Exportación)</span>
+                    <span class="detail-value">{{ evento.ruta_destino or '—' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Filas Exportadas</span>
+                    <span class="detail-value">{{ evento.filas_exportadas if evento.filas_exportadas is not none else '—' }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Sobrescritura</span>
+                    <span class="detail-value">
+                        {% if evento.sobrescritura is not none %}
+                            {{ 'Sí (Archivo Reemplazado)' if evento.sobrescritura else 'No' }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Motivo de Fallo (si aplica)</span>
+                    <span class="detail-value" style="color: #DC2626; font-weight: 700;">{{ evento.motivo_fallo or '—' }}</span>
+                </div>
+            </div>
+
+            <div style="margin-top: 24px;" class="detail-item">
+                <span class="detail-label">Entorno y Contexto de Ejecución</span>
+                <div style="font-size: 13px; font-weight: 600; color: var(--clr-text-main); margin-bottom: 6px;">
+                    {{ explicacion.entorno_desc }}
+                </div>
+                <span class="detail-value detail-value--code">{{ evento.contexto_ejecucion or '—' }}</span>
+            </div>
+        </div>
+
+        {# ── SECCIÓN 3: SEGURIDAD E INTEGRIDAD CRIPTOGRÁFICA (HU-6.1) ── #}
+        <div class="detail-card">
+            <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 20px;">3. Trazabilidad Criptográfica e Inmutabilidad</h3>
+            
+            <div class="detail-grid">
+                <div class="detail-item" style="grid-column: 1 / -1;">
+                    <span class="detail-label">Hash de Integridad SHA-256</span>
+                    <span class="detail-value detail-value--code" style="word-break: break-all;">
+                        {{ evento.hash_integridad or 'No generado' }}
+                    </span>
+                </div>
+                
+                <div class="detail-item" style="grid-column: 1 / -1;">
+                    <span class="detail-label">Firma Digital Ed25519 (Garantía de No Repudio)</span>
+                    <span class="detail-value detail-value--code" style="word-break: break-all; margin-bottom: 8px;">
+                        {{ evento.firma_digital or 'Sin firma' }}
+                    </span>
+                    
+                    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                        {% if estado_firma.presente %}
+                            {% if estado_firma.valida %}
+                                <span class="badge" style="background: #ECFDF5; color: #059669; display: inline-flex; align-items: center; gap: 4px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                    Firma Válida y Verificada
+                                </span>
+                            {% else %}
+                                <span class="badge" style="background: #FEF2F2; color: #DC2626; display: inline-flex; align-items: center; gap: 4px;">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                    Firma Inválida o Corrupta
+                                </span>
+                            {% endif %}
+                            <span style="font-size: 12px; color: var(--clr-text-muted);">
+                                {{ estado_firma.mensaje }}
+                            </span>
+                        {% else %}
+                            <span class="badge" style="background: #F3F4F6; color: #6B7280;">NO FIRMADO</span>
+                            <span style="font-size: 12px; color: var(--clr-text-muted);">
+                                Evento generado sin firma digital asimétrica.
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+{# ── SCRIPT PARA COPIAR RESUMEN FORENSE ── #}
+<script>
+    const textoResumenForense = {{ resumen_copiable | tojson }};
+
+    function copiarResumenAuditoria() {
+        if (!navigator.clipboard) {
+            const textarea = document.createElement('textarea');
+            textarea.value = textoResumenForense;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            mostrarFeedbackCopiado();
+            return;
+        }
+
+        navigator.clipboard.writeText(textoResumenForense).then(() => {
+            mostrarFeedbackCopiado();
+        }).catch(err => {
+            console.error('Error al copiar:', err);
+        });
+    }
+
+    function mostrarFeedbackCopiado() {
+        const copyText = document.getElementById('copy-text');
+        const copyIcon = document.getElementById('copy-icon');
+        const originalText = copyText.innerText;
+
+        copyText.innerText = '¡Copiado al Portapapeles!';
+        copyText.style.color = '#059669';
+
+        setTimeout(() => {
+            copyText.innerText = originalText;
+            copyText.style.color = '';
+        }, 2200);
+    }
+</script>
+{% endblock %}

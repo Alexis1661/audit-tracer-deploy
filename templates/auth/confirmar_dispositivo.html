@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Confirmar Dispositivo — Audit Tracer{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+    .form-container {
+        max-width: 480px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 24px;
+        border: 1px solid var(--clr-border);
+        padding: 40px;
+        box-shadow: var(--shadow-md);
+    }
+    .codigo-input {
+        text-align: center;
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-layout">
+
+    {# ── SIDEBAR ── #}
+    <aside class="sidebar">
+        <a href="{{ url_for('landing') }}" class="sidebar__brand">
+            <div class="sidebar__brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            </div>
+            Audit Tracer
+        </a>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Principal</div>
+            <a href="{{ url_for('dashboard') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                Dashboard
+            </a>
+        </div>
+
+        <div class="sidebar__footer">
+            <div class="user-profile">
+                <div class="user-avatar">{{ session.get('nombre', 'U')[0] | upper }}</div>
+                <div style="flex: 1;">
+                    <div style="font-size: 13px; font-weight: 700;">{{ session.get('nombre', 'Usuario') }}</div>
+                    <div style="font-size: 11px; color: var(--clr-text-muted);">{{ session.get('rol', 'Personal') }}</div>
+                </div>
+            </div>
+            <a href="{{ url_for('logout') }}" class="logout-link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                Cerrar sesión
+            </a>
+        </div>
+    </aside>
+
+    {# ── MAIN CONTENT ── #}
+    <main class="main-content" style="display: flex; align-items: center; justify-content: center;">
+        <div style="width: 100%;">
+            <header class="header" style="justify-content: center; text-align: center; flex-direction: column; margin-bottom: 32px;">
+                <div class="header__title">
+                    <h1>Confirmar tu notebook</h1>
+                    <p>Ingresa el código que apareció al ejecutar <code>audit_tracer.login()</code>.</p>
+                </div>
+            </header>
+
+            <div class="form-container">
+                {% if success %}
+                <div style="padding: 16px; border-radius: 12px; margin-bottom: 24px; font-size: 14px; font-weight: 600; background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0; text-align: center;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display: block; margin: 0 auto 8px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    {{ success }}
+                </div>
+                {% else %}
+                    {% if error %}
+                    <div style="padding: 12px 16px; border-radius: 12px; margin-bottom: 24px; font-size: 14px; font-weight: 600; background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5;">
+                        {{ error }}
+                    </div>
+                    {% endif %}
+
+                    <form method="POST" action="{{ url_for('confirmar_dispositivo_post') }}">
+                        <div class="form-group">
+                            <label class="form-label" style="text-align: center; display: block;">Código de 8 caracteres</label>
+                            <input name="codigo" type="text" class="form-input codigo-input" placeholder="XXXX-XXXX" required
+                                   maxlength="9" value="{{ codigo }}" autocomplete="off" autocapitalize="characters">
+                        </div>
+
+                        <div style="margin-top: 32px;">
+                            <button type="submit" class="btn btn-primary" style="width: 100%; padding: 14px;">Confirmar</button>
+                            <p style="text-align: center; font-size: 12px; color: var(--clr-text-muted); margin-top: 16px; line-height: 1.4;">
+                                Al confirmar, tu notebook recibirá automáticamente un token de acceso personal asociado a tu cuenta.
+                            </p>
+                        </div>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}
