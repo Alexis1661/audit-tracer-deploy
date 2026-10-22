@@ -1,6 +1,4 @@
 import uuid
-import socket
-import sys
 
 def generate_session_id() -> str:
     """
@@ -13,13 +11,13 @@ def generate_session_id() -> str:
 
 def get_hostname() -> str:
     """Returns the hostname of the current machine."""
-    return socket.gethostname()
+    from .contexto import get_hostname as _cached_hostname
+    return _cached_hostname()
 
 def detect_environment() -> str:
     """
     Detects the execution environment.
-    Returns 'Jupyter' or 'Script (.py)'.
+    Returns 'Google Colab', 'Jupyter' or 'Script (.py)'.
     """
-    if 'ipykernel' in sys.modules:
-        return 'Jupyter'
-    return 'Script (.py)'
+    from .contexto import detect_environment as _detect
+    return _detect()

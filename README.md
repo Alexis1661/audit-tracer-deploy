@@ -115,7 +115,7 @@ supuesto:
   de hashing e inmutabilidad vive en Python** (`hash_event()`,
   `_prepare_event()`, `verify_integrity()`), no en SQL específico del motor
   — lo único atado a SQLite son los dos triggers de bloqueo UPDATE/DELETE
-  (`schema/audit_log_central.sql`), que es la única pieza que habría que
+  (`audit_tracer/schema/audit_log_central.sql`), que es la única pieza que habría que
   reescribir en PL/pgSQL.
 
 `get_central_connection()` en `audit_tracer/db.py` abre la conexión con
@@ -126,8 +126,8 @@ reales en `tests/test_central_db.py::TestConcurrencia`, no simulado.
 
 ### Esquema (diccionario de datos)
 
-`schema/audit_log_central.sql` es estructuralmente compatible con
-`schema/audit_log.sql` (el `audit_log` local): mismos 13 campos
+`audit_tracer/schema/audit_log_central.sql` es estructuralmente compatible con
+`audit_tracer/schema/audit_log.sql` (el `audit_log` local): mismos 13 campos
 funcionales sobre los que se calcula `hash_integridad` (antes se
 documentaban como 11; `filas_exportadas` y `sobrescritura` se sumaron
 después, en HU-2.3). La única columna nueva es `evento_uuid`:
@@ -141,7 +141,7 @@ después, en HU-2.3). La única columna nueva es `evento_uuid`:
 
 También incluye `audit_intentos_bloqueados` (ver más abajo) y, a través de
 `get_central_connection()`, la tabla `usuarios` sin cambios
-(`schema/usuarios.sql`): el dashboard Flask lee y escribe todo — auth,
+(`audit_tracer/schema/usuarios.sql`): el dashboard Flask lee y escribe todo — auth,
 roles y eventos — contra esta misma conexión, porque en este diseño el
 dashboard es parte de la infraestructura central, no un cliente
 intermitente como una notebook de Colab.
@@ -235,7 +235,7 @@ Lo que sí existía y se reutilizó tal cual, sin modificarlo:
 
 ### Cola local de sincronización (`audit_sync_queue`)
 
-Nueva tabla, solo en la base **local** (`schema/audit_log.sql`), NO en la
+Nueva tabla, solo en la base **local** (`audit_tracer/schema/audit_log.sql`), NO en la
 central. Cada evento capturado por la librería tiene una fila espejo con
 `estado` (`PENDIENTE` | `SINCRONIZADO` | `FALLIDO`), `intentos`,
 `ultimo_intento`, `ultimo_error` y `sincronizado_en`.
@@ -292,7 +292,7 @@ estar disponible, sin que el notebook tenga que hacer nada.
 Mismo patrón que los endpoints existentes de HU-5.5
 (`/api/tokens/validar`): sin sesión Flask, autenticado por
 `Authorization: Bearer <token>`. Recibe el evento como JSON con los
-mismos nombres de campo que `schema/audit_log.sql` /
+mismos nombres de campo que `audit_tracer/schema/audit_log.sql` /
 `audit_log_central.sql` (`usuario_id`, `sesion_id`, `timestamp`,
 `tipo_accion`, `dataset_nombre`, `columnas_afectadas`, `ruta_destino`,
 `filas_exportadas`, `sobrescritura`, `contexto_ejecucion`,
@@ -409,7 +409,7 @@ robarle el token en cuanto lo confirmara. Con dos secretos separados,
 
 Mismo patrón que `auth/tokens.py`/`models/tokens.py` (HU-5.5): tabla
 `codigos_dispositivo` creada de forma perezosa en la conexión que se le
-pase (sin tocar `schema/*.sql` ni las migraciones de `db.py`). No está
+pase (sin tocar `audit_tracer/schema/*.sql` ni las migraciones de `db.py`). No está
 sujeta a los triggers de inmutabilidad de `audit_log` (HU-5.4): esos
 triggers son específicos de esa tabla, y `codigos_dispositivo` — igual
 que `tokens_acceso` — es metadata operativa que necesita mutar

@@ -24,7 +24,9 @@ import time
 from datetime import datetime
 from typing import Dict, Optional
 
-import requests
+from .utils.lazy import lazy_import
+
+requests = lazy_import("requests")   # HU-5.1 CA3: no cargar requests en cada import de la librería
 
 DEFAULT_POLL_INTERVAL_SECONDS = 5
 # Mismo valor que CODIGO_EXPIRACION_MINUTOS en auth/device_codes.py (10 min):
@@ -81,6 +83,56 @@ def _clear_cached_token(cache_dir: Optional[str]) -> None:
         os.remove(_cache_file_path(cache_dir))
     except OSError:
         pass
+
+
+def clear_cached_token(cache_dir: Optional[str] = None) -> None:
+    """Borra el token cacheado (p. ej. si el servidor lo rechazó)."""
+    _clear_cached_token(cache_dir)
+
+
+def load_cached_identity(cache_dir: Optional[str] = None) -> Optional[Dict]:
+    """
+    HU-5.1 — Identidad guardada por un login() anterior, leída solo del
+    disco (sin red), para que `import audit_tracer` identifique al usuario
+    sin pedirle nada. El servidor se toma del caché o, en cachés anteriores
+    a HU-5.1 que no lo guardaban, de AUDIT_TRACER_API_URL.
+
+    Returns:
+        {'token', 'usuario_id', 'api_url'} o None si no hay identidad usable.
+    """
+    cache = _load_cached_token(cache_dir)
+    if not cache or not cache.get("token") or not cache.get("usuario_id"):
+        return None
+    api_url = cache.get("api_url") or os.environ.get("AUDIT_TRACER_API_URL")
+    if not api_url:
+        return None
+    return {
+        "token": cache["token"],
+        "usuario_id": cache["usuario_id"],
+        "api_url": api_url.rstrip("/"),
+    }
+
+
+def token_status(api_url: str, token: str) -> str:
+    """
+    Estado de un token según el servidor central:
+    'VALIDO', 'INVALIDO' (rechazado: expirado/revocado/inexistente) o
+    'SIN_CONEXION' (no se pudo preguntar — no se asume nada).
+    """
+    try:
+        resp = requests.post(f"{api_url.rstrip('/')}/api/tokens/validar",
+                             json={"token": token}, timeout=5)
+    except requests.exceptions.RequestException:
+        return "SIN_CONEXION"
+    try:
+        valido = bool(resp.json().get("valido"))
+    except ValueError:
+        return "SIN_CONEXION"
+    if resp.status_code == 200 and valido:
+        return "VALIDO"
+    if resp.status_code in (200, 401, 403):
+        return "INVALIDO"
+    return "SIN_CONEXION"
 
 
 # ──────────────────────────────────────────────────────────────
@@ -163,6 +215,13 @@ def device_login(
         if cache and cache.get("token"):
             info = _validar_token_remoto(api_url, cache["token"])
             if info:
+                if cache.get("api_url") != api_url:
+                    # HU-5.1: cachés anteriores no guardaban el servidor;
+                    # sin él, el import no puede identificar al usuario solo.
+                    try:
+                        _save_cached_token(cache_dir, {**cache, "api_url": api_url})
+                    except OSError:
+                        pass
                 return {
                     "success": True,
                     "usuario_id": info.get("usuario_id"),
@@ -209,6 +268,7 @@ def device_login(
             _save_cached_token(cache_dir, {
                 "token": token,
                 "usuario_id": usuario_id,
+                "api_url": api_url,   # HU-5.1: para identificar al usuario en el próximo import
                 "guardado_en": datetime.utcnow().isoformat(),
             })
             print("[AuditTracer] Autenticación confirmada.")

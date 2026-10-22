@@ -13,13 +13,18 @@ Operaciones interceptadas:
   CONSULTA       → df[columna/s], df.query()
   ACCESO_FALLIDO → FileNotFoundError, PermissionError, OSError, IsADirectoryError
 
+HU-5.1: pd.read_csv()/pd.read_excel() devuelven un AuditedFrame (consulta +
+transformación) con el nombre del dataset ya asignado, así que no hace
+falta envolver nada a mano. Toda la lógica de auditoría corre dentro de
+guard(): si falla, la operación de pandas sigue y el error queda en el log
+de errores del sistema. Las excepciones propias del usuario (archivo
+inexistente, columna inexistente, ...) le llegan intactas.
+
 Normas: HIPAA §164.312(b) · Ley 1581/2012 · ISO/IEC 27001
 """
 
 import os
 import json
-import inspect
-import functools
 from datetime import datetime
 from typing import Optional
 
@@ -27,8 +32,10 @@ import pandas as pd
 
 from .db import get_connection
 from .models.audit_log import insert_event_and_enqueue_sync
-from .utils.session import detect_environment, get_hostname
+from .utils.contexto import build_contexto
+from .utils.error_log import guard, log_internal_error, in_audit_scope, audit_scope
 from .failed_access import log_failed_access, ACCESS_FAILURE_EXCEPTIONS   # HU-2.4
+from .transform_capture import AuditedTransformDataFrame                 # HU-2.2
 from .utils.horario import es_horario_laboral, HORA_INICIO_LABORAL, HORA_FIN_LABORAL  # HU-4.4
 
 
@@ -58,6 +65,8 @@ def _get_session() -> tuple[str, str]:
         tracker = SessionTracker.get_instance()
         usuario_id = tracker.usuario_id or "DESCONOCIDO"
         sesion_id = tracker.sesion_id
+        if usuario_id == "DESCONOCIDO":
+            tracker.remind_if_unidentified()
         return usuario_id, sesion_id
     except Exception:
         return "DESCONOCIDO", "SIN_SESION"
@@ -67,38 +76,22 @@ def _build_contexto() -> str:
     """
     Construye el campo contexto_ejecucion con script/notebook y entorno.
     """
-    env = detect_environment()
-    host = get_hostname()
-
-    # Intentar identificar el script o notebook que llamó la función
-    caller_file = "desconocido"
-    stack = inspect.stack()
-    for frame_info in stack:
-        filename = frame_info.filename
-        # Saltar frames internos de este módulo, pandas y stdlib
-        if (
-            filename != __file__
-            and "audit_tracer" not in filename
-            and "pandas" not in filename
-            and "<frozen" not in filename
-        ):
-            caller_file = os.path.basename(filename)
-            break
-
-    return f"Script: {caller_file} | Env: {env} | Host: {host}"
+    return build_contexto()
 
 
-def _resolve_dataset_nombre(filepath: Optional[str], default: str = "dataset_desconocido") -> str:
+def _resolve_dataset_nombre(filepath, default: str = "dataset_desconocido") -> str:
     """
-    Extrae el nombre del archivo desde una ruta.
+    Extrae el nombre del archivo desde una ruta (str o PathLike).
 
     Args:
-        filepath: Ruta al archivo (puede ser None).
+        filepath: Ruta al archivo (puede ser None o un buffer).
         default:  Valor por defecto si no se puede extraer.
 
     Returns:
         str: Nombre del archivo (e.g. 'PATIENTS.csv').
     """
+    if isinstance(filepath, os.PathLike):
+        filepath = os.fspath(filepath)
     if filepath and isinstance(filepath, str):
         return os.path.basename(filepath)
     return default
@@ -138,43 +131,101 @@ def _log_event(
         tipo_accion:        'CARGA' o 'CONSULTA'.
         dataset_nombre:     Nombre del dataset afectado.
         columnas_afectadas: Lista de columnas como JSON string (opcional).
+
+    HU-5.1 CA4: nunca lanza; cualquier fallo va al log de errores del sistema.
     """
-    usuario_id, sesion_id = _get_session()
-    ahora = datetime.utcnow()
-    nivel_alerta, motivo_alerta = _determine_alert(usuario_id, ahora)
-
-    event = {
-        "usuario_id": usuario_id,                       # CA1, CA3
-        "sesion_id": sesion_id,                          # CA5
-        "timestamp": ahora.isoformat(),                  # CA1
-        "tipo_accion": tipo_accion,                      # CA1
-        "dataset_nombre": dataset_nombre,                # CA1
-        "columnas_afectadas": columnas_afectadas,
-        "contexto_ejecucion": _build_contexto(),
-        "nivel_alerta": nivel_alerta,                    # CA3
-        "motivo_alerta": motivo_alerta,                  # CA3
-    }
-
     try:
+        usuario_id, sesion_id = _get_session()
+        ahora = datetime.utcnow()
+        nivel_alerta, motivo_alerta = _determine_alert(usuario_id, ahora)
+
+        event = {
+            "usuario_id": usuario_id,                       # CA1, CA3
+            "sesion_id": sesion_id,                          # CA5
+            "timestamp": ahora.isoformat(),                  # CA1
+            "tipo_accion": tipo_accion,                      # CA1
+            "dataset_nombre": dataset_nombre,                # CA1
+            "columnas_afectadas": columnas_afectadas,
+            "contexto_ejecucion": _build_contexto(),
+            "nivel_alerta": nivel_alerta,                    # CA3
+            "motivo_alerta": motivo_alerta,                  # CA3
+        }
+
         conn = get_connection()
         # CA4: persistencia inmediata. HU-5.8 CA1: se encola para
         # sincronización en la misma operación — el envío HTTP, si se
         # intenta, siempre sucede DESPUÉS de este insert, nunca antes.
-        resultado = insert_event_and_enqueue_sync(conn, event)
         try:
-            from .sync_client import try_sync_event
-            try_sync_event(conn, resultado["event_id"])  # best-effort, nunca lanza
-        except Exception:
-            pass
-        conn.close()
+            insert_event_and_enqueue_sync(conn, event)
+        finally:
+            conn.close()
+        # HU-5.1 CA4: el envío ocurre en el hilo de fondo, nunca aquí.
+        from .sync_client import schedule_sync
+        schedule_sync()
     except Exception as exc:
         # No interrumpir la operación del usuario si falla la auditoría
-        print(f"[AuditTracer] Advertencia: no se pudo registrar evento — {exc}")
+        log_internal_error(f"No se pudo registrar evento {tipo_accion}", exc)
 
 
 # ──────────────────────────────────────────────────────────────
 # INTERCEPTORES DE CARGA  (PDGTRAZDSA-50)
 # ──────────────────────────────────────────────────────────────
+
+def _registrar_carga(resultado, dataset_nombre: str):
+    """
+    Registra CARGA y devuelve el resultado envuelto en AuditedFrame
+    (HU-5.1). read_csv puede devolver un iterador (chunksize/iterator) y
+    read_excel un dict por hoja (sheet_name=None): se respetan tal cual.
+    """
+    if isinstance(resultado, pd.DataFrame):
+        _log_event(
+            tipo_accion="CARGA",
+            dataset_nombre=dataset_nombre,
+            columnas_afectadas=json.dumps([str(c) for c in resultado.columns]),
+        )
+        return wrap_audited(resultado, dataset_nombre)
+    if isinstance(resultado, dict):
+        envueltos = {}
+        for hoja, df in resultado.items():
+            nombre = f"{dataset_nombre}[{hoja}]"
+            _log_event(
+                tipo_accion="CARGA",
+                dataset_nombre=nombre,
+                columnas_afectadas=json.dumps([str(c) for c in df.columns]),
+            )
+            envueltos[hoja] = wrap_audited(df, nombre)
+        return envueltos
+    _log_event(tipo_accion="CARGA", dataset_nombre=dataset_nombre)
+    return resultado
+
+
+def _audited_read(original, fuente, default_nombre: str, args, kwargs):
+    """
+    Núcleo común de read_csv/read_excel auditados.
+
+    La llamada original va FUERA de guard(): sus excepciones son del
+    usuario y le llegan intactas (HU-5.1 CA4). Solo la auditoría va
+    dentro de guard().
+    """
+    if in_audit_scope():
+        return original(fuente, *args, **kwargs)
+
+    dataset_nombre = guard(
+        _resolve_dataset_nombre, fuente, default=default_nombre,
+        _default=default_nombre,
+    )
+    try:
+        with audit_scope():
+            resultado = original(fuente, *args, **kwargs)
+    except ACCESS_FAILURE_EXCEPTIONS as exc:
+        # HU-2.4 CA1: registrar fallo y relanzar la excepción
+        guard(log_failed_access, dataset_nombre=dataset_nombre, exc=exc,
+              _contexto="Registro de ACCESO_FALLIDO")
+        raise
+
+    return guard(_registrar_carga, resultado, dataset_nombre,
+                 _contexto="Registro de CARGA", _default=resultado)
+
 
 def _audited_read_csv(filepath_or_buffer=None, *args, **kwargs) -> pd.DataFrame:
     """
@@ -182,23 +233,7 @@ def _audited_read_csv(filepath_or_buffer=None, *args, **kwargs) -> pd.DataFrame:
     Registra tipo_accion = 'CARGA' en caso de éxito.
     Registra tipo_accion = 'ACCESO_FALLIDO' si ocurre un error de acceso (HU-2.4).
     """
-    dataset_nombre = _resolve_dataset_nombre(
-        filepath_or_buffer, default="buffer_csv"
-    )
-
-    try:
-        df = _original_read_csv(filepath_or_buffer, *args, **kwargs)
-    except ACCESS_FAILURE_EXCEPTIONS as exc:
-        # HU-2.4 CA1: registrar fallo y relanzar la excepción
-        log_failed_access(dataset_nombre=dataset_nombre, exc=exc)
-        raise
-
-    _log_event(
-        tipo_accion="CARGA",
-        dataset_nombre=dataset_nombre,
-        columnas_afectadas=json.dumps(list(df.columns)),
-    )
-    return df
+    return _audited_read(_original_read_csv, filepath_or_buffer, "buffer_csv", args, kwargs)
 
 
 def _audited_read_excel(io=None, *args, **kwargs) -> pd.DataFrame:
@@ -207,21 +242,7 @@ def _audited_read_excel(io=None, *args, **kwargs) -> pd.DataFrame:
     Registra tipo_accion = 'CARGA' en caso de éxito.
     Registra tipo_accion = 'ACCESO_FALLIDO' si ocurre un error de acceso (HU-2.4).
     """
-    dataset_nombre = _resolve_dataset_nombre(io, default="buffer_excel")
-
-    try:
-        df = _original_read_excel(io, *args, **kwargs)
-    except ACCESS_FAILURE_EXCEPTIONS as exc:
-        # HU-2.4 CA1: registrar fallo y relanzar la excepción
-        log_failed_access(dataset_nombre=dataset_nombre, exc=exc)
-        raise
-
-    _log_event(
-        tipo_accion="CARGA",
-        dataset_nombre=dataset_nombre,
-        columnas_afectadas=json.dumps(list(df.columns)),
-    )
-    return df
+    return _audited_read(_original_read_excel, io, "buffer_excel", args, kwargs)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -239,6 +260,10 @@ class AuditedDataFrame(pd.DataFrame):
     El nombre del dataset se almacena en el atributo `_dataset_nombre`.
     """
 
+    # HU-5.1: _metadata hace que pandas propague _dataset_nombre a los
+    # DataFrames derivados (copias, filtros, resultados de transformaciones).
+    _metadata = ["_dataset_nombre"]
+
     # Necesario para que pandas conserve la subclase al hacer operaciones
     @property
     def _constructor(self):
@@ -246,8 +271,14 @@ class AuditedDataFrame(pd.DataFrame):
 
     # ── df[key] ──────────────────────────────────────────────
     def __getitem__(self, key):
-        result = super().__getitem__(key)
+        if in_audit_scope():
+            return super().__getitem__(key)
+        with audit_scope():
+            result = super().__getitem__(key)
+        guard(self._registrar_getitem, key, _contexto="Registro de CONSULTA df[...]")
+        return result
 
+    def _registrar_getitem(self, key) -> None:
         dataset_nombre = getattr(self, "_dataset_nombre", "dataset_desconocido")
 
         # Determinar columnas accedidas
@@ -265,12 +296,16 @@ class AuditedDataFrame(pd.DataFrame):
                 columnas_afectadas=json.dumps(cols),
             )
 
-        return result
-
     # ── df.query() ────────────────────────────────────────────
     def query(self, expr, **kwargs):
-        result = super().query(expr, **kwargs)
+        if in_audit_scope():
+            return super().query(expr, **kwargs)
+        with audit_scope():
+            result = super().query(expr, **kwargs)
+        guard(self._registrar_query, expr, _contexto="Registro de CONSULTA df.query()")
+        return result
 
+    def _registrar_query(self, expr) -> None:
         dataset_nombre = getattr(self, "_dataset_nombre", "dataset_desconocido")
 
         # Intentar extraer columnas referenciadas en la expresión
@@ -282,7 +317,27 @@ class AuditedDataFrame(pd.DataFrame):
             columnas_afectadas=json.dumps(cols) if cols else expr,
         )
 
-        return result
+
+class AuditedFrame(AuditedDataFrame, AuditedTransformDataFrame):
+    """
+    HU-5.1 — DataFrame auditado completo: consultas (HU-2.1) y
+    transformaciones (HU-2.2) en el mismo objeto. Es lo que devuelven
+    pd.read_csv()/pd.read_excel() con audit_tracer importado, y se conserva
+    en los DataFrames derivados (copias, filtros, resultados de fillna, ...).
+    """
+
+    _metadata = ["_dataset_nombre"]
+
+    @property
+    def _constructor(self):
+        return AuditedFrame
+
+
+def wrap_audited(df: pd.DataFrame, dataset_nombre: str) -> AuditedFrame:
+    """Envuelve `df` en AuditedFrame con el nombre de dataset indicado."""
+    audited = AuditedFrame(df)
+    audited._dataset_nombre = dataset_nombre
+    return audited
 
 
 def _extract_columns_from_expr(expr: str, df_columns) -> list:
@@ -312,6 +367,10 @@ def wrap_dataframe(df: pd.DataFrame, dataset_nombre: str) -> AuditedDataFrame:
         from audit_tracer.data_capture import wrap_dataframe
         df = wrap_dataframe(df, "mi_dataset.csv")
 
+    HU-5.1: ya no hace falta para DataFrames cargados con read_csv/read_excel
+    (vienen auditados). Si `df` ya es un AuditedFrame, solo cambia el nombre
+    y conserva también la auditoría de transformaciones.
+
     Args:
         df:              DataFrame a envolver.
         dataset_nombre:  Nombre descriptivo del dataset.
@@ -319,6 +378,8 @@ def wrap_dataframe(df: pd.DataFrame, dataset_nombre: str) -> AuditedDataFrame:
     Returns:
         AuditedDataFrame listo para auditar consultas.
     """
+    if isinstance(df, AuditedFrame):
+        return wrap_audited(df, dataset_nombre)
     audited = AuditedDataFrame(df)
     audited._dataset_nombre = dataset_nombre
     return audited
@@ -328,21 +389,27 @@ def wrap_dataframe(df: pd.DataFrame, dataset_nombre: str) -> AuditedDataFrame:
 # ACTIVACIÓN / DESACTIVACIÓN DEL INTERCEPTOR
 # ──────────────────────────────────────────────────────────────
 
+def _unwrap(fn):
+    """Función original de pandas detrás de un parche de audit_tracer (o `fn`)."""
+    return getattr(fn, "_audit_tracer_original", fn)
+
+
 def activate() -> None:
     """
     Activa el interceptor: reemplaza pd.read_csv y pd.read_excel con
     versiones auditadas.
 
-    Idempotente: llamadas adicionales no tienen efecto.
+    Idempotente: llamadas adicionales no tienen efecto. HU-5.1: también
+    tras importlib.reload() / %autoreload — el original se recupera desde
+    la marca que deja cada parche, así nunca se parchea encima de un parche.
     """
     global _interceptor_active, _original_read_csv, _original_read_excel
 
-    if _interceptor_active:
-        return
-
     # Guardar referencias originales (PDGTRAZDSA-50)
-    _original_read_csv = pd.read_csv
-    _original_read_excel = pd.read_excel
+    _original_read_csv = _unwrap(pd.read_csv)
+    _original_read_excel = _unwrap(pd.read_excel)
+    _audited_read_csv._audit_tracer_original = _original_read_csv
+    _audited_read_excel._audit_tracer_original = _original_read_excel
 
     # Parchear las funciones globales de pandas
     pd.read_csv = _audited_read_csv
@@ -359,15 +426,39 @@ def deactivate() -> None:
     """
     Desactiva el interceptor y restaura las funciones originales de pandas.
     Útil principalmente en tests.
+
+    HU-5.1: desactivar queda registrado como evento CRITICO
+    AUDITORIA_DESACTIVADA — apagar la captura no puede pasar sin rastro.
     """
-    global _interceptor_active, _original_read_csv, _original_read_excel
+    global _interceptor_active
 
     if not _interceptor_active:
         return
 
-    if _original_read_csv is not None:
-        pd.read_csv = _original_read_csv
-    if _original_read_excel is not None:
-        pd.read_excel = _original_read_excel
+    pd.read_csv = _unwrap(pd.read_csv)
+    pd.read_excel = _unwrap(pd.read_excel)
+    pd.io.parsers.readers.read_csv = _unwrap(pd.io.parsers.readers.read_csv)
 
     _interceptor_active = False
+    log_deactivation("data_capture (read_csv, read_excel)", get_connection)
+
+
+def log_deactivation(interceptor: str, conn_factory) -> None:
+    """Registra AUDITORIA_DESACTIVADA (nivel CRITICO). Nunca lanza."""
+    try:
+        usuario_id, sesion_id = _get_session()
+        conn = conn_factory()
+        try:
+            insert_event_and_enqueue_sync(conn, {
+                "usuario_id": usuario_id,
+                "sesion_id": sesion_id,
+                "timestamp": datetime.utcnow().isoformat(),
+                "tipo_accion": "AUDITORIA_DESACTIVADA",
+                "contexto_ejecucion": _build_contexto(),
+                "nivel_alerta": "CRITICO",
+                "motivo_alerta": f"Se desactivó el interceptor {interceptor}",
+            })
+        finally:
+            conn.close()
+    except Exception as exc:
+        log_internal_error(f"No se pudo registrar AUDITORIA_DESACTIVADA ({interceptor})", exc)

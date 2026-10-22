@@ -14,7 +14,7 @@ se pueden DEDUCIR de campos almacenados — nunca inventadas:
   E1 (secuencia)   — Dentro de un mismo (sesion_id, dataset_nombre), cada
                      paso de linaje se conecta con el siguiente en orden de
                      timestamp. sesion_id vincula todos los eventos de una
-                     misma ejecución (ver schema/audit_log.sql); dos
+                     misma ejecución (ver audit_tracer/schema/audit_log.sql); dos
                      sesiones distintas son ejecuciones independientes y
                      NO se enlazan entre sí.
   E2 (exportado_a) — Un evento EXPORTACION se conecta con el archivo que

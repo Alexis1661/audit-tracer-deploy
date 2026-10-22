@@ -1,12 +1,22 @@
 import atexit
 import os
 import signal
+import sys
+import threading
 from datetime import datetime
 from typing import Dict, Optional
 from .db import get_connection
 from .auth.autenticacion import login as _auth_login, logout as _auth_logout
 from .models.audit_log import insert_event_and_enqueue_sync
+from .utils.error_log import guard, log_internal_error
 from .utils.session import generate_session_id, get_hostname, detect_environment
+
+_AVISO_SIN_USUARIO = (
+    "[AuditTracer] La auditoría está activa, pero no hay un usuario identificado: "
+    "los eventos se registran como DESCONOCIDO (nivel CRITICO). "
+    "Ejecuta audit_tracer.login(api_url=...) para identificarte."
+)
+
 
 class SessionTracker:
     _instance = None
@@ -20,10 +30,26 @@ class SessionTracker:
         self.usuario_id = 'DESCONOCIDO'
         self.conn = None
         self._active = False
-        
+        self._recordado = False
+
         # Manejo de señales para cierre abrupto
-        signal.signal(signal.SIGINT, self._handle_signal)
-        signal.signal(signal.SIGTERM, self._handle_signal)
+        self._install_signal_handlers()
+
+    def _install_signal_handlers(self):
+        """
+        HU-5.1 CA2: signal.signal() solo puede llamarse desde el hilo
+        principal (si no, ValueError y el import fallaría). En un kernel de
+        notebook, SIGINT es "Interrumpir kernel": detiene la celda, no
+        termina la sesión, así que ahí no se intercepta.
+        """
+        if threading.current_thread() is not threading.main_thread():
+            return
+        try:
+            if 'ipykernel' not in sys.modules:
+                signal.signal(signal.SIGINT, self._handle_signal)
+            signal.signal(signal.SIGTERM, self._handle_signal)
+        except (ValueError, OSError) as exc:
+            log_internal_error("No se pudieron instalar los manejadores de señales", exc)
 
     def _handle_signal(self, signum, frame):
         """Manejador de señales del sistema."""
@@ -45,7 +71,7 @@ class SessionTracker:
         try:
             self.conn = get_connection()
             # HU-5.8 CA1: persistencia local + encolado antes de cualquier envío.
-            resultado = insert_event_and_enqueue_sync(self.conn, {
+            insert_event_and_enqueue_sync(self.conn, {
                 'usuario_id': self.usuario_id,
                 'sesion_id': self.sesion_id,
                 'timestamp': self.start_time.isoformat(),
@@ -53,18 +79,97 @@ class SessionTracker:
                 'contexto_ejecucion': f"MODO_LIBRERIA | Env: {detect_environment()} | Host: {get_hostname()}",
                 'nivel_alerta': 'NORMAL'
             })
-            try:
-                from .sync_client import try_sync_event
-                try_sync_event(self.conn, resultado['event_id'])  # best-effort, nunca lanza
-            except Exception:
-                pass
+            _schedule_sync()
             self._active = True
             # Registrar el cierre automático para terminación normal
             atexit.register(self.end_session)
         except Exception as e:
-            # En modo librería no bloqueamos la ejecución si falla la auditoría, 
-            # pero notificamos por consola
-            print(f"Audit Tracer Error: No se pudo iniciar la sesión de auditoría: {e}")
+            # En modo librería no bloqueamos la ejecución si falla la auditoría
+            # (HU-5.1 CA4: el detalle va al log de errores del sistema).
+            log_internal_error("No se pudo iniciar la sesión de auditoría", e)
+
+    def remind_if_unidentified(self) -> None:
+        """
+        HU-5.1 — Recordatorio (una sola vez por sesión) en el primer evento
+        de datos capturado sin usuario identificado. Solo en notebooks: ahí
+        el aviso del import queda en otra celda; en un .py ya se vio.
+        """
+        if self._recordado or self.usuario_id != 'DESCONOCIDO':
+            return
+        self._recordado = True
+        if detect_environment() != 'Script (.py)':
+            _avisar(_AVISO_SIN_USUARIO)
+
+    def identify_from_cache(self) -> bool:
+        """
+        HU-5.1 — Si hay un token cacheado por un login() anterior (HU-5.7),
+        identifica al usuario sin pedir nada y sin tocar la red: solo lee
+        el caché en disco. El token se valida en segundo plano; si el
+        servidor lo rechaza, se vuelve a DESCONOCIDO y se avisa.
+        """
+        from .device_login import load_cached_identity
+        identidad = load_cached_identity()
+        if identidad is None:
+            return False
+
+        self.usuario_id = identidad['usuario_id']
+        from . import sync_client
+        sync_client.configure_sync(identidad['api_url'], identidad['token'])
+        threading.Thread(
+            target=self._validar_identidad_cacheada,
+            args=(identidad['api_url'], identidad['token']),
+            name="audit_tracer-validar-token", daemon=True,
+        ).start()
+        return True
+
+    def _validar_identidad_cacheada(self, api_url: str, token: str) -> None:
+        try:
+            from .device_login import token_status, clear_cached_token
+            if token_status(api_url, token) != 'INVALIDO':
+                return  # válido, o sin conexión: se valida de nuevo al sincronizar
+            from . import sync_client
+            sync_client.unconfigure_sync()
+            clear_cached_token()
+            self.usuario_id = 'DESCONOCIDO'
+            self._recordado = False
+            _avisar(
+                "[AuditTracer] El token guardado ya no es válido (expiró o fue revocado). "
+                "Los eventos siguientes se registran como DESCONOCIDO. "
+                "Ejecuta audit_tracer.login(api_url=...) de nuevo."
+            )
+        except Exception as exc:
+            log_internal_error("Validación en segundo plano del token cacheado", exc)
+
+    def _registrar_atribucion(self) -> None:
+        """
+        HU-5.1 — audit_log es inmutable y usuario_id forma parte del hash:
+        los eventos registrados como DESCONOCIDO antes del login no se
+        pueden reescribir. En su lugar se agrega un evento ATRIBUCION_SESION
+        que liga este sesion_id con el usuario recién identificado.
+        """
+        conn = get_connection()
+        try:
+            previos = conn.execute(
+                "SELECT COUNT(*) FROM audit_log WHERE sesion_id = ? AND usuario_id = 'DESCONOCIDO'",
+                (self.sesion_id,),
+            ).fetchone()[0]
+            if not previos:
+                return
+            insert_event_and_enqueue_sync(conn, {
+                'usuario_id': self.usuario_id,
+                'sesion_id': self.sesion_id,
+                'timestamp': datetime.utcnow().isoformat(),
+                'tipo_accion': 'ATRIBUCION_SESION',
+                'contexto_ejecucion': (
+                    f"{previos} evento(s) previos de esta sesión quedaron como DESCONOCIDO "
+                    f"y se atribuyen a {self.usuario_id} tras login()"
+                ),
+                'nivel_alerta': 'ADVERTENCIA',
+                'motivo_alerta': f"Identificación tardía: {previos} evento(s) sin usuario en la sesión",
+            })
+        finally:
+            conn.close()
+        _schedule_sync()
 
     def login(
         self,
@@ -89,6 +194,9 @@ class SessionTracker:
         correctamente atribuidos. En fallo, self.usuario_id no se modifica
         (permanece DESCONOCIDO si no había login previo).
 
+        HU-5.1: si la sesión ya tenía eventos como DESCONOCIDO, se registra
+        un evento ATRIBUCION_SESION que los liga al usuario identificado.
+
         Args:
             email: Email del usuario (camino HU-2.5).
             password: Contraseña del usuario (camino HU-2.5).
@@ -99,6 +207,8 @@ class SessionTracker:
         Returns:
             Dict: resultado de autenticación (success, message, ...).
         """
+        anterior = self.usuario_id
+
         if email and password:
             conn = self.conn or get_connection()
             try:
@@ -109,6 +219,8 @@ class SessionTracker:
 
             if result.get('success'):
                 self.usuario_id = result['usuario_id']
+                if anterior == 'DESCONOCIDO':
+                    guard(self._registrar_atribucion, _contexto="Registro de ATRIBUCION_SESION")
 
             return result
 
@@ -131,8 +243,11 @@ class SessionTracker:
             try:
                 from .sync_client import configure_sync
                 configure_sync(resolved_api_url, resultado['token'])
-            except Exception:
-                pass  # la identidad local ya quedó establecida aunque falle configurar el sync
+            except Exception as exc:
+                # la identidad local ya quedó establecida aunque falle configurar el sync
+                log_internal_error("No se pudo configurar la sincronización tras login()", exc)
+            if anterior == 'DESCONOCIDO':
+                guard(self._registrar_atribucion, _contexto="Registro de ATRIBUCION_SESION")
 
         return resultado
 
@@ -164,7 +279,7 @@ class SessionTracker:
             now = datetime.utcnow()
             duration = int((now - self.start_time).total_seconds())
 
-            resultado = insert_event_and_enqueue_sync(self.conn, {
+            insert_event_and_enqueue_sync(self.conn, {
                 'usuario_id': self.usuario_id,
                 'sesion_id': self.sesion_id,
                 'timestamp': now.isoformat(),
@@ -172,20 +287,51 @@ class SessionTracker:
                 'contexto_ejecucion': f"Duración: {duration}s",
                 'nivel_alerta': 'NORMAL' if not abrupt else 'ADVERTENCIA'
             })
-            try:
-                from .sync_client import try_sync_event
-                try_sync_event(self.conn, resultado['event_id'])  # best-effort, nunca lanza
-            except Exception:
-                pass
             self.conn.close()
             self._active = False
-        except:
-            pass
+        except Exception as exc:
+            log_internal_error("No se pudo registrar el cierre de sesión", exc)
+
+        # HU-5.1 CA4: último intento de sincronizar (incluido el cierre),
+        # acotado en tiempo; lo que no alcance se envía en la próxima sesión.
+        try:
+            from .sync_client import flush_pending
+            flush_pending()
+        except Exception as exc:
+            log_internal_error("Sincronización final al cerrar la sesión", exc)
+
+
+def _schedule_sync() -> None:
+    try:
+        from .sync_client import schedule_sync
+        schedule_sync()
+    except Exception as exc:
+        log_internal_error("No se pudo programar la sincronización", exc)
+
+
+def _avisar(mensaje: str) -> None:
+    try:
+        sys.stderr.write(mensaje + "\n")
+    except Exception:
+        pass
+
 
 def init_tracker():
-    """Inicializa el tracker global."""
+    """
+    Inicializa el tracker global.
+
+    HU-5.1: antes de registrar INICIO_SESION intenta identificar al usuario
+    con el token cacheado (sin red). Si no hay token, la captura sigue igual
+    (DESCONOCIDO) y se muestra un aviso para ejecutar audit_tracer.login().
+    """
     tracker = SessionTracker.get_instance()
+    if not tracker._active:
+        guard(tracker.identify_from_cache, _contexto="Identificación desde el token cacheado")
     tracker.start_session()
+    if tracker.usuario_id == 'DESCONOCIDO':
+        # Aviso al importar; remind_if_unidentified() lo repite una sola vez
+        # en el primer evento de datos, que en un notebook suele ser otra celda.
+        _avisar(_AVISO_SIN_USUARIO)
 
 
 def login(

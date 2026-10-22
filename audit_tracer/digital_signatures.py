@@ -101,19 +101,35 @@ def load_public_key(dir_path: str) -> Optional[ed25519.Ed25519PublicKey]:
         pem = f.read()
     return serialization.load_pem_public_key(pem)
 
-def get_or_create_user_keypair(dir_path: str = ".audit_keys") -> Tuple[ed25519.Ed25519PrivateKey, ed25519.Ed25519PublicKey]:
+_keypair_cache: Dict[str, Tuple[ed25519.Ed25519PrivateKey, ed25519.Ed25519PublicKey]] = {}
+
+
+def get_or_create_user_keypair(dir_path: str = None) -> Tuple[ed25519.Ed25519PrivateKey, ed25519.Ed25519PublicKey]:
     """
     Obtiene el par de llaves del usuario desde el directorio local.
     Si no existe, genera uno nuevo y lo guarda (PDGTRAZDSA-140).
+
+    HU-5.1: por defecto en `~/.audit_tracer/keys` (no en el directorio de
+    trabajo, para que el par no cambie al cambiar de carpeta) y cacheado en
+    memoria, porque se usa para firmar cada evento capturado.
     """
+    if dir_path is None:
+        from audit_tracer.utils.paths import keys_dir
+        dir_path = keys_dir()
+    cache_key = os.path.abspath(str(dir_path))
+    cached = _keypair_cache.get(cache_key)
+    if cached is not None and os.path.exists(os.path.join(cache_key, "private_key.pem")):
+        return cached
+
     private_key = load_private_key(dir_path)
     public_key = load_public_key(dir_path)
-    
+
     if private_key is None or public_key is None:
         private_key, public_key = generate_keypair()
         save_private_key(private_key, dir_path)
         save_public_key(public_key, dir_path)
-        
+
+    _keypair_cache[cache_key] = (private_key, public_key)
     return private_key, public_key
 
 def public_key_to_pem(public_key: ed25519.Ed25519PublicKey) -> str:

@@ -14,6 +14,7 @@ import os
 import sqlite3
 import pytest
 
+from audit_tracer.db import SCHEMA_DIR
 from audit_tracer.session_tracker import SessionTracker
 from audit_tracer.auth.registro import register_user
 from audit_tracer.models.audit_log import get_events
@@ -27,7 +28,7 @@ def tracker_env(monkeypatch, tmp_path):
     db_file = str(tmp_path / "audit_trail.db")
 
     def _mock_get_conn():
-        schema_dir = "schema"
+        schema_dir = SCHEMA_DIR
         db_exists = os.path.exists(db_file)
         conn = sqlite3.connect(db_file, check_same_thread=False)
         if not db_exists:
