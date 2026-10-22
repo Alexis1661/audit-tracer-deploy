@@ -44,6 +44,15 @@ from audit_tracer.models.audit_log import (
     get_sync_queue_summary,    # HU-5.8
 )
 from audit_tracer.digital_signatures import verify_event_signature  # HU-6.1
+from audit_tracer.merkle import (                                    # HU-6.2
+    generate_proof_for_event,
+    verify_merkle_proof,
+    build_batch_tree,
+    publish_batch_root,
+    verify_external_anchor,
+    verify_all_anchors,
+    get_pending_batch_hours,
+)
 from audit_tracer.event_explainer import enrich_event_detail  # HU-7.4
 from audit_tracer.auth.control_acceso import has_permission  # HU-1.4
 from audit_tracer.lineage import build_lineage_graph, list_lineage_datasets  # HU-7.1
@@ -1271,6 +1280,175 @@ def verificar_integridad():
     return redirect(url_for('eventos'))
 
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HU-6.2 — Merkle tree y ancla externa de integridad
+# PDGTRAZDSA-146 / 147 / 148 / 149 / 150
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/merkle/verificar/<int:event_id>')
+@login_required
+@modulo_required('consulta_reportes')
+def merkle_verificar_evento(event_id):
+    """
+    PDGTRAZDSA-147 / 150 — Genera la prueba de Merkle para un evento puntual
+    y la verifica inmediatamente, sin recorrer todo el historial.
+
+    Usado por el botón «Verificar integridad Merkle» en detalle_evento.html.
+    """
+    conn = get_db()
+    evento = get_event_by_id(conn, event_id)
+    if not evento:
+        conn.close()
+        return jsonify({'error': f'Evento #{event_id} no encontrado.'}), 404
+
+    proof = generate_proof_for_event(conn, event_id)
+    conn.close()
+
+    if proof is None:
+        return jsonify({
+            'event_id': event_id,
+            'integrity_ok': False,
+            'details': 'No se pudo generar la prueba de Merkle (el evento puede no tener hash_integridad).',
+        }), 422
+
+    integrity_ok = verify_merkle_proof(proof)
+    return jsonify({
+        'event_id': event_id,
+        'evento_uuid': proof.get('evento_uuid'),
+        'timestamp': proof.get('timestamp'),
+        'batch_hour': proof.get('batch_hour'),
+        'leaf_hash': proof.get('leaf_hash'),
+        'merkle_root': proof.get('root'),
+        'proof_steps': len(proof.get('proof', [])),
+        'integrity_ok': integrity_ok,
+        'details': (
+            'Prueba de Merkle válida: el evento forma parte íntegra del lote.'
+            if integrity_ok else
+            'Prueba de Merkle INVÁLIDA: el evento o algún registro del lote puede haber sido alterado.'
+        ),
+        'proof': proof.get('proof', []),
+    })
+
+
+@app.route('/merkle/lote/<batch_hour>')
+@login_required
+@modulo_required('consulta_reportes')
+def merkle_lote(batch_hour):
+    """
+    PDGTRAZDSA-146 — Devuelve la raíz del árbol de Merkle para el lote horario
+    indicado (formato YYYY-MM-DDTHH), junto con el número de hojas.
+    No expone todos los hashes por razones de tamaño.
+    """
+    conn = get_db()
+    try:
+        tree = build_batch_tree(conn, batch_hour)
+    except Exception as exc:
+        conn.close()
+        return jsonify({'error': str(exc)}), 400
+    conn.close()
+
+    return jsonify({
+        'batch_hour': batch_hour,
+        'root': tree['root'],
+        'leaf_count': tree['leaf_count'],
+    })
+
+
+@app.route('/merkle/publicar', methods=['POST'])
+@login_required
+def merkle_publicar():
+    """
+    PDGTRAZDSA-148 — Publica manualmente el anclaje externo para un lote
+    horario. Body JSON: {"batch_hour": "YYYY-MM-DDTHH"}.
+    Si no se provee batch_hour, publica todos los lotes pendientes.
+    Solo accesible por ADMIN o AUDITOR.
+    """
+    rol = session.get('rol', '')
+    if rol not in ('ADMIN', 'AUDITOR'):
+        return jsonify({'error': 'Acceso denegado. Se requiere rol ADMIN o AUDITOR.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    batch_hour = data.get('batch_hour')
+
+    conn = get_db()
+    try:
+        if batch_hour:
+            anchor = publish_batch_root(conn, batch_hour)
+            results = [anchor]
+        else:
+            from audit_tracer.merkle import publish_all_pending
+            results = publish_all_pending(conn)
+    except Exception as exc:
+        conn.close()
+        return jsonify({'error': str(exc)}), 500
+    conn.close()
+
+    return jsonify({
+        'published': len(results),
+        'anchors': [
+            {
+                'batch_hour': a.get('batch_hour'),
+                'root': a.get('root'),
+                'leaf_count': a.get('leaf_count'),
+                'published_at': a.get('published_at'),
+                'file_path': a.get('_file_path'),
+                'signed': bool(a.get('signature')),
+            }
+            for a in results
+        ],
+    })
+
+
+@app.route('/merkle/verificar-ancla', methods=['GET', 'POST'])
+@login_required
+@modulo_required('consulta_reportes')
+def merkle_verificar_ancla():
+    """
+    PDGTRAZDSA-149 / 150 — Verifica la raíz publicada en el anclaje externo
+    contra la raíz recalculada desde la base de datos.
+
+    GET  → pantalla de verificación de anclas.
+    POST → verifica el lote batch_hour recibido en el formulario y muestra resultado.
+    """
+    conn = get_db()
+
+    if request.method == 'POST':
+        batch_hour = request.form.get('batch_hour', '').strip()
+        if not batch_hour:
+            flash('Debes indicar el lote horario a verificar.', 'warning')
+            conn.close()
+            return redirect(url_for('merkle_verificar_ancla'))
+
+        resultado = verify_external_anchor(conn, batch_hour)
+        pendientes = get_pending_batch_hours(conn)
+        conn.close()
+
+        return render_template(
+            'dashboard/merkle_integridad.html',
+            nombre=session.get('nombre', 'Usuario'),
+            rol=session.get('rol', 'N/A'),
+            resultado=resultado,
+            pendientes=pendientes,
+            batch_hour_verificado=batch_hour,
+        )
+
+    # GET — mostrar todos los anclajes disponibles
+    todos = verify_all_anchors(conn)
+    pendientes = get_pending_batch_hours(conn)
+    conn.close()
+
+    return render_template(
+        'dashboard/merkle_integridad.html',
+        nombre=session.get('nombre', 'Usuario'),
+        rol=session.get('rol', 'N/A'),
+        resultado=None,
+        pendientes=pendientes,
+        todos_anchors=todos,
+        batch_hour_verificado=None,
+    )
+
+
 @app.route('/logout')
 def logout():
     """Cierra la sesión y registra el evento en auditoría."""
@@ -1329,6 +1507,12 @@ def _seed_demo_data_if_requested():
 
 if __name__ == '__main__':
     _seed_demo_data_if_requested()
+    if os.environ.get('START_MERKLE_SCHEDULER', '1') == '1':
+        try:
+            from audit_tracer.merkle_scheduler import start_scheduler
+            start_scheduler(interval_hours=1)
+        except Exception as e:
+            print(f"[AuditTracer] Info Merkle Scheduler: {e}")
     port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_DEBUG', '1') == '1'
     app.run(debug=debug_mode, host='0.0.0.0', port=port)

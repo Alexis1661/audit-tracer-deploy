@@ -1,0 +1,427 @@
+{% extends "base.html" %}
+
+{% block title %}Integridad Merkle — Audit Tracer{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+    /* ── Layout general ───────────────────────────────────────── */
+    .merkle-hero {
+        background: linear-gradient(135deg, #0F172A 0%, #1E3A5F 60%, #0F4C75 100%);
+        border-radius: 20px;
+        padding: 32px 36px;
+        margin-bottom: 28px;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .merkle-hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Ccircle cx='30' cy='30' r='4'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        pointer-events: none;
+    }
+    .merkle-hero h1 { font-size: 24px; font-weight: 800; margin: 0 0 8px; }
+    .merkle-hero p  { font-size: 14px; opacity: .8; margin: 0; max-width: 650px; line-height: 1.5; }
+    .merkle-icon { font-size: 40px; margin-bottom: 12px; display: inline-block; }
+
+    /* ── Tarjetas de resultado ────────────────────────────────── */
+    .result-card {
+        border-radius: 16px;
+        border: 1px solid var(--clr-border);
+        padding: 24px 28px;
+        margin-bottom: 24px;
+        background: white;
+        box-shadow: var(--shadow-sm);
+    }
+    .result-card.ok   { border-left: 5px solid #10B981; }
+    .result-card.fail { border-left: 5px solid #EF4444; }
+    .result-card.warn { border-left: 5px solid #F59E0B; }
+
+    .status-badge {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 6px 14px; border-radius: 50px;
+        font-size: 12px; font-weight: 700; letter-spacing: .3px;
+    }
+    .status-ok   { background: #D1FAE5; color: #065F46; }
+    .status-fail { background: #FEE2E2; color: #991B1B; }
+    .status-warn { background: #FEF3C7; color: #92400E; }
+    .status-none { background: #F3F4F6; color: #6B7280; }
+
+    /* ── Formulario de verificación ──────────────────────────── */
+    .verify-form-card {
+        background: white;
+        border-radius: 16px;
+        border: 1px solid var(--clr-border);
+        padding: 24px 28px;
+        margin-bottom: 24px;
+        box-shadow: var(--shadow-sm);
+    }
+    .verify-form-card h2 {
+        font-size: 16px; font-weight: 700; color: var(--clr-text-main);
+        margin: 0 0 16px;
+    }
+    .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 220px; }
+    .form-group label { font-size: 11px; font-weight: 700; text-transform: uppercase;
+                        letter-spacing: .5px; color: var(--clr-text-muted); }
+    .form-group input {
+        padding: 10px 14px; border-radius: 10px;
+        border: 1.5px solid var(--clr-border);
+        font-size: 14px; font-family: 'SF Mono', monospace;
+        transition: border-color .2s;
+    }
+    .form-group input:focus { outline: none; border-color: #3B82F6; }
+    .btn-verify {
+        padding: 10px 22px; background: #1D4ED8; color: white;
+        border: none; border-radius: 10px; font-size: 13px; font-weight: 600;
+        cursor: pointer; transition: background .2s, transform .1s; white-space: nowrap;
+    }
+    .btn-verify:hover { background: #1E40AF; transform: translateY(-1px); }
+
+    /* ── Tabla de anclas ──────────────────────────────────────── */
+    .anchors-table { width: 100%; border-collapse: collapse; }
+    .anchors-table th {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .5px; color: var(--clr-text-muted);
+        padding: 10px 14px; border-bottom: 2px solid var(--clr-border);
+        text-align: left;
+    }
+    .anchors-table td {
+        padding: 12px 14px; border-bottom: 1px solid #F3F4F6;
+        font-size: 13px; vertical-align: middle;
+    }
+    .anchors-table tr:last-child td { border-bottom: none; }
+    .anchors-table tr:hover td { background: #F9FAFB; }
+    .hash-mono {
+        font-family: 'SF Mono', 'Fira Code', monospace;
+        font-size: 12px; color: #374151; background: #F5F5F7;
+        padding: 3px 8px; border-radius: 5px;
+    }
+
+    /* ── Grid y campos ────────────────────────────────────────── */
+    .detail-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .detail-item { display: flex; flex-direction: column; gap: 4px; }
+    .detail-label {
+        font-size: 11px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: .5px; color: var(--clr-text-muted);
+    }
+    .detail-value { font-size: 13px; font-weight: 600; color: var(--clr-text-main); word-break: break-all; }
+
+    /* ── Pendientes ───────────────────────────────────────────── */
+    .pending-chip {
+        display: inline-block; padding: 4px 10px; border-radius: 50px;
+        background: #FEF3C7; color: #92400E; font-size: 12px; font-weight: 600;
+        margin: 3px;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────── */
+    .empty-state { text-align: center; padding: 50px 20px; color: var(--clr-text-muted); }
+    .empty-state-icon { font-size: 44px; margin-bottom: 12px; display: block; }
+    .empty-state p { font-size: 14px; margin: 0; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-layout">
+
+    {# ── SIDEBAR ── #}
+    <aside class="sidebar">
+        <a href="{{ url_for('landing') }}" class="sidebar__brand">
+            <div class="sidebar__brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            </div>
+            Audit Tracer
+        </a>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Principal</div>
+            <a href="{{ url_for('dashboard') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                Dashboard
+            </a>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Auditoría</div>
+            <a href="{{ url_for('eventos') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                Eventos
+            </a>
+            <a href="{{ url_for('reportes') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                Reportes
+            </a>
+            <a href="{{ url_for('linaje') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="12" r="3"></circle><path d="M9 6h3a3 3 0 0 1 3 3v0M9 18h3a3 3 0 0 0 3-3v0"></path></svg>
+                Linaje
+            </a>
+            <a href="{{ url_for('merkle_verificar_ancla') }}" class="nav-item active">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+                Integridad Merkle
+            </a>
+        </div>
+
+        {% if session.get('rol') == 'ADMIN' %}
+        <div class="nav-section">
+            <div class="nav-section__title">Administración</div>
+            <a href="{{ url_for('lista_usuarios') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+                Usuarios
+            </a>
+            <a href="{{ url_for('lista_tokens') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                Tokens
+            </a>
+            <a href="{{ url_for('admin_sincronizacion') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                Sincronización
+            </a>
+        </div>
+        {% endif %}
+
+        <div class="sidebar__footer">
+            <div class="user-profile">
+                <div class="user-avatar">{{ session.get('nombre', 'U')[0] | upper }}</div>
+                <div style="flex: 1;">
+                    <div style="font-size: 13px; font-weight: 700;">{{ session.get('nombre', 'Usuario') }}</div>
+                    <div style="font-size: 11px; color: var(--clr-text-muted);">{{ session.get('rol', 'Personal') }}</div>
+                </div>
+            </div>
+            <a href="{{ url_for('logout') }}" class="logout-link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                Cerrar sesión
+            </a>
+        </div>
+    </aside>
+
+    {# ── MAIN CONTENT ── #}
+    <main class="main-content">
+
+        <!-- Hero ──────────────────────────────────────────────────── -->
+        <div class="merkle-hero">
+            <span class="merkle-icon">🌳</span>
+            <h1>Integridad Merkle — Ancla Externa</h1>
+            <p>
+                Verifica que los eventos de auditoría no han sido alterados, incluso por alguien con
+                acceso administrativo. Cada lote horario tiene una raíz criptográfica publicada
+                fuera del sistema (HU-6.2).
+            </p>
+        </div>
+
+        <!-- Formulario de verificación de ancla ───────────────────── -->
+        <div class="verify-form-card">
+            <h2>🔍 Verificar ancla de un lote horario</h2>
+            <form method="POST" action="{{ url_for('merkle_verificar_ancla') }}" class="form-row">
+                <div class="form-group">
+                    <label for="batch_hour">Lote horario</label>
+                    <input
+                        type="text"
+                        id="batch_hour"
+                        name="batch_hour"
+                        placeholder="Ej: 2026-10-22T14"
+                        value="{{ batch_hour_verificado or '' }}"
+                        pattern="\d{4}-\d{2}-\d{2}T\d{2}"
+                        title="Formato: YYYY-MM-DDTHH"
+                        required
+                    >
+                </div>
+                <button type="submit" class="btn-verify">Verificar ancla →</button>
+            </form>
+            <p style="font-size:12px;color:var(--clr-text-muted);margin-top:10px;margin-bottom:0;">
+                Formato <code>YYYY-MM-DDTHH</code> — por ejemplo <code>2026-10-22T14</code> para la hora 14:00 del 22 de octubre de 2026.
+            </p>
+        </div>
+
+        <!-- Resultado de verificación ─────────────────────────────── -->
+        {% if resultado %}
+        {% set ok = resultado.integrity_ok %}
+        {% set card_cls = 'ok' if ok else 'fail' %}
+        {% set badge_cls = 'status-ok' if ok else 'status-fail' %}
+        {% set icon = '✅' if ok else '🚨' %}
+
+        <div class="result-card {{ card_cls }}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+                <div>
+                    <div style="font-size:20px;font-weight:800;margin-bottom:6px;">
+                        {{ icon }} Lote <code>{{ resultado.batch_hour }}</code>
+                    </div>
+                    <span class="status-badge {{ badge_cls }}">
+                        {% if ok %}ÍNTEGRO{% else %}ALTERACIÓN DETECTADA{% endif %}
+                    </span>
+                </div>
+                {% if resultado.published_at %}
+                <div style="text-align:right;font-size:12px;color:var(--clr-text-muted);">
+                    Ancla publicada el<br>
+                    <strong>{{ resultado.published_at[:19] | replace('T', ' ') }}</strong>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Mensaje descriptivo -->
+            <div style="font-size:14px;padding:14px 16px;border-radius:10px;margin-bottom:20px;
+                background:{{ '#D1FAE5' if ok else '#FEE2E2' }};
+                color:{{ '#065F46' if ok else '#991B1B' }};">
+                {{ resultado.details }}
+            </div>
+
+            <!-- Grid de detalles técnicos -->
+            <div class="detail-grid-2">
+                <div class="detail-item">
+                    <div class="detail-label">Raíz publicada (ancla)</div>
+                    <div class="detail-value hash-mono">
+                        {{ resultado.published_root or '(sin ancla publicada)' }}
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Raíz recalculada (BD actual)</div>
+                    <div class="detail-value hash-mono">{{ resultado.recalculated_root }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Eventos en ancla</div>
+                    <div class="detail-value">
+                        {{ resultado.published_leaf_count if resultado.published_leaf_count is not none else '—' }}
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Eventos en BD actual</div>
+                    <div class="detail-value">{{ resultado.current_leaf_count }}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Firma del anclaje</div>
+                    <div class="detail-value">
+                        {% if resultado.signature_valid is none %}
+                            <span class="status-badge status-none">Sin firma</span>
+                        {% elif resultado.signature_valid %}
+                            <span class="status-badge status-ok">✓ Firma válida</span>
+                        {% else %}
+                            <span class="status-badge status-fail">✗ Firma inválida</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Ancla existe en canal externo</div>
+                    <div class="detail-value">
+                        {% if resultado.anchor_exists %}
+                            <span class="status-badge status-ok">✓ Sí</span>
+                        {% else %}
+                            <span class="status-badge status-warn">⚠ No publicada</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Lotes pendientes de publicar ──────────────────────────── -->
+        {% if pendientes %}
+        <div class="result-card warn">
+            <div style="font-size:15px;font-weight:700;margin-bottom:12px;">
+                ⚠️ Lotes sin ancla publicada ({{ pendientes | length }})
+            </div>
+            <p style="font-size:13px;color:var(--clr-text-muted);margin-bottom:14px;">
+                Estos lotes tienen eventos en la base de datos pero todavía no cuentan con
+                un archivo de anclaje externo. Un administrador o auditor puede publicarlos
+                desde la API <code>POST /merkle/publicar</code>.
+            </p>
+            {% for h in pendientes %}
+            <span class="pending-chip">{{ h }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Tabla de todos los anclajes verificados ───────────────── -->
+        {% if todos_anchors is defined and todos_anchors %}
+        <div class="result-card" style="padding:24px 28px;">
+            <div style="font-size:16px;font-weight:700;margin-bottom:20px;">📋 Historial de anclajes verificados</div>
+            <div style="overflow-x:auto;">
+            <table class="anchors-table">
+                <thead>
+                    <tr>
+                        <th>Lote horario</th>
+                        <th>Raíz publicada</th>
+                        <th>Hojas publicadas / BD</th>
+                        <th>Integridad</th>
+                        <th>Firma</th>
+                        <th>Publicado</th>
+                        <th>Verificar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for a in todos_anchors %}
+                <tr>
+                    <td><code>{{ a.batch_hour }}</code></td>
+                    <td>
+                        {% if a.published_root %}
+                        <span class="hash-mono">{{ a.published_root[:12] }}…</span>
+                        {% else %}<em style="color:var(--clr-text-muted);">—</em>{% endif %}
+                    </td>
+                    <td>
+                        {% if a.published_leaf_count is not none %}
+                            {{ a.published_leaf_count }} / {{ a.current_leaf_count }}
+                            {% if not a.leaf_count_match %}
+                            <span class="status-badge status-fail" style="margin-left:4px;">≠</span>
+                            {% endif %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if a.integrity_ok %}
+                        <span class="status-badge status-ok">✓ OK</span>
+                        {% else %}
+                        <span class="status-badge status-fail">✗ FALLO</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if a.signature_valid is none %}
+                        <span class="status-badge status-none">Sin firma</span>
+                        {% elif a.signature_valid %}
+                        <span class="status-badge status-ok">✓ Válida</span>
+                        {% else %}
+                        <span class="status-badge status-fail">✗ Inválida</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:12px;color:var(--clr-text-muted);">
+                        {{ a.published_at[:16] | replace('T', ' ') if a.published_at else '—' }}
+                    </td>
+                    <td>
+                        <form method="POST" action="{{ url_for('merkle_verificar_ancla') }}" style="display:inline;">
+                            <input type="hidden" name="batch_hour" value="{{ a.batch_hour }}">
+                            <button type="submit" class="btn-verify" style="padding:6px 14px;font-size:12px;">
+                                Verificar
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+        {% elif todos_anchors is defined %}
+        <div class="empty-state">
+            <span class="empty-state-icon">🌿</span>
+            <p>No hay anclajes externos publicados aún.</p>
+            <p style="font-size:13px;margin-top:6px;">
+                Usa <code>POST /merkle/publicar</code> para publicar el primer anclaje.
+            </p>
+        </div>
+        {% endif %}
+
+        <!-- Cómo funciona ─────────────────────────────────────────── -->
+        <div class="result-card" style="background:#F9FAFB;">
+            <div style="font-size:15px;font-weight:700;margin-bottom:14px;">ℹ️ ¿Cómo funciona el árbol de Merkle?</div>
+            <ol style="font-size:13px;color:var(--clr-text-muted);line-height:1.9;padding-left:20px;margin:0;">
+                <li>Cada evento de auditoría tiene un <strong>hash SHA-256</strong> de integridad calculado al insertarse.</li>
+                <li>Cada hora, todos los hashes del lote se combinan en un <strong>árbol de Merkle binario</strong>.</li>
+                <li>La <strong>raíz del árbol</strong> (un único hash) se publica en <code>merkle_anchors/</code> —
+                    fuera de la base de datos — y se firma con Ed25519.</li>
+                <li>Para verificar un evento, sólo se necesitan los <em>O(log n)</em> hashes del camino hasta la raíz,
+                    no todos los registros del historial.</li>
+                <li>Si alguien modifica un evento, la raíz recalculada difiere de la publicada → <strong>alteración detectada</strong>.</li>
+            </ol>
+        </div>
+
+    </main>
+</div>
+{% endblock %}
