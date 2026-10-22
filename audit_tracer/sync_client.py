@@ -30,7 +30,9 @@ from datetime import datetime
 from typing import Dict, Optional
 from urllib.parse import urlparse
 
-import requests
+from .utils.lazy import lazy_import
+
+requests = lazy_import("requests")   # HU-5.1 CA3: solo se carga al enviar (hilo de fondo)
 
 from .db import get_connection
 from .models.audit_log import (
@@ -39,6 +41,7 @@ from .models.audit_log import (
     mark_event_synced,
     mark_event_sync_failed,
 )
+from .utils.error_log import log_internal_error
 
 # ──────────────────────────────────────────────────────────────
 # CONFIGURACIÓN
@@ -50,7 +53,7 @@ BACKOFF_BASE_SEGUNDOS = 0.5          # backoff exponencial: 0.5s, 1s, 2s, ...
 SYNC_INTERVAL_SECONDS = 30           # cadencia del hilo de reintento periódico
 
 # Campos de audit_log que viajan en el payload de sincronización (mismos
-# nombres que schema/audit_log.sql y schema/audit_log_central.sql).
+# nombres que audit_tracer/schema/audit_log.sql y audit_tracer/schema/audit_log_central.sql).
 _CAMPOS_PAYLOAD = [
     "evento_uuid", "usuario_id", "sesion_id", "timestamp", "tipo_accion",
     "dataset_nombre", "columnas_afectadas", "ruta_destino", "filas_exportadas",
@@ -62,6 +65,13 @@ _CAMPOS_PAYLOAD = [
 _config: Dict[str, Optional[str]] = {"api_url": None, "token": None}
 _sync_thread: Optional[threading.Thread] = None
 _stop_event: Optional[threading.Event] = None
+_wake_event: Optional[threading.Event] = None
+_pending_key_registration = threading.Event()
+_estado = {"servidor_caido": False}
+
+# Presupuesto total de la sincronización final al cerrar el proceso: con el
+# servidor caído, cerrar el script no debe tardar más que esto (HU-5.1 CA4).
+EXIT_FLUSH_BUDGET_SECONDS = 2.0
 
 
 def _validar_https(api_url: str) -> None:
@@ -92,26 +102,52 @@ def configure_sync(api_url: str, token: str, auto: bool = True) -> None:
     api_url = api_url.rstrip("/")
     _config["api_url"] = api_url
     _config["token"] = token
-    
-    # HU-6.1 CA1: Registrar llave pública en el servidor central al configurar.
+
+    if auto:
+        # HU-5.1 CA4: el registro de la llave (HU-6.1 CA1) y todo envío HTTP
+        # ocurren en el hilo de fondo — configurar nunca bloquea al usuario.
+        _pending_key_registration.set()
+        _start_background_sync()
+        schedule_sync()
+    else:
+        _registrar_llave_publica()
+
+
+def _registrar_llave_publica() -> bool:
+    """HU-6.1 CA1: registra la llave pública Ed25519 en el servidor central."""
     try:
         from audit_tracer.digital_signatures import get_or_create_user_keypair, public_key_to_pem
         _, public_key = get_or_create_user_keypair()
         pem = public_key_to_pem(public_key)
-        
-        # Enviar llave al servidor
-        requests.post(
-            f"{api_url}/api/usuarios/llave-publica",
+        resp = requests.post(
+            f"{_config['api_url']}/api/usuarios/llave-publica",
             json={"llave_publica": pem},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=5
+            headers={"Authorization": f"Bearer {_config['token']}"},
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
+        return getattr(resp, "status_code", 0) == 200
     except Exception as e:
-        import logging
-        logging.warning(f"AuditTracer: No se pudo registrar la llave pública en el servidor: {e}")
+        if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+            _estado["servidor_caido"] = True
+        log_internal_error("No se pudo registrar la llave pública en el servidor", e)
+        return False
 
-    if auto:
-        _start_background_sync()
+
+def unconfigure_sync() -> None:
+    """Olvida servidor y token (p. ej. si el servidor rechazó el token cacheado)."""
+    _config["api_url"] = None
+    _config["token"] = None
+
+
+def schedule_sync() -> None:
+    """
+    HU-5.1 CA4 — Pide al hilo de fondo un barrido de la cola. No hace red
+    ni espera nada en el hilo que lo llama: es lo único que invocan los
+    interceptores después de persistir un evento, así que una operación de
+    pandas nunca queda esperando al servidor central.
+    """
+    if _wake_event is not None and is_configured():
+        _wake_event.set()
 
 
 def is_configured() -> bool:
@@ -130,7 +166,11 @@ def _payload_from_row(row: Dict) -> Dict:
 # ENVÍO CON REINTENTOS ACOTADOS Y BACKOFF (CA2, CA4)
 # ──────────────────────────────────────────────────────────────
 
-def _intentar_envio(payload: Dict) -> Dict:
+def _intentar_envio(
+    payload: Dict,
+    max_intentos: int = MAX_INTENTOS_POR_EVENTO,
+    timeout: float = REQUEST_TIMEOUT_SECONDS,
+) -> Dict:
     """
     Intenta enviar un evento al endpoint central.
 
@@ -146,17 +186,17 @@ def _intentar_envio(payload: Dict) -> Dict:
     url = _endpoint_url()
     ultimo_error = "Sin conexión con el servidor central"
 
-    for intento in range(1, MAX_INTENTOS_POR_EVENTO + 1):
+    for intento in range(1, max_intentos + 1):
         try:
             resp = requests.post(
                 url,
                 json=payload,
                 headers={"Authorization": f"Bearer {token}"},
-                timeout=REQUEST_TIMEOUT_SECONDS,
+                timeout=timeout,
             )
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as exc:
             ultimo_error = f"{type(exc).__name__}: sin conexión con el servidor central"
-            if intento < MAX_INTENTOS_POR_EVENTO:
+            if intento < max_intentos:
                 time.sleep(BACKOFF_BASE_SEGUNDOS * (2 ** (intento - 1)))
                 continue
             return {"ok": False, "motivo": "SIN_CONEXION", "mensaje": ultimo_error, "event_id_central": None}
@@ -183,7 +223,7 @@ def _intentar_envio(payload: Dict) -> Dict:
                 "event_id_central": None,
             }
 
-        if resp.status_code >= 500 and intento < MAX_INTENTOS_POR_EVENTO:
+        if resp.status_code >= 500 and intento < max_intentos:
             ultimo_error = f"HTTP {resp.status_code} del servidor central"
             time.sleep(BACKOFF_BASE_SEGUNDOS * (2 ** (intento - 1)))
             continue
@@ -240,7 +280,7 @@ def try_sync_event(conn, event_id: int) -> Dict:
     return resultado
 
 
-def sync_pending_events(conn=None) -> Dict:
+def sync_pending_events(conn=None, deadline: Optional[float] = None) -> Dict:
     """
     CA2/CA3 — Barrido de reintento sobre TODOS los eventos PENDIENTE/FALLIDO
     de la base local. Es lo que usa sync_now() y el hilo automático.
@@ -248,6 +288,10 @@ def sync_pending_events(conn=None) -> Dict:
     Si un evento falla por falta de conexión, se detiene el barrido (no
     tiene sentido martillar el resto de la cola contra un servidor caído);
     los eventos restantes quedan igual en la cola para el próximo barrido.
+
+    HU-5.1: con `deadline` (time.monotonic()), cada evento se intenta una
+    sola vez con un timeout acotado al tiempo restante, y el barrido se
+    corta al vencer — lo usa la sincronización final al cerrar el proceso.
     """
     conn_propia = conn is None
     conn_local = conn or get_connection()
@@ -256,13 +300,25 @@ def sync_pending_events(conn=None) -> Dict:
         resumen = {"total": len(pendientes), "sincronizados": 0, "fallidos": 0}
 
         for fila in pendientes:
-            resultado = _intentar_envio(_payload_from_row(fila))
+            if deadline is None:
+                resultado = _intentar_envio(_payload_from_row(fila))
+            else:
+                restante = deadline - time.monotonic()
+                if restante <= 0:
+                    break
+                resultado = _intentar_envio(
+                    _payload_from_row(fila), max_intentos=1,
+                    timeout=min(REQUEST_TIMEOUT_SECONDS, restante),
+                )
             _aplicar_resultado(conn_local, fila["event_id"], resultado)
 
             if resultado["ok"]:
                 resumen["sincronizados"] += 1
+                _estado["servidor_caido"] = False
             else:
                 resumen["fallidos"] += 1
+                if resultado["motivo"] == "SIN_CONEXION":
+                    _estado["servidor_caido"] = True
                 if resultado["motivo"] in ("SIN_CONEXION", "SIN_CONFIGURAR"):
                     break
 
@@ -276,20 +332,36 @@ def sync_pending_events(conn=None) -> Dict:
 # HILO DE REINTENTO AUTOMÁTICO (CA2 — "reintentarse automáticamente")
 # ──────────────────────────────────────────────────────────────
 
-def _background_loop(stop_event: threading.Event) -> None:
-    while not stop_event.wait(SYNC_INTERVAL_SECONDS):
+def _background_loop(stop_event: threading.Event, wake_event: threading.Event) -> None:
+    while not stop_event.is_set():
         try:
-            sync_pending_events()
-        except Exception:
-            pass  # nunca debe matar el hilo por un error transitorio
+            llave_lista = True
+            if _pending_key_registration.is_set() and is_configured():
+                llave_lista = _registrar_llave_publica()
+                if llave_lista:
+                    _pending_key_registration.clear()
+            # Sin la llave registrada, el servidor rechaza los eventos firmados:
+            # se espera al próximo ciclo en vez de gastar los reintentos.
+            if llave_lista and is_configured():
+                sync_pending_events()
+        except Exception as exc:
+            log_internal_error("Barrido de sincronización en segundo plano", exc)
+        # Despierta por un evento nuevo (schedule_sync) o, si no, cada
+        # SYNC_INTERVAL_SECONDS para reintentar lo que haya quedado pendiente.
+        wake_event.wait(SYNC_INTERVAL_SECONDS)
+        wake_event.clear()
 
 
 def _start_background_sync() -> None:
-    global _sync_thread, _stop_event
+    global _sync_thread, _stop_event, _wake_event
     if _sync_thread is not None and _sync_thread.is_alive():
         return
     _stop_event = threading.Event()
-    _sync_thread = threading.Thread(target=_background_loop, args=(_stop_event,), daemon=True)
+    _wake_event = threading.Event()
+    _sync_thread = threading.Thread(
+        target=_background_loop, args=(_stop_event, _wake_event),
+        name="audit_tracer-sync", daemon=True,
+    )
     _sync_thread.start()
 
 
@@ -297,6 +369,25 @@ def stop_background_sync() -> None:
     """Detiene el hilo de reintento periódico. Uso principal: limpieza en tests."""
     if _stop_event is not None:
         _stop_event.set()
+    if _wake_event is not None:
+        _wake_event.set()
+
+
+def flush_pending(budget_seconds: float = EXIT_FLUSH_BUDGET_SECONDS) -> None:
+    """
+    Último intento de sincronizar la cola al cerrar el proceso, acotado a
+    `budget_seconds` en total. Lo que no alcance queda en la base local y
+    se envía en la próxima sesión. Nunca lanza. Si el último barrido ya
+    encontró el servidor caído, no se reintenta: cerrar no debe esperar.
+    """
+    # Si el hilo de fondo ni siquiera logró registrar la llave, el servidor
+    # no ha respondido en toda la sesión: esperar al cierre no aporta nada.
+    if not is_configured() or _estado["servidor_caido"] or _pending_key_registration.is_set():
+        return
+    try:
+        sync_pending_events(deadline=time.monotonic() + budget_seconds)
+    except Exception as exc:
+        log_internal_error("Sincronización final al cerrar el proceso", exc)
 
 
 # ──────────────────────────────────────────────────────────────
