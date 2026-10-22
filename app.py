@@ -5,6 +5,7 @@ Sistema de Auditoría de Trazabilidad de Datos Clínicos.
 
 import io
 import os
+import secrets
 import sqlite3
 from collections import Counter
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, jsonify
@@ -66,7 +67,12 @@ def _categorize_critical_reason(motivo: str) -> str:
 
 # ── Configuración Flask ──────────────────────────────────────────────────────
 app = Flask(__name__)
-app.secret_key = 'audit_tracer_dev_key_2026'
+# HU-6.5 — La clave que firma la cookie de sesión no puede estar en el
+# código: el repositorio es legible por terceros y con ella cualquiera
+# firmaría una cookie con rol=ADMIN. Se toma de SECRET_KEY; si no está
+# definida, se genera una aleatoria por proceso (las sesiones se pierden
+# al reiniciar, pero nunca quedan falsificables).
+app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 
 # HU-5.6/5.7 — Detrás de un proxy inverso real (Railway, Heroku, etc.) Flask
 # ve la conexión interna proxy→contenedor, que es HTTP aunque el cliente sí
@@ -112,11 +118,36 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+def _registrar_acceso_denegado(modulo: str, ruta: str) -> None:
+    """HU-1.4 / HU-6.5 CA2 — Deja constancia en audit_log de un acceso bloqueado por rol."""
+    rol = session.get('rol', '')
+    try:
+        conn = get_db()
+        insert_event(conn, {
+            'usuario_id': session.get('usuario_id', 'DESCONOCIDO'),
+            'sesion_id': session.get('sesion_id', 'N/A'),
+            'timestamp': datetime.utcnow().isoformat(),
+            'tipo_accion': 'ACCESO_DENEGADO',
+            'contexto_ejecucion': (
+                f"Rol: {rol} | Módulo: {modulo} | Ruta: {ruta} | Método: {request.method}"
+            ),
+            'motivo_fallo': f"Acceso denegado: rol '{rol}' no tiene permiso sobre '{modulo}'",
+            'nivel_alerta': 'ADVERTENCIA',
+        })
+        conn.close()
+    except Exception:
+        pass  # No bloquear la respuesta si falla el log
+
+
 def admin_required(f):
     from functools import wraps
     @wraps(f)
     def decorated(*args, **kwargs):
         if session.get('rol') != 'ADMIN':
+            # HU-6.5 CA2: antes este bloqueo no quedaba en audit_log, así que
+            # un intento de escalar privilegios (p. ej. un ANALISTA haciendo
+            # POST a /admin/usuarios/nuevo) no dejaba rastro.
+            _registrar_acceso_denegado('administracion', f.__name__)
             flash('No tienes permisos para acceder a esta sección.', 'error')
             return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
@@ -135,30 +166,11 @@ def modulo_required(modulo: str):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            rol        = session.get('rol', '')
-            usuario_id = session.get('usuario_id', 'DESCONOCIDO')
-            sesion_id  = session.get('sesion_id', 'N/A')
+            rol = session.get('rol', '')
 
             if not has_permission(rol, modulo):
                 # Registrar el rechazo en audit_log
-                try:
-                    conn = get_db()
-                    insert_event(conn, {
-                        'usuario_id': usuario_id,
-                        'sesion_id': sesion_id,
-                        'timestamp': datetime.utcnow().isoformat(),
-                        'tipo_accion': 'ACCESO_DENEGADO',
-                        'contexto_ejecucion': (
-                            f"Rol: {rol} | Módulo: {modulo} | Ruta: {f.__name__}"
-                        ),
-                        'motivo_fallo': (
-                            f"Acceso denegado: rol '{rol}' no tiene permiso sobre '{modulo}'"
-                        ),
-                        'nivel_alerta': 'ADVERTENCIA',
-                    })
-                    conn.close()
-                except Exception:
-                    pass  # No bloquear la respuesta si falla el log
+                _registrar_acceso_denegado(modulo, f.__name__)
 
                 return render_template(
                     'acceso_denegado.html',
@@ -709,9 +721,37 @@ def api_sincronizar_evento():
     # Si el evento trae firma_digital, la verificamos con la llave pública
     # del usuario. Un evento firmado con firma inválida se rechaza (422).
     # Eventos sin firma (firmware antiguo o módulo desactivado) se aceptan
-    # sin firmar para mantener compatibilidad hacia atrás.
+    # sin firmar para mantener compatibilidad hacia atrás — pero solo si el
+    # usuario nunca registró una llave (HU-6.5 CA4, ver abajo).
+    llave_publica_pem = get_user_public_key(conn, token_data['usuario_id'])
+    if not evento.get('firma_digital') and llave_publica_pem is not None:
+        # HU-6.5 CA4 — Ataque de degradación: quitarle la firma a un evento
+        # manipulado no puede ser la forma de saltarse la verificación. Un
+        # usuario con llave registrada usa una librería que firma todo.
+        try:
+            insert_event(conn, {
+                'usuario_id': token_data['usuario_id'],
+                'sesion_id': 'SINCRONIZACION',
+                'timestamp': datetime.utcnow().isoformat(),
+                'tipo_accion': 'FIRMA_INVALIDA',
+                'motivo_fallo': (
+                    f"Evento sin firma de un usuario con llave registrada "
+                    f"(evento_uuid={evento.get('evento_uuid')})"
+                ),
+                'nivel_alerta': 'CRITICO',
+            })
+        except Exception:
+            pass
+        conn.close()
+        return jsonify({
+            'status': 'error',
+            'mensaje': (
+                'Evento sin firma digital: el usuario tiene una llave pública '
+                'registrada, así que todos sus eventos deben venir firmados.'
+            ),
+        }), 422
+
     if evento.get('firma_digital'):
-        llave_publica_pem = get_user_public_key(conn, token_data['usuario_id'])
         if llave_publica_pem is None:
             conn.close()
             return jsonify({
