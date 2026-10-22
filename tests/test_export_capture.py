@@ -25,6 +25,7 @@ import sqlite3
 import pandas as pd
 import pytest
 
+from audit_tracer.db import SCHEMA_DIR
 from audit_tracer.models.audit_log import get_events
 from audit_tracer import export_capture
 from audit_tracer.export_capture import (
@@ -45,7 +46,7 @@ def clean_db(monkeypatch, tmp_path):
     Activa/desactiva el interceptor de exportación alrededor de cada test.
     """
     db_file = str(tmp_path / "audit_trail.db")
-    schema_dir = "schema"
+    schema_dir = SCHEMA_DIR
 
     def _mock_get_conn():
         db_exists = os.path.exists(db_file)

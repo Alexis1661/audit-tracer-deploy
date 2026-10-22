@@ -4,7 +4,7 @@ dispositivo (HU-5.7).
 
 Mismo patrón que models/tokens.py: la tabla se crea de forma perezosa
 (_ensure_device_codes_table) en la conexión que se le pase, sin tocar
-schema/*.sql ni las migraciones aditivas de db.py.
+audit_tracer/schema/*.sql ni las migraciones aditivas de db.py.
 
 No está sujeta a los triggers de inmutabilidad de audit_log (HU-5.4):
 esos triggers están definidos `BEFORE UPDATE/DELETE ON audit_log`

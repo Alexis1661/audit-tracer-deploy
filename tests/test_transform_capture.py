@@ -22,6 +22,7 @@ import json
 import os
 import sqlite3
 import pytest
+from audit_tracer.db import SCHEMA_DIR
 import pandas as pd
 
 from audit_tracer.db import get_connection
@@ -52,7 +53,7 @@ def clean_db(monkeypatch, tmp_path):
     Activa/desactiva el interceptor alrededor de cada test.
     """
     db_file = str(tmp_path / "audit_trail.db")
-    schema_dir = "schema"
+    schema_dir = SCHEMA_DIR
 
     def _mock_conn():
         exists = os.path.exists(db_file)

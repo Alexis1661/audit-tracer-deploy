@@ -18,6 +18,7 @@ Subtasks validadas:
 
 import os
 import pytest
+from audit_tracer.db import SCHEMA_DIR
 import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta
@@ -51,7 +52,7 @@ def clean_db(monkeypatch, tmp_path):
     db_file = str(tmp_path / "audit_trail_hu24.db")
 
     def _mock_get_conn():
-        schema_dir = "schema"
+        schema_dir = SCHEMA_DIR
         db_exists = os.path.exists(db_file)
         conn = sqlite3.connect(db_file, check_same_thread=False)
         if not db_exists:

@@ -32,7 +32,7 @@ from audit_tracer.auth.control_acceso import (
 
 
 _SCHEMA_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "schema")
+    os.path.join(os.path.dirname(__file__), "..", "audit_tracer", "schema")
 )
 _SCHEMA_FILES = ["usuarios.sql", "audit_log.sql"]
 

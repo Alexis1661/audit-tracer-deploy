@@ -624,7 +624,7 @@ def api_estado_login_dispositivo():
 # fallaría con un error de esquema, así que se validan antes de tocar la BD.
 _CAMPOS_EVENTO_REQUERIDOS = ('evento_uuid', 'usuario_id', 'sesion_id', 'timestamp', 'tipo_accion')
 
-# Mismos nombres de columna que schema/audit_log.sql / audit_log_central.sql —
+# Mismos nombres de columna que audit_tracer/schema/audit_log.sql / audit_log_central.sql —
 # el payload JSON usa exactamente estos campos (ver README HU-5.8).
 _CAMPOS_EVENTO_ACEPTADOS = _CAMPOS_EVENTO_REQUERIDOS + (
     'dataset_nombre', 'columnas_afectadas', 'ruta_destino', 'filas_exportadas',

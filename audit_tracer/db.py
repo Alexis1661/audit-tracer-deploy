@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import threading
 import uuid
 
 # Columnas incorporadas a audit_log después de la versión inicial del schema.
@@ -16,7 +17,7 @@ _AUDIT_LOG_MIGRATIONS = [
 
 # HU-5.4 CA3 — Infraestructura de inmutabilidad: bloquea UPDATE/DELETE sobre
 # audit_log y deja constancia del intento. Idéntica en la base local y en la
-# central (ver schema/audit_log.sql y schema/audit_log_central.sql, que la
+# central (ver audit_tracer/schema/audit_log.sql y audit_tracer/schema/audit_log_central.sql, que la
 # incluyen directamente para bases nuevas). Este bloque se aplica aquí para
 # bases *preexistentes* que se crearon antes de que existiera (cierra un
 # faltante de HU-3.3, que la implementó en una rama que nunca se mergeó a
@@ -107,7 +108,7 @@ def _migrate_audit_log(conn: sqlite3.Connection) -> None:
 def _migrate_sync_queue(conn: sqlite3.Connection) -> None:
     """
     HU-5.8 — Crea audit_sync_queue en bases LOCALES preexistentes que se
-    crearon antes de que esta tabla existiera en schema/audit_log.sql.
+    crearon antes de que esta tabla existiera en audit_tracer/schema/audit_log.sql.
 
     Se aplica únicamente a la base local (llamada solo desde
     get_connection()): la central es el destino de la sincronización, no
@@ -128,9 +129,19 @@ def _migrate_sync_queue(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+# HU-5.1 CA2: los .sql viajan dentro del paquete y se resuelven relativos a
+# este archivo, no al directorio de trabajo — así `import audit_tracer`
+# funciona desde cualquier carpeta y también instalado con pip.
+SCHEMA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema")
+
+# Bases locales ya migradas en este proceso: las migraciones aditivas son
+# idempotentes, pero repetirlas en cada evento es costo puro (HU-5.1 CA3).
+_migrated_local_dbs: set = set()
+
+
 def _init_from_schema(conn: sqlite3.Connection, schema_files: list) -> None:
-    """Ejecuta los archivos de schema indicados (relativos a schema/) sobre `conn`."""
-    schema_dir = "schema"
+    """Ejecuta los archivos de schema indicados (relativos a audit_tracer/schema/) sobre `conn`."""
+    schema_dir = SCHEMA_DIR
     for schema_file in schema_files:
         file_path = os.path.join(schema_dir, schema_file)
         if os.path.exists(file_path):
@@ -161,26 +172,74 @@ def _migrate_tokens(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def get_connection(db_path: str = "audit_trail.db") -> sqlite3.Connection:
+class _ConexionLocalReutilizable(sqlite3.Connection):
+    """
+    HU-5.1 CA3 — Conexión a la base local por defecto que se reutiliza
+    dentro del mismo hilo: abrir una conexión por evento costaba ~20 ms.
+    Los llamadores siguen haciendo close() como siempre; aquí close() solo
+    descarta una transacción que hubiera quedado abierta por un error.
+    """
+
+    def close(self):
+        if self.in_transaction:
+            self.rollback()
+
+
+_conexiones_por_hilo = threading.local()
+
+
+def get_connection(db_path: str = None) -> sqlite3.Connection:
     """
     Returns an SQLite connection to the specified database file.
     If the database doesn't exist, it creates it and initializes tables from SQL files.
     If it already exists, applies any pending additive migrations.
 
+    HU-5.1: sin `db_path`, usa la base local del usuario
+    (`~/.audit_tracer/audit_trail.db`), independiente del directorio de
+    trabajo, con una conexión reutilizada por hilo. Las bases en archivo
+    usan WAL + synchronous=NORMAL: cada evento es un commit, y sin esto
+    cada commit fuerza un fsync completo.
+
     Returns:
         sqlite3.Connection: Database connection object.
     """
-    db_exists = os.path.exists(db_path)
+    if db_path is None:
+        from .utils.paths import local_db_path
+        db_path = local_db_path()
+        cache = getattr(_conexiones_por_hilo, "conexiones", None)
+        if cache is None:
+            cache = _conexiones_por_hilo.conexiones = {}
+        conn = cache.get(db_path)
+        if conn is not None and os.path.exists(db_path):
+            conn.row_factory = None
+            return conn
+        conn = _abrir(db_path, factory=_ConexionLocalReutilizable)
+        cache[db_path] = conn
+        return conn
 
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    return _abrir(db_path)
+
+
+def _abrir(db_path: str, factory=sqlite3.Connection) -> sqlite3.Connection:
+    in_memory = db_path == ":memory:"
+    db_exists = not in_memory and os.path.exists(db_path)
+
+    conn = sqlite3.connect(db_path, check_same_thread=False, factory=factory)
     conn.execute("PRAGMA busy_timeout = 5000")
+    if not in_memory:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
 
+    key = None if in_memory else os.path.abspath(db_path)
     if not db_exists:
         _init_from_schema(conn, ["usuarios.sql", "audit_log.sql", "tokens.sql"])
-    else:
+        if key:
+            _migrated_local_dbs.add(key)
+    elif key not in _migrated_local_dbs:
         _migrate_audit_log(conn)
         _migrate_tokens(conn)
         _migrate_sync_queue(conn)  # HU-5.8 — solo bases locales
+        _migrated_local_dbs.add(key)
 
     return conn
 
@@ -195,7 +254,7 @@ def get_central_connection(db_path: str = "audit_central.db") -> sqlite3.Connect
     PRAGMA busy_timeout hace que escritores concurrentes esperen su turno
     en vez de fallar inmediatamente con "database is locked" (CA2).
 
-    Incluye también la tabla `usuarios` (mismo schema/usuarios.sql que la
+    Incluye también la tabla `usuarios` (mismo audit_tracer/schema/usuarios.sql que la
     base local, sin cambios): el dashboard Flask consulta y escribe TODO
     a través de esta conexión (autenticación, roles y eventos por igual)
     porque el dashboard es, en este diseño, parte de la infraestructura
