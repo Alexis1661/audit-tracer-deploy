@@ -28,7 +28,8 @@ from typing import Optional, Callable
 
 from .db import get_connection
 from .models.audit_log import insert_event_and_enqueue_sync
-from .utils.session import detect_environment, get_hostname
+from .utils.contexto import build_contexto
+from .utils.error_log import guard, log_internal_error
 
 
 # ──────────────────────────────────────────────────────────────
@@ -136,6 +137,8 @@ def _get_session() -> tuple[str, str]:
         tracker = SessionTracker.get_instance()
         usuario_id = tracker.usuario_id or "DESCONOCIDO"
         sesion_id = tracker.sesion_id
+        if usuario_id == "DESCONOCIDO":
+            tracker.remind_if_unidentified()
         return usuario_id, sesion_id
     except Exception:
         return "DESCONOCIDO", "SIN_SESION"
@@ -143,23 +146,7 @@ def _get_session() -> tuple[str, str]:
 
 def _build_contexto() -> str:
     """Construye contexto_ejecucion con entorno y script de origen."""
-    env = detect_environment()
-    host = get_hostname()
-
-    caller_file = "desconocido"
-    stack = inspect.stack()
-    for frame_info in stack:
-        filename = frame_info.filename
-        if (
-            filename != __file__
-            and "audit_tracer" not in filename
-            and "pandas" not in filename
-            and "<frozen" not in filename
-        ):
-            caller_file = os.path.basename(filename)
-            break
-
-    return f"Script: {caller_file} | Env: {env} | Host: {host}"
+    return build_contexto()
 
 
 def _resolve_motivo(exc: Exception) -> str:
@@ -231,17 +218,17 @@ def log_failed_access(
         conn = get_connection()
         # CA4: persistencia inmediata / PDGTRAZDSA-65.
         # HU-5.8 CA1: se encola para sincronización en la misma operación.
-        resultado = insert_event_and_enqueue_sync(conn, event)
         try:
-            from .sync_client import try_sync_event
-            try_sync_event(conn, resultado["event_id"])  # best-effort, nunca lanza
-        except Exception:
-            pass
-        conn.close()
+            resultado = insert_event_and_enqueue_sync(conn, event)
+        finally:
+            conn.close()
+        # HU-5.1 CA4: el envío ocurre en el hilo de fondo, nunca aquí.
+        from .sync_client import schedule_sync
+        schedule_sync()
         return resultado["event_id"]
     except Exception as db_exc:
         # No interrumpir el flujo del usuario si falla la auditoría
-        print(f"[AuditTracer] Advertencia: no se pudo registrar ACCESO_FALLIDO — {db_exc}")
+        log_internal_error("No se pudo registrar ACCESO_FALLIDO", db_exc)
         return None
 
 
@@ -281,22 +268,25 @@ def intercept_access_failures(
             try:
                 return func(*args, **kwargs)
             except ACCESS_FAILURE_EXCEPTIONS as exc:
-                # Resolver nombre del dataset
-                nombre = dataset_nombre or "dataset_desconocido"
-                if dataset_arg is not None:
-                    # Intentar extraer desde kwargs primero, luego por posición
-                    raw_path = kwargs.get(dataset_arg)
-                    if raw_path is None:
-                        sig = inspect.signature(func)
-                        param_names = list(sig.parameters.keys())
-                        if dataset_arg in param_names:
-                            idx = param_names.index(dataset_arg)
-                            if idx < len(args):
-                                raw_path = args[idx]
-                    if raw_path and isinstance(raw_path, str):
-                        nombre = os.path.basename(raw_path)
+                def _registrar():
+                    # Resolver nombre del dataset
+                    nombre = dataset_nombre or "dataset_desconocido"
+                    if dataset_arg is not None:
+                        # Intentar extraer desde kwargs primero, luego por posición
+                        raw_path = kwargs.get(dataset_arg)
+                        if raw_path is None:
+                            sig = inspect.signature(func)
+                            param_names = list(sig.parameters.keys())
+                            if dataset_arg in param_names:
+                                idx = param_names.index(dataset_arg)
+                                if idx < len(args):
+                                    raw_path = args[idx]
+                        if raw_path and isinstance(raw_path, str):
+                            nombre = os.path.basename(raw_path)
+                    log_failed_access(dataset_nombre=nombre, exc=exc)
 
-                log_failed_access(dataset_nombre=nombre, exc=exc)
+                # HU-5.1 CA4: un fallo de auditoría no reemplaza el error del usuario.
+                guard(_registrar, _contexto="Registro de ACCESO_FALLIDO")
                 raise   # Re-lanzar para no ocultar el error al llamador
         return wrapper
     return decorator

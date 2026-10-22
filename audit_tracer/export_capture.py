@@ -24,7 +24,6 @@ Normas: HIPAA §164.312(b) · Ley 1581/2012 · ISO/IEC 27001
 
 import os
 import contextlib
-import inspect
 from datetime import datetime
 from typing import Optional
 
@@ -32,7 +31,8 @@ import pandas as pd
 
 from .db import get_connection
 from .models.audit_log import insert_event_and_enqueue_sync
-from .utils.session import detect_environment, get_hostname
+from .utils.contexto import build_contexto
+from .utils.error_log import guard, log_internal_error, in_audit_scope, audit_scope
 
 
 # ──────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ from .utils.session import detect_environment, get_hostname
 # ──────────────────────────────────────────────────────────────
 
 UMBRAL_EXPORTACION_MASIVA = 1000
-# Coherente con el comentario de nivel_alerta en schema/audit_log.sql:
+# Coherente con el comentario de nivel_alerta en audit_tracer/schema/audit_log.sql:
 # "CRITICO: ... exportaciones masivas >1000 filas"
 
 
@@ -69,6 +69,8 @@ def _get_session() -> tuple[str, str]:
         tracker = SessionTracker.get_instance()
         usuario_id = tracker.usuario_id or "DESCONOCIDO"
         sesion_id = tracker.sesion_id
+        if usuario_id == "DESCONOCIDO":
+            tracker.remind_if_unidentified()
         return usuario_id, sesion_id
     except Exception:
         return "DESCONOCIDO", "SIN_SESION"
@@ -76,23 +78,7 @@ def _get_session() -> tuple[str, str]:
 
 def _build_contexto(formato: str) -> str:
     """Construye contexto_ejecucion: script, entorno, host y formato exportado."""
-    env = detect_environment()
-    host = get_hostname()
-
-    caller_file = "desconocido"
-    for frame_info in inspect.stack():
-        fname = frame_info.filename
-        if (
-            fname != __file__
-            and "audit_tracer" not in fname
-            and "pandas" not in fname
-            and "<frozen" not in fname
-            and "<string>" not in fname
-        ):
-            caller_file = os.path.basename(fname)
-            break
-
-    return f"Script: {caller_file} | Env: {env} | Host: {host} | Formato: {formato}"
+    return build_contexto(f"Formato: {formato}")
 
 
 def _determine_alert(usuario_id: str, filas_exportadas: Optional[int]) -> tuple[str, Optional[str]]:
@@ -137,36 +123,38 @@ def _log_export(
 ) -> None:
     """
     Construye y persiste un registro EXPORTACION en audit_log (CA1, CA2, CA3).
+
+    HU-5.1 CA4: nunca lanza; cualquier fallo va al log de errores del sistema.
     """
-    usuario_id, sesion_id = _get_session()
-    nivel_alerta, motivo_alerta = _determine_alert(usuario_id, filas_exportadas)
-
-    event = {
-        "usuario_id": usuario_id,                          # CA2
-        "sesion_id": sesion_id,
-        "timestamp": datetime.utcnow().isoformat(),         # CA2
-        "tipo_accion": "EXPORTACION",                       # CA1
-        "dataset_nombre": dataset_nombre,                   # CA2
-        "ruta_destino": ruta_destino,                       # CA2
-        "filas_exportadas": filas_exportadas,                # CA2
-        "sobrescritura": 1 if sobrescritura else 0,          # CA3
-        "contexto_ejecucion": _build_contexto(formato),
-        "nivel_alerta": nivel_alerta,
-        "motivo_alerta": motivo_alerta,
-    }
-
     try:
+        usuario_id, sesion_id = _get_session()
+        nivel_alerta, motivo_alerta = _determine_alert(usuario_id, filas_exportadas)
+
+        event = {
+            "usuario_id": usuario_id,                          # CA2
+            "sesion_id": sesion_id,
+            "timestamp": datetime.utcnow().isoformat(),         # CA2
+            "tipo_accion": "EXPORTACION",                       # CA1
+            "dataset_nombre": dataset_nombre,                   # CA2
+            "ruta_destino": ruta_destino,                       # CA2
+            "filas_exportadas": filas_exportadas,                # CA2
+            "sobrescritura": 1 if sobrescritura else 0,          # CA3
+            "contexto_ejecucion": _build_contexto(formato),
+            "nivel_alerta": nivel_alerta,
+            "motivo_alerta": motivo_alerta,
+        }
+
         conn = get_connection()
         # HU-5.8 CA1: persistencia local + encolado antes de cualquier envío.
-        resultado = insert_event_and_enqueue_sync(conn, event)
         try:
-            from .sync_client import try_sync_event
-            try_sync_event(conn, resultado["event_id"])  # best-effort, nunca lanza
-        except Exception:
-            pass
-        conn.close()
+            insert_event_and_enqueue_sync(conn, event)
+        finally:
+            conn.close()
+        # HU-5.1 CA4: el envío ocurre en el hilo de fondo, nunca aquí.
+        from .sync_client import schedule_sync
+        schedule_sync()
     except Exception as exc:
-        print(f"[AuditTracer] Advertencia: no se pudo registrar exportación — {exc}")
+        log_internal_error("No se pudo registrar exportación", exc)
 
 
 def wrap_for_export(df: pd.DataFrame, dataset_nombre: str) -> pd.DataFrame:
@@ -186,72 +174,52 @@ def wrap_for_export(df: pd.DataFrame, dataset_nombre: str) -> pd.DataFrame:
 # INTERCEPTORES DE EXPORTACIÓN  (PDGTRAZDSA-54, PDGTRAZDSA-55)
 # ──────────────────────────────────────────────────────────────
 
-def _audited_to_csv(self, path_or_buf=None, *args, **kwargs):
-    """Reemplazo auditado de DataFrame.to_csv()."""
-    ruta = _resolve_export_path(path_or_buf)
-    existed_before = _path_exists(ruta)
+def _audited_export(self, original, destino, formato, buffer_label, args, kwargs):
+    """
+    Núcleo común de to_csv/to_excel/to_json/to_parquet auditados.
 
-    result = _original_to_csv(self, path_or_buf, *args, **kwargs)
+    HU-5.1 CA4: la escritura original va FUERA de guard() (sus errores son
+    del usuario y le llegan intactos); solo la auditoría va dentro.
+    """
+    if in_audit_scope():
+        return original(self, destino, *args, **kwargs)
 
-    _log_export(
+    ruta = guard(_resolve_export_path, destino, _contexto="Ruta de exportación")
+    existed_before = guard(_path_exists, ruta, _default=False)
+
+    with audit_scope():
+        result = original(self, destino, *args, **kwargs)
+
+    guard(
+        _log_export,
         dataset_nombre=getattr(self, "_dataset_nombre", "dataset_desconocido"),
-        ruta_destino=ruta or "buffer_csv",
+        ruta_destino=ruta or buffer_label,
         filas_exportadas=len(self),
-        formato="CSV",
+        formato=formato,
         sobrescritura=existed_before,
+        _contexto=f"Registro de EXPORTACION {formato}",
     )
     return result
+
+
+def _audited_to_csv(self, path_or_buf=None, *args, **kwargs):
+    """Reemplazo auditado de DataFrame.to_csv()."""
+    return _audited_export(self, _original_to_csv, path_or_buf, "CSV", "buffer_csv", args, kwargs)
 
 
 def _audited_to_excel(self, excel_writer=None, *args, **kwargs):
     """Reemplazo auditado de DataFrame.to_excel()."""
-    ruta = _resolve_export_path(excel_writer)
-    existed_before = _path_exists(ruta)
-
-    result = _original_to_excel(self, excel_writer, *args, **kwargs)
-
-    _log_export(
-        dataset_nombre=getattr(self, "_dataset_nombre", "dataset_desconocido"),
-        ruta_destino=ruta or "buffer_excel",
-        filas_exportadas=len(self),
-        formato="EXCEL",
-        sobrescritura=existed_before,
-    )
-    return result
+    return _audited_export(self, _original_to_excel, excel_writer, "EXCEL", "buffer_excel", args, kwargs)
 
 
 def _audited_to_json(self, path_or_buf=None, *args, **kwargs):
     """Reemplazo auditado de DataFrame.to_json()."""
-    ruta = _resolve_export_path(path_or_buf)
-    existed_before = _path_exists(ruta)
-
-    result = _original_to_json(self, path_or_buf, *args, **kwargs)
-
-    _log_export(
-        dataset_nombre=getattr(self, "_dataset_nombre", "dataset_desconocido"),
-        ruta_destino=ruta or "buffer_json",
-        filas_exportadas=len(self),
-        formato="JSON",
-        sobrescritura=existed_before,
-    )
-    return result
+    return _audited_export(self, _original_to_json, path_or_buf, "JSON", "buffer_json", args, kwargs)
 
 
 def _audited_to_parquet(self, path=None, *args, **kwargs):
     """Reemplazo auditado de DataFrame.to_parquet()."""
-    ruta = _resolve_export_path(path)
-    existed_before = _path_exists(ruta)
-
-    result = _original_to_parquet(self, path, *args, **kwargs)
-
-    _log_export(
-        dataset_nombre=getattr(self, "_dataset_nombre", "dataset_desconocido"),
-        ruta_destino=ruta or "buffer_parquet",
-        filas_exportadas=len(self),
-        formato="PARQUET",
-        sobrescritura=existed_before,
-    )
-    return result
+    return _audited_export(self, _original_to_parquet, path, "PARQUET", "buffer_parquet", args, kwargs)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -313,44 +281,47 @@ def audited_open(path, mode: str = "w", dataset_nombre: Optional[str] = None, **
 # ACTIVACIÓN / DESACTIVACIÓN DEL INTERCEPTOR
 # ──────────────────────────────────────────────────────────────
 
+_PATCHES = (
+    ("to_csv", "_audited_to_csv", "_original_to_csv"),
+    ("to_excel", "_audited_to_excel", "_original_to_excel"),
+    ("to_json", "_audited_to_json", "_original_to_json"),
+    ("to_parquet", "_audited_to_parquet", "_original_to_parquet"),
+)
+
+
 def activate() -> None:
     """
     Activa el interceptor: reemplaza to_csv/to_excel/to_json/to_parquet
-    de pd.DataFrame con versiones auditadas. Idempotente.
+    de pd.DataFrame con versiones auditadas. Idempotente, también tras
+    importlib.reload() (HU-5.1): el original se recupera desde la marca
+    que deja cada parche, así nunca se parchea encima de un parche.
     """
     global _export_interceptor_active
-    global _original_to_csv, _original_to_excel, _original_to_json, _original_to_parquet
 
-    if _export_interceptor_active:
-        return
-
-    _original_to_csv = pd.DataFrame.to_csv
-    _original_to_excel = pd.DataFrame.to_excel
-    _original_to_json = pd.DataFrame.to_json
-    _original_to_parquet = pd.DataFrame.to_parquet
-
-    pd.DataFrame.to_csv = _audited_to_csv
-    pd.DataFrame.to_excel = _audited_to_excel
-    pd.DataFrame.to_json = _audited_to_json
-    pd.DataFrame.to_parquet = _audited_to_parquet
+    g = globals()
+    for metodo, auditada, original in _PATCHES:
+        actual = getattr(pd.DataFrame, metodo)
+        g[original] = getattr(actual, "_audit_tracer_original", actual)
+        g[auditada]._audit_tracer_original = g[original]
+        setattr(pd.DataFrame, metodo, g[auditada])
 
     _export_interceptor_active = True
 
 
 def deactivate() -> None:
-    """Desactiva el interceptor y restaura los métodos originales de pandas."""
+    """
+    Desactiva el interceptor y restaura los métodos originales de pandas.
+    HU-5.1: queda registrado como evento CRITICO AUDITORIA_DESACTIVADA.
+    """
     global _export_interceptor_active
 
     if not _export_interceptor_active:
         return
 
-    if _original_to_csv is not None:
-        pd.DataFrame.to_csv = _original_to_csv
-    if _original_to_excel is not None:
-        pd.DataFrame.to_excel = _original_to_excel
-    if _original_to_json is not None:
-        pd.DataFrame.to_json = _original_to_json
-    if _original_to_parquet is not None:
-        pd.DataFrame.to_parquet = _original_to_parquet
+    for metodo, _, _ in _PATCHES:
+        actual = getattr(pd.DataFrame, metodo)
+        setattr(pd.DataFrame, metodo, getattr(actual, "_audit_tracer_original", actual))
 
     _export_interceptor_active = False
+    from .data_capture import log_deactivation
+    log_deactivation("export_capture (to_csv, to_excel, to_json, to_parquet)", get_connection)

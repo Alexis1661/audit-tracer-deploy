@@ -524,8 +524,8 @@ def insert_event_and_enqueue_sync(conn: sqlite3.Connection, event: Dict) -> Dict
         private_key, _ = get_or_create_user_keypair()
         prepared = add_signature_to_event(prepared, private_key)
     except Exception as e:
-        import logging
-        logging.warning(f"AuditTracer: No se pudo firmar el evento local: {e}")
+        from audit_tracer.utils.error_log import log_internal_error
+        log_internal_error("No se pudo firmar el evento local", e)
 
     # 3. Persistir en base local
     event_id = _execute_insert(conn, prepared)
@@ -637,7 +637,7 @@ def insert_event_if_new(conn: sqlite3.Connection, event: Dict) -> Tuple[Dict, bo
     de un mismo evento nunca produzca una segunda fila.
 
     La garantía real de no-duplicados es la restricción `evento_uuid TEXT
-    UNIQUE NOT NULL` del esquema (schema/audit_log_central.sql, HU-5.4):
+    UNIQUE NOT NULL` del esquema (audit_tracer/schema/audit_log_central.sql, HU-5.4):
     el SELECT inicial es solo una optimización para el camino feliz (evita
     pagar el costo de un INSERT fallido en el caso común). Si dos
     solicitudes concurrentes llegan a la vez para el mismo evento_uuid, la
