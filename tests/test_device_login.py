@@ -292,6 +292,22 @@ class TestEndpointConfirmarDispositivo:
         resp = client.post("/auth/dispositivo", data={"codigo": "ABCD-1234"})
         assert resp.status_code == 302
 
+    def test_sesion_de_un_usuario_que_ya_no_existe_vuelve_al_login(self, api_client):
+        """Tras un redeploy con la base recreada, la cookie apunta a un usuario_id inexistente."""
+        client, _ = api_client
+        datos = client.post("/api/auth/dispositivo/iniciar").get_json()
+        with client.session_transaction() as sess:
+            sess.update(usuario_id="id-de-antes-del-redeploy", rol="CIENTIFICO_DATOS",
+                        nombre="x", sesion_id="s")
+
+        resp = client.post("/auth/dispositivo", data={"codigo": datos["codigo"]})
+
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]
+        assert datos["codigo"] in resp.headers["Location"]   # al volver, el código sigue ahí
+        with client.session_transaction() as sess:
+            assert "usuario_id" not in sess
+
 
 class TestEndpointEstado:
     def test_estado_pendiente_por_http(self, api_client):

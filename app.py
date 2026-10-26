@@ -143,6 +143,19 @@ def get_db():
 
 
 # ── Decorador de protección de rutas ────────────────────────────────────────
+def _usuario_de_sesion_vigente() -> bool:
+    """True si el usuario de la sesión existe y está activo en la base central."""
+    try:
+        conn = get_db()
+        try:
+            usuario = get_user_by_id(conn, session['usuario_id'])
+        finally:
+            conn.close()
+    except Exception:
+        return True  # ante un fallo de la base no se expulsa al usuario
+    return bool(usuario) and usuario.get('activo', 1) != 0
+
+
 def login_required(f):
     from functools import wraps
     @wraps(f)
@@ -621,8 +634,30 @@ def api_iniciar_login_dispositivo():
     }), 201
 
 
+def sesion_vigente_required(f):
+    """
+    La confirmación del código genera un token a nombre del usuario de la
+    sesión, así que ese usuario tiene que existir de verdad. Tras un
+    redeploy con la base recreada, la cookie seguía firmada pero apuntaba a
+    un usuario_id que ya no existe y la confirmación terminaba en error 500.
+    Ahora se cierra esa sesión y se vuelve al login, conservando el código.
+    """
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not _usuario_de_sesion_vigente():
+            session.clear()
+            flash('Tu sesión ya no es válida. Inicia sesión de nuevo para confirmar el código.', 'warning')
+            codigo = request.values.get('codigo', '').strip().upper()
+            destino = url_for('confirmar_dispositivo', codigo=codigo) if codigo else url_for('confirmar_dispositivo')
+            return redirect(url_for('login', next=destino))
+        return f(*args, **kwargs)
+    return decorated
+
+
 @app.route('/auth/dispositivo', methods=['GET'])
 @login_required
+@sesion_vigente_required
 def confirmar_dispositivo():
     """HU-5.7 CA2 — Página del dashboard para confirmar un código de login por dispositivo."""
     return render_template('auth/confirmar_dispositivo.html', codigo=request.args.get('codigo', ''))
@@ -630,6 +665,7 @@ def confirmar_dispositivo():
 
 @app.route('/auth/dispositivo', methods=['POST'])
 @login_required
+@sesion_vigente_required
 def confirmar_dispositivo_post():
     """HU-5.7 CA2 — Procesa la confirmación del código, ya autenticado en el dashboard."""
     codigo = request.form.get('codigo', '').strip().upper()
