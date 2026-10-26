@@ -1,0 +1,29 @@
+# Despliegue del dashboard central en Render (Blueprint).
+# Render lee este archivo al crear el servicio con "New > Blueprint".
+services:
+  - type: web
+    name: audit-tracer
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # app.py lee PORT (Render lo define) y escucha en 0.0.0.0.
+    startCommand: python app.py
+    healthCheckPath: /login
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      # Sin modo debug en un servidor público.
+      - key: FLASK_DEBUG
+        value: "0"
+      # Crea las cuentas de demo al arrancar (el disco del plan free es
+      # efímero: la base se recrea en cada reinicio).
+      - key: SEED_DEMO_DATA
+        value: "1"
+      # Render termina HTTPS en su proxy: confiar en X-Forwarded-Proto para
+      # que /api/eventos/sincronizar no rechace tráfico HTTPS legítimo (HU-5.6).
+      - key: TRUST_PROXY_HEADERS
+        value: "1"
+      # Clave de la cookie de sesión (HU-6.5): Render genera una aleatoria.
+      - key: SECRET_KEY
+        generateValue: true
