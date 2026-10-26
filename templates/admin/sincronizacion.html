@@ -184,7 +184,7 @@
                     <div class="stat-card__header">
                         <div class="stat-card__icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></div>
                     </div>
-                    <div class="stat-card__value" style="font-size: 15px;">{{ cola_local.ultimo_intento[:19].replace('T', ' ') if cola_local.ultimo_intento else '—' }}</div>
+                    <div class="stat-card__value" style="font-size: 15px;">{{ cola_local.ultimo_intento | hora_col }}</div>
                     <div class="stat-card__label">Último intento de sincronización</div>
                 </div>
             </div>
@@ -216,7 +216,7 @@
                 <tbody>
                     {% for r in rechazos_recientes %}
                     <tr>
-                        <td style="color: var(--clr-text-muted);">{{ r.timestamp[:19].replace('T', ' ') }}</td>
+                        <td style="color: var(--clr-text-muted);">{{ r.timestamp | hora_col }}</td>
                         <td style="font-weight: 700;">{{ r.usuario_id }}</td>
                         <td>{{ r.motivo_fallo }}</td>
                     </tr>

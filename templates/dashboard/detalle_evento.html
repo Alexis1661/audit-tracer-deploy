@@ -383,8 +383,8 @@
                     <span class="detail-value" style="color: var(--clr-accent-blue); font-weight: 700;">{{ evento.tipo_accion }}</span>
                 </div>
                 <div class="detail-item">
-                    <span class="detail-label">Fecha y Hora (Timestamp UTC)</span>
-                    <span class="detail-value">{{ evento.timestamp.replace('T', ' ') if evento.timestamp else '—' }}</span>
+                    <span class="detail-label">Fecha y Hora ({{ ZONA_HORARIA }})</span>
+                    <span class="detail-value">{{ evento.timestamp | hora_col }}</span>
                 </div>
                 <div class="detail-item">
                     <span class="detail-label">ID Sesión</span>

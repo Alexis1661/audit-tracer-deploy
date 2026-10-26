@@ -211,7 +211,7 @@
                     {% for paso in cadena.pasos %}
                     <tr>
                         <td style="font-weight: 700;">{{ paso.paso }}</td>
-                        <td>{{ paso.timestamp.split('.')[0].replace('T', ' ') }}</td>
+                        <td>{{ paso.timestamp | hora_col }}</td>
                         <td>{{ paso.tipo_accion }}</td>
                         <td>{{ paso.descripcion }}{% if paso.ruta_destino %} → {{ paso.ruta_destino }}{% endif %}</td>
                         <td>
@@ -250,7 +250,12 @@
     };
 
     function hora(ts) {
-        return ts ? ts.split('.')[0].replace('T', ' ') : '';
+        // Timestamps en UTC (sin zona) -> hora de Colombia (UTC-5, sin horario de verano).
+        if (!ts) return '';
+        var base = ts.split('.')[0];
+        var ms = Date.parse(/[zZ]|[+-]\d\d:\d\d$/.test(base) ? base : base + 'Z');
+        if (isNaN(ms)) return base.replace('T', ' ');
+        return new Date(ms - 5 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
     }
 
     var elements = grafo.nodes.map(function (n) {

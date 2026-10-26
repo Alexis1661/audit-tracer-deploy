@@ -155,7 +155,7 @@
                         <td>
                             <div style="display: flex; flex-direction: column;">
                                 <span style="font-weight: 700;">{{ u.email }}</span>
-                                <span style="font-size: 11px; color: var(--clr-text-muted);">Registrado el {{ u.fecha_registro or 'N/A' }}</span>
+                                <span style="font-size: 11px; color: var(--clr-text-muted);">Registrado el {{ u.fecha_registro | hora_col if u.fecha_registro else 'N/A' }}</span>
                             </div>
                         </td>
                         <td style="font-family: monospace; font-size: 12px; color: var(--clr-text-muted);">{{ u.usuario_id[:12] }}...</td>

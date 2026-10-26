@@ -430,10 +430,10 @@
                             </div>
                         </td>
                         <td>
-                            <span style="font-size: 12px; color: var(--clr-text-muted);">{{ t.fecha_creacion[:19].replace('T', ' ') }}</span>
+                            <span style="font-size: 12px; color: var(--clr-text-muted);">{{ t.fecha_creacion | hora_col }}</span>
                         </td>
                         <td>
-                            <span style="font-size: 12px; font-weight: 600;">{{ t.fecha_expiracion[:19].replace('T', ' ') }}</span>
+                            <span style="font-size: 12px; font-weight: 600;">{{ t.fecha_expiracion | hora_col }}</span>
                         </td>
                         <td>
                             {% if t.estado == 'ACTIVO' %}

@@ -13,6 +13,8 @@ import json
 import sqlite3
 from typing import Dict, Any, Optional, List
 from audit_tracer.models.usuarios import get_user_by_id, get_user_by_email
+from audit_tracer.utils.horario import HORA_INICIO_LABORAL, HORA_FIN_LABORAL
+from audit_tracer.utils.zona_horaria import ETIQUETA_ZONA, formatear_fecha
 
 
 def _format_friendly_name(email: Optional[str], default: str = "Usuario") -> str:
@@ -284,7 +286,8 @@ def generate_alert_diagnosis(evento: Dict[str, Any]) -> Dict[str, Any]:
             )
         elif "horario" in motivo.lower():
             impacto = (
-                "Acceso atípico fuera de la ventana operativa institucional (08:00 - 18:00 UTC). "
+                f"Acceso atípico fuera de la ventana operativa institucional "
+                f"({HORA_INICIO_LABORAL:02d}:00 - {HORA_FIN_LABORAL:02d}:00 {ETIQUETA_ZONA}). "
                 "Podría indicar credenciales comprometidas o actividad investigativa no programada."
             )
         elif "intentos" in motivo.lower() or tipo == "ACCESO_FALLIDO":
@@ -452,7 +455,7 @@ def generate_copyable_summary(
     HU-7.4 CA5 — Genera un resumen textual formateado para copiar en el portapapeles y pegar en Jira/tickets.
     """
     event_id = evento.get("event_id", "N/A")
-    timestamp = str(evento.get("timestamp", "N/A")).replace("T", " ")
+    timestamp = formatear_fecha(evento.get("timestamp"), vacio="N/A")
     tipo = evento.get("tipo_accion", "N/A")
     nivel = diagnostico.get("nivel", "NORMAL")
     usuario = f"{user_info.get('nombre', 'N/A')} ({user_info.get('email', 'N/A')} | {user_info.get('rol', 'N/A')})"
@@ -469,7 +472,7 @@ def generate_copyable_summary(
         f"============================================================",
         f" REPORTE DE AUDITORÍA CLÍNICA — EVENTO #{event_id}",
         f"============================================================",
-        f"Fecha y Hora (UTC): {timestamp}",
+        f"Fecha y Hora:       {timestamp} ({ETIQUETA_ZONA})",
         f"Tipo de Acción:     {tipo}",
         f"Nivel de Alerta:    {nivel}",
         f"Usuario:            {usuario}",

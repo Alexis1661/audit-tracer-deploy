@@ -57,6 +57,10 @@ from audit_tracer.event_explainer import enrich_event_detail  # HU-7.4
 from audit_tracer.auth.control_acceso import has_permission  # HU-1.4
 from audit_tracer.lineage import build_lineage_graph, list_lineage_datasets  # HU-7.1
 from datetime import datetime, timedelta
+from audit_tracer.utils.zona_horaria import (  # hora Colombia en la interfaz
+    formatear_fecha, ahora_colombia, inicio_dia_utc, fin_dia_utc,
+    lote_a_hora_colombia, ETIQUETA_ZONA,
+)
 
 
 def _categorize_critical_reason(motivo: str) -> str:
@@ -82,6 +86,31 @@ app = Flask(__name__)
 # definida, se genera una aleatoria por proceso (las sesiones se pierden
 # al reiniciar, pero nunca quedan falsificables).
 app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+
+# Hora de Colombia en todas las pantallas. Los timestamps se guardan en UTC
+# (hash, firmas y lotes de Merkle dependen de ese valor exacto); solo se
+# convierten al mostrarlos.
+app.jinja_env.filters['hora_col'] = formatear_fecha
+app.jinja_env.filters['hora_col_min'] = lambda v: formatear_fecha(v, segundos=False)
+app.jinja_env.filters['lote_col'] = lote_a_hora_colombia
+app.jinja_env.globals['ZONA_HORARIA'] = ETIQUETA_ZONA
+
+
+def _limites_dia_colombia(fecha_inicio, fecha_fin):
+    """
+    Los <input type="date"> entregan días de Colombia ('YYYY-MM-DD'); la base
+    guarda UTC. Devuelve los límites del rango ya convertidos a UTC ISO para
+    la comparación lexicográfica sobre timestamp. Una fecha inválida se ignora.
+    """
+    try:
+        inicio = inicio_dia_utc(fecha_inicio)
+    except ValueError:
+        inicio = None
+    try:
+        fin = fin_dia_utc(fecha_fin)
+    except ValueError:
+        fin = None
+    return inicio, fin
 
 # HU-5.6/5.7 — Detrás de un proxy inverso real (Railway, Heroku, etc.) Flask
 # ve la conexión interna proxy→contenedor, que es HTTP aunque el cliente sí
@@ -889,8 +918,9 @@ def dashboard():
     registros_corruptos = len(verify_integrity(conn))
 
     # Eventos hoy
-    today = datetime.utcnow().strftime('%Y-%m-%d')
-    events_today = [e for e in all_events if e['timestamp'].startswith(today)]
+    hoy_inicio, hoy_fin = _limites_dia_colombia(
+        ahora_colombia().date().isoformat(), ahora_colombia().date().isoformat())
+    events_today = [e for e in all_events if hoy_inicio <= e['timestamp'] <= hoy_fin]
     
     # Alertas críticas
     critical_alerts = [e for e in all_events if e['nivel_alerta'] == 'CRITICO']
@@ -953,7 +983,7 @@ def dashboard():
         eventos_por_tipo=eventos_por_tipo,
         alertas_por_nivel=alertas_por_nivel,
         criticos_por_causa=criticos_por_causa,
-        now_date=today
+        now_date=ahora_colombia().strftime('%Y-%m-%d %H:%M')
     )
 
 
@@ -990,8 +1020,8 @@ def reportes():
     # Mismo criterio que /eventos: ampliar 'YYYY-MM-DD' a los límites del día
     # para que la comparación lexicográfica sobre el timestamp ISO 8601 cubra
     # el día completo.
-    reporte_fecha_inicio_query = f"{reporte_fecha_inicio}T00:00:00" if reporte_fecha_inicio else None
-    reporte_fecha_fin_query = f"{reporte_fecha_fin}T23:59:59.999999" if reporte_fecha_fin else None
+    reporte_fecha_inicio_query, reporte_fecha_fin_query = _limites_dia_colombia(
+        reporte_fecha_inicio, reporte_fecha_fin)
 
     conn = get_db()
     reporte_eventos = generate_report(
@@ -1042,8 +1072,7 @@ def exportar_reporte():
     fecha_inicio = request.args.get('reporte_fecha_inicio')
     fecha_fin = request.args.get('reporte_fecha_fin')
 
-    fecha_inicio_query = f"{fecha_inicio}T00:00:00" if fecha_inicio else None
-    fecha_fin_query = f"{fecha_fin}T23:59:59.999999" if fecha_fin else None
+    fecha_inicio_query, fecha_fin_query = _limites_dia_colombia(fecha_inicio, fecha_fin)
 
     conn = get_db()
     buffer = io.StringIO()
@@ -1054,6 +1083,7 @@ def exportar_reporte():
         fecha_fin=fecha_fin_query,
         tipo_accion=tipo_accion,
         dataset_nombre=dataset_nombre,
+        formatear_timestamp=formatear_fecha,
     )
     conn.close()
 
@@ -1083,8 +1113,7 @@ def eventos():
     # Los campos <input type="date"> entregan 'YYYY-MM-DD'; se amplían a los
     # límites del día para que la comparación lexicográfica sobre el
     # timestamp ISO 8601 cubra el día completo (CA2).
-    fecha_inicio_query = f"{fecha_inicio}T00:00:00" if fecha_inicio else None
-    fecha_fin_query = f"{fecha_fin}T23:59:59.999999" if fecha_fin else None
+    fecha_inicio_query, fecha_fin_query = _limites_dia_colombia(fecha_inicio, fecha_fin)
 
     # Paginación
     page = request.args.get('page', 1, type=int)
@@ -1254,6 +1283,7 @@ def exportar_eventos_criticos():
         conn, buffer,
         usuario_id=usuario_id,
         tipo_accion=tipo_accion,
+        formatear_timestamp=formatear_fecha,
     )
     conn.close()
 

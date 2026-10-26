@@ -589,13 +589,14 @@ class TestHorarioLaboral:
         assert "no identificado" in ev["motivo_alerta"].lower()
 
     def test_es_horario_laboral_respeta_limites_configurados(self):
-        """Utilidad pura: [HORA_INICIO_LABORAL, HORA_FIN_LABORAL) es horario laboral."""
+        """Utilidad pura: [HORA_INICIO_LABORAL, HORA_FIN_LABORAL) en hora de Colombia es horario laboral."""
         from datetime import datetime
         from audit_tracer.utils.horario import es_horario_laboral, HORA_INICIO_LABORAL, HORA_FIN_LABORAL
+        from audit_tracer.utils.zona_horaria import ZONA_COLOMBIA
 
-        dentro = datetime(2026, 1, 5, HORA_INICIO_LABORAL, 0)
-        fuera_temprano = datetime(2026, 1, 5, max(HORA_INICIO_LABORAL - 1, 0), 0)
-        fuera_tarde = datetime(2026, 1, 5, HORA_FIN_LABORAL, 0)
+        dentro = datetime(2026, 1, 5, HORA_INICIO_LABORAL, 0, tzinfo=ZONA_COLOMBIA)
+        fuera_temprano = datetime(2026, 1, 5, max(HORA_INICIO_LABORAL - 1, 0), 0, tzinfo=ZONA_COLOMBIA)
+        fuera_tarde = datetime(2026, 1, 5, HORA_FIN_LABORAL, 0, tzinfo=ZONA_COLOMBIA)
 
         assert es_horario_laboral(dentro) is True
         assert es_horario_laboral(fuera_tarde) is False

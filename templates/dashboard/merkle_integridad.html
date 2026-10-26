@@ -223,7 +223,7 @@
                         placeholder="Ej: 2026-10-22T14"
                         value="{{ batch_hour_verificado or '' }}"
                         pattern="\d{4}-\d{2}-\d{2}T\d{2}"
-                        title="Formato: YYYY-MM-DDTHH"
+                        title="Formato: YYYY-MM-DDTHH (el identificador del lote está en UTC; la hora de Colombia se muestra al lado de cada lote)"
                         required
                     >
                 </div>
@@ -245,7 +245,7 @@
             <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
                 <div>
                     <div style="font-size:20px;font-weight:800;margin-bottom:6px;">
-                        {{ icon }} Lote <code>{{ resultado.batch_hour }}</code>
+                        {{ icon }} Lote <code>{{ resultado.batch_hour }}</code> <small>({{ resultado.batch_hour | lote_col }}, {{ ZONA_HORARIA }})</small>
                     </div>
                     <span class="status-badge {{ badge_cls }}">
                         {% if ok %}ÍNTEGRO{% else %}ALTERACIÓN DETECTADA{% endif %}
@@ -254,7 +254,7 @@
                 {% if resultado.published_at %}
                 <div style="text-align:right;font-size:12px;color:var(--clr-text-muted);">
                     Ancla publicada el<br>
-                    <strong>{{ resultado.published_at[:19] | replace('T', ' ') }}</strong>
+                    <strong>{{ resultado.published_at | hora_col }}</strong>
                 </div>
                 {% endif %}
             </div>
@@ -326,7 +326,7 @@
                 desde la API <code>POST /merkle/publicar</code>.
             </p>
             {% for h in pendientes %}
-            <span class="pending-chip">{{ h }}</span>
+            <span class="pending-chip" title="{{ h | lote_col }} ({{ ZONA_HORARIA }})">{{ h }} · {{ h | lote_col }}</span>
             {% endfor %}
         </div>
         {% endif %}
@@ -351,7 +351,7 @@
                 <tbody>
                 {% for a in todos_anchors %}
                 <tr>
-                    <td><code>{{ a.batch_hour }}</code></td>
+                    <td><code>{{ a.batch_hour }}</code><br><small>{{ a.batch_hour | lote_col }}</small></td>
                     <td>
                         {% if a.published_root %}
                         <span class="hash-mono">{{ a.published_root[:12] }}…</span>
@@ -382,7 +382,7 @@
                         {% endif %}
                     </td>
                     <td style="font-size:12px;color:var(--clr-text-muted);">
-                        {{ a.published_at[:16] | replace('T', ' ') if a.published_at else '—' }}
+                        {{ a.published_at | hora_col_min }}
                     </td>
                     <td>
                         <form method="POST" action="{{ url_for('merkle_verificar_ancla') }}" style="display:inline;">
