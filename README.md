@@ -575,3 +575,16 @@ por timestamp frente a inserción desordenada, selección por dataset y por
 evento, una integración con los interceptores reales (`pd.read_csv` →
 `to_csv`) y las rutas con una base central aislada (permisos, enlace al
 detalle de HU-4.3).
+
+## Matriz de trazabilidad normativa (HU-6.6)
+
+[`docs/matriz_trazabilidad_normativa.md`](docs/matriz_trazabilidad_normativa.md)
+es el anexo del documento final: vincula cada control técnico (CT-01 … CT-32)
+con su componente, las cláusulas de HIPAA y de la Ley 1581 que satisface y la
+evidencia (HU y prueba automatizada). Incluye una vista por cláusula y las
+brechas encontradas durante el levantamiento.
+
+La misma matriz está en [`docs/matriz_trazabilidad_normativa.csv`](docs/matriz_trazabilidad_normativa.csv)
+para que HU-7.3 la lea desde código. `tests/test_matriz_normativa.py` falla si
+una prueba o un archivo citados como evidencia desaparecen, o si el CSV y el
+anexo dejan de coincidir.
