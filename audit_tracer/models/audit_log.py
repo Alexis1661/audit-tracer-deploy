@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 from ..utils.hashing import hash_event
+from ..normative_mapping import referencia_normativa
 
 # Los 13 campos funcionales sobre los que se calcula hash_integridad.
 # event_id, evento_uuid y hash_integridad quedan fuera a propósito:
@@ -403,9 +404,13 @@ def verify_integrity(conn: sqlite3.Connection) -> List[Dict]:
 # ──────────────────────────────────────────────────────────────
 
 # CA2/CA3 — Columnas exactas del reporte de auditoría (display y CSV).
+# HU-7.3 CA2 — 'referencia_normativa' es la columna adicional con la cláusula
+# HIPAA / Ley 1581 que cada evento ayuda a demostrar (ver normative_mapping).
+# No es una columna de audit_log: se calcula al generar el reporte.
 REPORT_CSV_COLUMNS = [
     'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
     'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+    'referencia_normativa',
 ]
 
 # CA4 — Mensaje exacto cuando los filtros no producen eventos. Única fuente
@@ -429,6 +434,10 @@ def generate_report(
     CA2 — Cada evento se reduce a las columnas REPORT_CSV_COLUMNS, en orden
     cronológico ascendente (get_events() ya ordena por timestamp ASC).
 
+    HU-7.3 CA2/CA3 — Cada evento se anota con su referencia_normativa según
+    el tipo_accion; si no tiene una asociada, la celda dice explícitamente
+    SIN_REFERENCIA_NORMATIVA en lugar de quedar vacía.
+
     Returns:
         List[Dict]: Eventos del reporte, o [] si ningún evento cumple los
         filtros (CA4: no se lanza excepción, la lista vacía es el resultado).
@@ -441,7 +450,12 @@ def generate_report(
         tipo_accion=tipo_accion,
         dataset_nombre=dataset_nombre,
     )
-    return [{col: evento.get(col) for col in REPORT_CSV_COLUMNS} for evento in eventos]
+    reporte = []
+    for evento in eventos:
+        fila = {col: evento.get(col) for col in REPORT_CSV_COLUMNS}
+        fila['referencia_normativa'] = referencia_normativa(evento.get('tipo_accion'))
+        reporte.append(fila)
+    return reporte
 
 
 def export_report_to_csv(

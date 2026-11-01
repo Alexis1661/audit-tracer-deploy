@@ -248,3 +248,15 @@ HU-7.3 debe leer la matriz desde [`matriz_trazabilidad_normativa.csv`](matriz_tr
 Para anotar un reporte con su base normativa, HU-7.3 puede cruzar el `tipo_accion` de cada evento con `eventos_audit_log`. Por ejemplo, un `ACCESO_FALLIDO` lleva a CT-03, CT-04, CT-05 y CT-15, y de ahí a §164.308(a)(5)(ii)(C), §164.308(a)(6)(ii) y Art. 17 lit. d.
 
 Si se agrega un control, hay que actualizar el CSV y este anexo en el mismo cambio. `tests/test_matriz_normativa.py` verifica que ambos queden sincronizados.
+
+### 8.1 Implementación (HU-7.3)
+
+El cruce quedó implementado en `audit_tracer/normative_mapping.py` (`MAPEO_NORMATIVO`): para cada `tipo_accion` une las cláusulas HIPAA, los artículos de la Ley 1581 y los controles (CT-xx) de todas las filas que lo mencionan en `eventos_audit_log`. La tabla se escribe en el paquete, y no se lee del CSV en tiempo de ejecución, porque `docs/` no se instala con la librería. `tests/test_mapeo_normativo.py::TestCA1TablaDeMapeo::test_tabla_coincide_exactamente_con_la_matriz_hu_6_6` la compara con este CSV: **si se cambian los eventos o las cláusulas de un control, también hay que actualizar `MAPEO_NORMATIVO`**.
+
+El reporte de auditoría (`/reportes` y `/reportes/exportar`, HU-4.5) agrega la columna `referencia_normativa` con el formato:
+
+```
+HIPAA §164.312(b); §164.312(c)(1) | Ley 1581 Art. 4 lit. d; Art. 17 lit. m | Matriz CT-13
+```
+
+Los tipos sin control asociado (por ejemplo `MODELADO` y `MODELADO_FALLIDO`) muestran `Sin referencia normativa asociada`, nunca una celda vacía.
