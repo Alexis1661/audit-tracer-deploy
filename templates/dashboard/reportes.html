@@ -292,6 +292,7 @@
                         <th>Dataset</th>
                         <th>Columnas Afectadas</th>
                         <th>Nivel de Alerta</th>
+                        <th title="HU-7.3 — Cláusula HIPAA / Ley 1581 que el evento ayuda a demostrar (matriz de trazabilidad normativa HU-6.6)">Referencia Normativa</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -304,10 +305,15 @@
                         <td>{{ evento.dataset_nombre or '—' }}</td>
                         <td>{{ evento.columnas_afectadas or '—' }}</td>
                         <td><span class="badge badge-{{ evento.nivel_alerta | lower }}">{{ evento.nivel_alerta }}</span></td>
+                        {% if evento.referencia_normativa == sin_referencia_normativa %}
+                        <td class="referencia-normativa referencia-normativa--ausente" style="font-style: italic; color: var(--clr-text-muted);">{{ evento.referencia_normativa }}</td>
+                        {% else %}
+                        <td class="referencia-normativa" style="font-size: 0.85em; min-width: 260px;">{{ evento.referencia_normativa }}</td>
+                        {% endif %}
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" style="text-align: center; padding: 60px; color: var(--clr-text-muted);">
+                        <td colspan="8" style="text-align: center; padding: 60px; color: var(--clr-text-muted);">
                             {{ reporte_mensaje_vacio }}
                         </td>
                     </tr>

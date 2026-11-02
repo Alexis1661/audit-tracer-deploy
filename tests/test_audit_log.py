@@ -561,6 +561,7 @@ class TestGenerateReport:
         assert REPORT_CSV_COLUMNS == [
             'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
             'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+            'referencia_normativa',  # HU-7.3 CA2
         ]
 
 
@@ -582,7 +583,7 @@ class TestExportReportToCsv:
         return db_conn
 
     # ── Test 7: CSV ───────────────────────────────────────────────
-    def test_csv_tiene_cabecera_correcta_y_siete_columnas(self, eventos_reporte, tmp_path):
+    def test_csv_tiene_cabecera_correcta_y_ocho_columnas(self, eventos_reporte, tmp_path):
         dest = tmp_path / "reporte.csv"
         total = export_report_to_csv(eventos_reporte, str(dest))
         assert total == 2
@@ -594,8 +595,9 @@ class TestExportReportToCsv:
         assert header == [
             'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
             'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+            'referencia_normativa',  # HU-7.3 CA2
         ]
-        assert len(header) == 7
+        assert len(header) == 8  # 7 de HU-4.5 + referencia_normativa (HU-7.3)
 
     def test_csv_respeta_orden_cronologico_y_solo_incluye_eventos_filtrados(self, eventos_reporte, tmp_path):
         dest = tmp_path / "reporte_u123.csv"
@@ -632,6 +634,7 @@ class TestExportReportToCsv:
         assert rows[0] == [
             'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
             'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+            'referencia_normativa',  # HU-7.3 CA2
         ]
 
     def test_csv_exporta_a_buffer_en_memoria(self, eventos_reporte):

@@ -54,6 +54,7 @@ from audit_tracer.merkle import (                                    # HU-6.2
     get_pending_batch_hours,
 )
 from audit_tracer.event_explainer import enrich_event_detail  # HU-7.4
+from audit_tracer.normative_mapping import SIN_REFERENCIA_NORMATIVA  # HU-7.3
 from audit_tracer.auth.control_acceso import has_permission  # HU-1.4
 from audit_tracer.lineage import build_lineage_graph, list_lineage_datasets  # HU-7.1
 from datetime import datetime, timedelta
@@ -1024,6 +1025,7 @@ def reportes():
         reporte_eventos=reporte_eventos,
         reporte_filtros=reporte_filtros,
         reporte_mensaje_vacio=NO_RESULTS_MESSAGE if not reporte_eventos else None,
+        sin_referencia_normativa=SIN_REFERENCIA_NORMATIVA,  # HU-7.3 CA3
     )
 
 
@@ -1034,7 +1036,8 @@ def exportar_reporte():
     """
     HU-4.5 CA3 — Exporta a CSV el reporte de auditoría filtrado por
     usuario/fecha/tipo_accion/dataset, con la cabecera estandarizada
-    de REPORT_CSV_COLUMNS.
+    de REPORT_CSV_COLUMNS. HU-7.3 CA2 — incluye la columna
+    referencia_normativa con la cláusula HIPAA / Ley 1581 de cada evento.
     """
     usuario_id = request.args.get('reporte_usuario_id')
     tipo_accion = request.args.get('reporte_tipo_accion')
