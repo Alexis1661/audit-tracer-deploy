@@ -273,8 +273,31 @@ def generate_alert_diagnosis(evento: Dict[str, Any]) -> Dict[str, Any]:
 
     es_critico = nivel == "CRITICO"
     es_advertencia = nivel == "ADVERTENCIA"
+    es_anomalia = nivel == "ANOMALIA"
 
-    if es_critico:
+    if es_anomalia:
+        categoria_alerta = "Anomalía de Comportamiento Detectada"
+        clase_css = "alert-anomalia"
+        m_lower = motivo.lower()
+        if "volumen" in m_lower or "promedio" in m_lower:
+            impacto = (
+                "El volumen de registros u operaciones clínicas supera significativamente "
+                "el promedio histórico establecido para el usuario. Podría indicar extracción masiva "
+                "no rutinaria o anomalía en scripts automatizados."
+            )
+        elif "horario" in m_lower or "fuera del horario" in m_lower:
+            impacto = (
+                "Acceso a datos clínicos fuera del horario habitual observado para este usuario. "
+                "Requiere corroborar si corresponde a una guardia extraordinaria o un potencial compromiso de credenciales."
+            )
+        elif "correlación" in m_lower or "correlacion" in m_lower or "múltiples usuarios" in m_lower:
+            impacto = (
+                "Alerta de correlación: el mismo dataset clínico fue accedido concurrentemente por múltiples "
+                "usuarios en una ventana temporal estrecha. Patrón sospechoso de acceso coordinado sobre datos sensibles."
+            )
+        else:
+            impacto = "Patrón inusual detectado por el motor de análisis de comportamiento sobre eventos centralizados."
+    elif es_critico:
         categoria_alerta = "Alerta de Severidad Alta"
         clase_css = "alert-critica"
         if "masiva" in motivo.lower() or (evento.get("filas_exportadas") or 0) > 1000:
@@ -326,7 +349,8 @@ def generate_alert_diagnosis(evento: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "nivel": nivel,
-        "es_alerta": es_critico or es_advertencia,
+        "es_alerta": es_critico or es_advertencia or es_anomalia,
+        "es_anomalia": es_anomalia,
         "es_critico": es_critico,
         "es_advertencia": es_advertencia,
         "categoria_alerta": categoria_alerta,

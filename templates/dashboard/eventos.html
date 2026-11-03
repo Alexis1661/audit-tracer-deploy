@@ -45,6 +45,7 @@
     .badge-normal { background: #F5F5F7; color: var(--clr-text-muted); }
     .badge-advertencia { background: #FFF9E6; color: #D97706; }
     .badge-critico { background: #FEF2F2; color: #DC2626; }
+    .badge-anomalia { background: #FAF5FF; color: #7E22CE; border: 1px solid #D8B4FE; }
     
     .hash-code {
         font-family: 'SF Mono', 'Fira Code', monospace;
@@ -62,6 +63,25 @@
     }
     .audit-table tr.fila-acceso-fallido:hover { background: #FEE2E2; }
     .audit-table tr.fila-acceso-fallido td:first-child { padding-left: 13px; } /* compensa el border-left */
+
+    /* HU-6.3: resaltado visual de anomalías */
+    .audit-table tr.fila-anomalia {
+        background: #FAF5FF;
+        border-left: 3px solid #9333EA;
+    }
+    .audit-table tr.fila-anomalia:hover { background: #F3E8FF; }
+    .audit-table tr.fila-anomalia td:first-child { padding-left: 13px; }
+    .motivo-anomalia-tag {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #7E22CE;
+        background: #FAF5FF;
+        border: 1px solid #E9D5FF;
+        padding: 2px 8px;
+        border-radius: 5px;
+        margin-top: 4px;
+    }
     .motivo-fallo-tag {
         display: inline-block;
         font-size: 11px;
@@ -222,6 +242,10 @@
                     <input type="checkbox" id="solo_criticos" name="nivel_alerta" value="CRITICO" {% if filtros.nivel_alerta == 'CRITICO' %}checked{% endif %}>
                     <label for="solo_criticos" class="form-label" style="margin: 0; white-space: nowrap;">Solo Críticos</label>
                 </div>
+                <div style="display: flex; align-items: center; gap: 8px; padding-bottom: 10px;">
+                    <input type="checkbox" id="solo_anomalias" name="solo_anomalias" value="1" {% if filtros.solo_anomalias or filtros.nivel_alerta == 'ANOMALIA' %}checked{% endif %}>
+                    <label for="solo_anomalias" class="form-label" style="margin: 0; white-space: nowrap; color: #7E22CE; font-weight: 700;">Solo Anomalías</label>
+                </div>
                 <button type="submit" class="btn btn-outline">Filtrar Resultados</button>
                 {% if filtros.usuario_id or filtros.tipo_accion or filtros.nivel_alerta or filtros.dataset_nombre or filtros.fecha_inicio or filtros.fecha_fin %}
                 <a href="{{ url_for('eventos') }}" class="btn btn-outline">Limpiar</a>
@@ -246,8 +270,8 @@
                 </thead>
                 <tbody>
                     {% for evento in eventos %}
-                    {# HU-2.4: clase especial para intentos fallidos de acceso #}
-                    <tr{% if evento.tipo_accion == 'ACCESO_FALLIDO' %} class="fila-acceso-fallido"{% endif %}>
+                    {# HU-2.4 y HU-6.3: clases especiales para fallidos y anomalías #}
+                    <tr{% if evento.tipo_accion == 'ACCESO_FALLIDO' %} class="fila-acceso-fallido"{% elif evento.nivel_alerta == 'ANOMALIA' %} class="fila-anomalia"{% endif %}>
                         <td>
                             <a href="{{ url_for('detalle_evento', event_id=evento.event_id) }}" style="font-family: monospace; font-weight: 700; color: var(--clr-accent-blue); text-decoration: none;" title="Ver detalle del evento #{{ evento.event_id }}">
                                 #{{ evento.event_id }}

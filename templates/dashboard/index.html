@@ -3,6 +3,9 @@
 {% block title %}Dashboard — Audit Tracer{% endblock %}
 
 {% block extra_css %}
+<style>
+.badge-anomalia { background: #FAF5FF; color: #7E22CE; border: 1px solid #D8B4FE; }
+</style>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 {% endblock %}
 
@@ -155,6 +158,21 @@
                 </div>
                 <div class="stat-card__value">{{ total_exportaciones }}</div>
                 <div class="stat-card__label">Exportaciones de Datos · {{ filas_exportadas_total }} filas</div>
+            </div>
+            {# HU-6.3 CA5: Tarjeta de Anomalías Detectadas #}
+            <div class="stat-card">
+                <div class="stat-card__header">
+                    <div class="stat-card__icon" style="color: #7E22CE;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    </div>
+                    {% if total_anomalias > 0 %}
+                    <span style="font-size: 11px; color: #7E22CE; font-weight: 700;">{{ total_anomalias }} detectada{{ 's' if total_anomalias != 1 else '' }}</span>
+                    {% else %}
+                    <span style="font-size: 11px; color: #34C759; font-weight: 700;">Sin anomalías</span>
+                    {% endif %}
+                </div>
+                <div class="stat-card__value" style="{% if total_anomalias > 0 %}color: #7E22CE;{% endif %}">{{ total_anomalias }}</div>
+                <div class="stat-card__label">Anomalías Detectadas · <a href="{{ url_for('eventos', solo_anomalias='1') }}" style="color: inherit; text-decoration: underline; font-weight: 700;">Ver registros</a></div>
             </div>
         </div>
 
