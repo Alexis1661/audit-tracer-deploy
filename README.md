@@ -642,3 +642,95 @@ El documento [`docs/lineamientos_buenas_practicas_seguridad.md`](docs/lineamient
 - **Auditoría y Trazabilidad (CA3 / PDGTRAZDSA-90):** Principio de inmutabilidad garantizado por triggers SQL en base de datos central, verificación de integridad SHA-256 campo a campo, no repudio mediante firmas digitales asimétricas Ed25519, verificación logarítmica y anclaje externo con Árboles de Merkle, y detección proactiva de anomalías (volumen, horario y correlación).
 - **Alineación Normativa (CA4):** Mapeo exhaustivo frente a la Ley Estatutaria 1581 de 2012 (Colombia), HIPAA Security & Privacy Rule (45 CFR Parte 164) e ISO/IEC 27001:2022 (Anexo A).
 - **Escenarios Reales y Checklists (CA5):** Ejemplos prácticos de uso seguro en notebooks, mitigación de exfiltraciones no autorizadas, reportes normativos para auditoría externa y listas de chequeo de gobernanza periódica.
+
+## Alertas en tiempo real de eventos críticos (HU-7.2)
+
+El oficial de cumplimiento recibe un correo automático cuando ocurre un
+evento crítico de auditoría, sin tener que revisar el dashboard.
+
+### Catálogo de eventos críticos (CA1) — `audit_tracer/alerts/catalogo.py`
+
+| Código | Severidad | Regla | Origen |
+|---|---|---|---|
+| `EXPORTACION_MASIVA` | ALTA | `EXPORTACION` con más de `UMBRAL_EXPORTACION_MASIVA` (1.000) filas | HU-2.3 |
+| `ACCESOS_DENEGADOS_REPETIDOS` | ALTA | ≥ 3 `ACCESO_DENEGADO`/`ACCESO_FALLIDO` del mismo usuario en 10 min | HU-1.4 / 2.4 / 4.4 |
+| `ANOMALIA_DETECTADA` | MEDIA | `nivel_alerta = 'ANOMALIA'` (detector de HU-6.3) | HU-6.3 |
+| `FIRMA_INVALIDA` | CRITICA | evento rechazado por firma digital inválida o ausente | HU-6.1 / 6.5 |
+| `AUDITORIA_DESACTIVADA` | CRITICA | se apagó un interceptor de captura | HU-5.1 |
+
+Las tres primeras son las que pide CA1; las dos últimas ya se registraban
+como `CRITICO` y comprometen la integridad de la evidencia. Las reglas
+reutilizan las clasificaciones de esas HU, no las reimplementan. Un evento
+que coincide con varios tipos genera **un** correo con la severidad mayor.
+Los accesos denegados se agrupan: una ráfaga genera un correo por usuario
+cada 10 minutos (el resto queda en el historial como `AGRUPADA`).
+
+### Disparo desacoplado del registro (CA4) — `audit_tracer/alerts/dispatcher.py`
+
+`models/audit_log.py::_execute_insert()` (el único punto por donde pasa todo
+INSERT en `audit_log`) ejecuta *hooks post-inserción* **después del COMMIT**.
+El despachador de alertas se registra como hook y lo único que hace en el
+hilo de la petición es `queue.put_nowait(event_id)`. Un hilo daemon
+(`audit-alertas`) abre su propia conexión, relee el evento, lo clasifica,
+resuelve destinatarios, envía con 3 reintentos y backoff, y deja el
+resultado en `alertas_notificaciones`. Consecuencias:
+
+- El evento ya está persistido cuando se piensa siquiera en notificar.
+- Un SMTP lento o caído no retrasa `insert_event()` ni la respuesta HTTP
+  (probado con un servicio de 2 s de demora: el INSERT tarda < 0,5 s).
+- Cualquier excepción de un hook se atrapa y va al log interno.
+- Si la cola se llena, se pierde la *notificación*, nunca el evento.
+- Solo se escuchan inserciones sobre la base central (se compara la ruta
+  del archivo de la conexión), no las de la base local de la librería.
+
+### Servicio de correo (CA2/CA3) — `audit_tracer/alerts/email_service.py`
+
+`smtplib` de la librería estándar, configurado solo por variables de entorno:
+
+| Variable | Uso |
+|---|---|
+| `AUDIT_SMTP_HOST` | servidor SMTP (activa el envío real) |
+| `AUDIT_SMTP_PORT` | 587 por defecto (465 si `AUDIT_SMTP_SSL=1`) |
+| `AUDIT_SMTP_USER` / `AUDIT_SMTP_PASSWORD` | credenciales (app password) |
+| `AUDIT_SMTP_FROM` | remitente (por defecto el usuario SMTP) |
+| `AUDIT_SMTP_STARTTLS` / `AUDIT_SMTP_SSL` | modo TLS (STARTTLS por defecto) |
+| `AUDIT_DASHBOARD_URL` | URL base para el enlace del correo (si no, se toma de la primera petición) |
+| `AUDIT_ALERTAS_OUTBOX` | desarrollo: sin SMTP, guarda cada correo como `.eml` en esa carpeta |
+| `AUDIT_ALERTAS_DESACTIVADAS=1` | apaga el despachador (lo usa la suite de pruebas) |
+
+El correo (texto + HTML) incluye usuario, tipo de acción, dataset,
+timestamp, ID del evento, severidad, motivo y un enlace directo a
+`/eventos/<event_id>` (detalle de HU-4.3). Los destinatarios van en `Bcc`.
+Sin servicio configurado, la notificación queda como `SIN_SERVICIO_CORREO`
+en el historial — visible, nunca silenciosa.
+
+### Configuración desde el dashboard (Sub-tarea 4) — `/admin/alertas`
+
+Solo ADMIN. Muestra el catálogo, el estado del despachador y del servicio
+de correo, y permite:
+
+- Agregar destinatarios por **rol** (se expande a los correos de los
+  usuarios activos con ese rol) o por **correo** suelto.
+- Fijar la **severidad mínima** (MEDIA / ALTA / CRITICA) y, opcionalmente,
+  limitar a ciertos tipos del catálogo.
+- Activar, desactivar o eliminar destinatarios, y enviar un correo de prueba.
+- Ver las últimas 50 notificaciones con su estado y enlace al evento.
+
+La primera vez se siembran `ROL=AUDITOR` (severidad MEDIA: el oficial de
+cumplimiento recibe todo) y `ROL=ADMIN` (ALTA). Cada cambio de
+configuración queda en `audit_log` como `CONFIGURACION_ALERTAS`.
+Las tablas `alertas_destinatarios` y `alertas_notificaciones`
+(`audit_tracer/models/alertas.py`) se crean de forma perezosa en la base
+central, fuera de los triggers de inmutabilidad de `audit_log`.
+
+### Pruebas
+
+`tests/test_alertas_tiempo_real.py` (61 casos): clasificación de cada tipo
+del catálogo y sus bordes (umbral, ventana, otro usuario, timestamps
+idénticos), resolución de destinatarios, contenido del correo, disparo por
+cada tipo crítico, agrupación, idempotencia, reintentos, CA4 (correo lento,
+correo caído, hook que lanza, cola llena, hilo que sobrevive a errores),
+SMTP con `smtplib` simulado, y la integración con la app: una exportación
+masiva sincronizada por `/api/eventos/sincronizar` y accesos denegados
+repetidos en el dashboard disparan el correo, y la configuración de
+`/admin/alertas` cambia a quién llega el siguiente.

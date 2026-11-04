@@ -60,6 +60,15 @@ from audit_tracer.event_explainer import enrich_event_detail  # HU-7.4
 from audit_tracer.normative_mapping import SIN_REFERENCIA_NORMATIVA  # HU-7.3
 from audit_tracer.auth.control_acceso import has_permission  # HU-1.4
 from audit_tracer.lineage import build_lineage_graph, list_lineage_datasets  # HU-7.1
+from audit_tracer.alerts import (                                    # HU-7.2
+    CATALOGO_EVENTOS_CRITICOS,
+    ErrorEnvioCorreo,
+    configurar_alertas,
+    crear_servicio_correo_desde_entorno,
+    obtener_despachador,
+)
+from audit_tracer.models import alertas as alertas_model             # HU-7.2
+from audit_tracer.auth.control_acceso import PERMISSION_MATRIX       # HU-7.2
 from datetime import datetime, timedelta
 
 
@@ -102,6 +111,26 @@ if os.environ.get('TRUST_PROXY_HEADERS') == '1':
 
 # Directorio de trabajo: raíz del proyecto
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# HU-7.2 — Alertas en tiempo real. El despachador se engancha a cada INSERT
+# en la base central (models/audit_log.py) y notifica por correo en un hilo
+# aparte: el registro del evento nunca espera al envío (CA4). La suite de
+# pruebas lo apaga con AUDIT_ALERTAS_DESACTIVADAS=1 (tests/conftest.py) y
+# crea sus propios despachadores contra bases temporales.
+CENTRAL_DB_PATH = os.path.join(BASE_DIR, 'audit_central.db')
+if os.environ.get('AUDIT_ALERTAS_DESACTIVADAS') != '1':
+    try:
+        configurar_alertas(CENTRAL_DB_PATH, servicio_correo=crear_servicio_correo_desde_entorno())
+    except Exception as _exc:  # nunca impedir que el dashboard arranque
+        print(f"[AuditTracer] Alertas en tiempo real no disponibles: {_exc}")
+
+
+@app.before_request
+def _recordar_url_dashboard():
+    """HU-7.2 CA3 — URL base para el enlace del correo, si no se fijó AUDIT_DASHBOARD_URL."""
+    despachador = obtener_despachador()
+    if despachador is not None:
+        despachador.recordar_url_base(request.url_root)
 
 
 def get_db():
@@ -500,6 +529,168 @@ def admin_sincronizacion():
         total_rechazos=len(rechazos),
         rechazos_recientes=rechazos[:10],
     )
+
+
+# ── ALERTAS EN TIEMPO REAL (HU-7.2 Sub-tarea 4) ────────────────────────────────
+
+import re as _re
+_EMAIL_RE = _re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+
+def _auditar_config_alertas(conn, detalle: str) -> None:
+    """Deja constancia en audit_log de cada cambio en la configuración de alertas."""
+    try:
+        insert_event(conn, {
+            'usuario_id': session.get('usuario_id', 'DESCONOCIDO'),
+            'sesion_id': session.get('sesion_id', 'N/A'),
+            'timestamp': datetime.utcnow().isoformat(),
+            'tipo_accion': 'CONFIGURACION_ALERTAS',
+            'contexto_ejecucion': detalle,
+            'nivel_alerta': 'NORMAL',
+        })
+    except Exception:
+        pass
+
+
+def _tipos_evento_del_form() -> list:
+    return [t for t in request.form.getlist('tipos_evento') if t in CATALOGO_EVENTOS_CRITICOS]
+
+
+@app.route('/admin/alertas')
+@login_required
+@admin_required
+def admin_alertas():
+    """
+    HU-7.2 — Configuración de alertas: catálogo de eventos críticos (CA1),
+    a quién se notifica y con qué severidad (Sub-tarea 4), estado del
+    servicio de correo e historial de notificaciones enviadas.
+    """
+    conn = get_db()
+    destinatarios = alertas_model.listar_destinatarios(conn)
+    for d in destinatarios:
+        if d['tipo_destino'] == 'ROL':
+            d['correos'] = [r[0] for r in conn.execute(
+                "SELECT email FROM usuarios WHERE rol = ? AND activo = 1 ORDER BY email",
+                (d['valor'],),
+            ).fetchall()]
+    notificaciones = alertas_model.listar_notificaciones(conn, limite=50)
+    resumen = alertas_model.resumen_notificaciones(conn, horas=24)
+    conn.close()
+
+    despachador = obtener_despachador()
+    servicio = despachador.servicio_correo if despachador else None
+    return render_template(
+        'admin/alertas.html',
+        nombre=session.get('nombre', 'Usuario'),
+        rol=session.get('rol', 'N/A'),
+        catalogo=list(CATALOGO_EVENTOS_CRITICOS.values()),
+        catalogo_nombres={c: t.nombre for c, t in CATALOGO_EVENTOS_CRITICOS.items()},
+        severidades=alertas_model.SEVERIDADES,
+        roles=sorted(PERMISSION_MATRIX.keys()),
+        destinatarios=destinatarios,
+        notificaciones=notificaciones,
+        resumen=resumen,
+        despachador_activo=bool(despachador and despachador.activo),
+        servicio_descripcion=servicio.descripcion() if servicio else None,
+        remitente=servicio.remitente if servicio else None,
+        url_base=despachador.url_base if despachador else None,
+    )
+
+
+@app.route('/admin/alertas/destinatarios', methods=['POST'])
+@login_required
+@admin_required
+def admin_alertas_crear_destinatario():
+    tipo = request.form.get('tipo_destino', '').upper()
+    valor = request.form.get('valor_rol') if tipo == 'ROL' else request.form.get('valor_email')
+    valor = (valor or '').strip()
+    severidad = request.form.get('severidad_minima', 'MEDIA').upper()
+    tipos = _tipos_evento_del_form()
+
+    if tipo not in alertas_model.TIPOS_DESTINO:
+        flash('Tipo de destinatario inválido.', 'error')
+    elif severidad not in alertas_model.SEVERIDADES:
+        flash('Severidad inválida.', 'error')
+    elif tipo == 'ROL' and valor.upper() not in PERMISSION_MATRIX:
+        flash('Rol inválido.', 'error')
+    elif tipo == 'EMAIL' and not _EMAIL_RE.match(valor):
+        flash('Correo electrónico inválido.', 'error')
+    else:
+        conn = get_db()
+        try:
+            alertas_model.crear_destinatario(
+                conn, tipo, valor, severidad, tipos, creado_por=session.get('usuario_id', 'SISTEMA')
+            )
+            _auditar_config_alertas(
+                conn, f"Alta destinatario {tipo}={valor} | severidad>={severidad} | "
+                      f"tipos={','.join(tipos) or 'TODOS'}"
+            )
+            flash(f'Destinatario {valor} agregado.', 'success')
+        except sqlite3.IntegrityError:
+            flash(f'El destinatario {valor} ya existe.', 'error')
+        finally:
+            conn.close()
+    return redirect(url_for('admin_alertas'))
+
+
+@app.route('/admin/alertas/destinatarios/<int:destinatario_id>', methods=['POST'])
+@login_required
+@admin_required
+def admin_alertas_actualizar_destinatario(destinatario_id):
+    accion = request.form.get('accion', 'actualizar')
+    conn = get_db()
+    try:
+        dest = alertas_model.obtener_destinatario(conn, destinatario_id)
+        if dest is None:
+            flash('Destinatario no encontrado.', 'error')
+        elif accion == 'eliminar':
+            alertas_model.eliminar_destinatario(conn, destinatario_id)
+            _auditar_config_alertas(conn, f"Baja destinatario {dest['tipo_destino']}={dest['valor']}")
+            flash(f"Destinatario {dest['valor']} eliminado.", 'success')
+        elif accion == 'alternar':
+            alertas_model.actualizar_destinatario(conn, destinatario_id, activo=not dest['activo'])
+            _auditar_config_alertas(
+                conn, f"{'Desactivado' if dest['activo'] else 'Activado'} destinatario "
+                      f"{dest['tipo_destino']}={dest['valor']}"
+            )
+            flash(f"Destinatario {dest['valor']} {'desactivado' if dest['activo'] else 'activado'}.", 'success')
+        else:
+            severidad = request.form.get('severidad_minima', '').upper()
+            if severidad not in alertas_model.SEVERIDADES:
+                flash('Severidad inválida.', 'error')
+            else:
+                tipos = _tipos_evento_del_form()
+                alertas_model.actualizar_destinatario(
+                    conn, destinatario_id, severidad_minima=severidad, tipos_evento=tipos
+                )
+                _auditar_config_alertas(
+                    conn, f"Cambio destinatario {dest['tipo_destino']}={dest['valor']} | "
+                          f"severidad>={severidad} | tipos={','.join(tipos) or 'TODOS'}"
+                )
+                flash(f"Destinatario {dest['valor']} actualizado.", 'success')
+    finally:
+        conn.close()
+    return redirect(url_for('admin_alertas'))
+
+
+@app.route('/admin/alertas/prueba', methods=['POST'])
+@login_required
+@admin_required
+def admin_alertas_prueba():
+    """Envía un correo de prueba para validar el servicio de envío configurado."""
+    destino = (request.form.get('destino') or '').strip()
+    despachador = obtener_despachador()
+    if not _EMAIL_RE.match(destino):
+        flash('Correo electrónico inválido.', 'error')
+    elif despachador is None:
+        flash('Las alertas en tiempo real están desactivadas en este servidor.', 'error')
+    else:
+        try:
+            despachador.enviar_prueba(destino)
+            flash(f'Correo de prueba enviado a {destino}.', 'success')
+        except ErrorEnvioCorreo as exc:
+            flash(f'No se pudo enviar el correo de prueba: {exc}', 'error')
+    return redirect(url_for('admin_alertas'))
 
 
 # ── API ENDPOINTS DE TOKENS (HU-5.5 CA5 / HU-6.1 ready) ───────────────────────
