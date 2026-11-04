@@ -279,6 +279,36 @@ def get_critical_events(
     )
 
 
+def get_anomaly_events(
+    conn: sqlite3.Connection,
+    usuario_id: str = None,
+    fecha_inicio: str = None,
+    fecha_fin: str = None,
+    tipo_accion: str = None,
+    dataset_nombre: str = None,
+    orden_desc: bool = True,
+) -> List[Dict]:
+    """
+    HU-6.3 CA5 — Consulta de eventos anómalos (nivel_alerta = 'ANOMALIA').
+    Permite consultar y filtrar únicamente los eventos clasificados como
+    anomalías detectadas sobre datos clínicos, combinados con los filtros
+    de get_events().
+
+    Returns:
+        List[Dict]: Eventos con nivel_alerta = 'ANOMALIA' que cumplen los filtros.
+    """
+    return get_events(
+        conn,
+        usuario_id=usuario_id,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        tipo_accion=tipo_accion,
+        dataset_nombre=dataset_nombre,
+        nivel_alerta='ANOMALIA',
+        orden_desc=orden_desc,
+    )
+
+
 def contar_intentos_fallidos_recientes(
     conn: sqlite3.Connection,
     usuario_id: str,

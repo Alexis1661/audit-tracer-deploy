@@ -606,3 +606,19 @@ y cubran las seis categorías en los cuatro componentes; prueba las
 mitigaciones que no tenían prueba propia, y reproduce como `xfail` estricto
 los riesgos abiertos confirmados, para que la suite avise cuando uno se
 corrija y el anexo deba actualizarse.
+
+## Benchmark de overhead de rendimiento (HU-6.7)
+
+[`benchmarks/overhead_referencia.py`](benchmarks/overhead_referencia.py) mide el impacto en tiempo de ejecución de la librería sobre operaciones reales de Pandas con y sin auditoría activa (CA1), sobre tres tamaños de dataset (CA2: 50.000, 200.000 y 1.000.000 filas).
+
+Resultados principales (documentados en detalle en [`docs/validacion_resultados.md`](docs/validacion_resultados.md) y [`benchmarks/resultados_benchmark.json`](benchmarks/resultados_benchmark.json)):
+
+- **Datasets grandes (1M filas / ~90 MB):** El overhead total del script es de apenas **0.11%** (prácticamente imperceptible), pues el tiempo de cómputo en C/Cython de Pandas absorbe el tiempo fijo de registro en SQLite.
+- **Datasets pequeños y medianos:** La auditoría se mantiene en torno a 4.5% en pipelines pequeños, pero el costo fijo de importación de criptografía (+170 ms a +295 ms) eleva el overhead porcentual en scripts de ejecución corta.
+- **Hallazgos para optimización futura (CA4):** Se identificaron oportunidades de lazy loading en `cryptography` y buffer asíncrono en memoria para eventos de lectura y exportación.
+
+Para reproducir:
+```bash
+python benchmarks/overhead_referencia.py --filas 50000 200000 1000000 --corridas 3 --salida-json benchmarks/resultados_benchmark.json
+python -m pytest tests/test_benchmark_overhead.py -v
+```

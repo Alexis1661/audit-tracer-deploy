@@ -31,6 +31,8 @@ from audit_tracer.auth.device_codes import (
 from audit_tracer.models.usuarios import get_all_users, get_user_by_id, get_user_by_email, set_user_public_key, get_user_public_key
 from audit_tracer.utils.session import generate_session_id
 from audit_tracer.models.audit_log import (
+    get_anomaly_events,       # HU-6.3
+
     get_events,
     get_event_by_id,
     verify_integrity,
@@ -44,6 +46,7 @@ from audit_tracer.models.audit_log import (
     get_sync_queue_summary,    # HU-5.8
 )
 from audit_tracer.digital_signatures import verify_event_signature  # HU-6.1
+from audit_tracer.anomaly_detector import evaluar_evento_anomalias  # HU-6.3
 from audit_tracer.merkle import (                                    # HU-6.2
     generate_proof_for_event,
     verify_merkle_proof,
@@ -793,6 +796,13 @@ def api_sincronizar_evento():
                 ),
             }), 422
 
+    # HU-6.3: Evaluar reglas de anomalías si el evento no viene firmado ni como crítico
+    if not evento.get('firma_digital') and evento.get('nivel_alerta') != 'CRITICO':
+        try:
+            _, evento, _ = evaluar_evento_anomalias(conn, evento)
+        except Exception:
+            pass
+
     try:
         registro, creado = insert_event_if_new(conn, evento)
     except sqlite3.IntegrityError as exc:
@@ -893,8 +903,9 @@ def dashboard():
     today = datetime.utcnow().strftime('%Y-%m-%d')
     events_today = [e for e in all_events if e['timestamp'].startswith(today)]
     
-    # Alertas críticas
+    # Alertas críticas y anomalías (HU-6.3)
     critical_alerts = [e for e in all_events if e['nivel_alerta'] == 'CRITICO']
+    anomalias_detectadas = [e for e in all_events if e['nivel_alerta'] == 'ANOMALIA']
 
     # Usuarios únicos (basado en el log)
     unique_users = len(set(e['usuario_id'] for e in all_events))
@@ -927,7 +938,7 @@ def dashboard():
     max_nivel_count = max(nivel_counts.values()) if nivel_counts else 1
     alertas_por_nivel = [
         {'nivel': nivel, 'count': nivel_counts.get(nivel, 0), 'pct': round(nivel_counts.get(nivel, 0) / max_nivel_count * 100)}
-        for nivel in ('NORMAL', 'ADVERTENCIA', 'CRITICO')
+        for nivel in ('NORMAL', 'ADVERTENCIA', 'ANOMALIA', 'CRITICO')
     ]
 
     # Eventos críticos agrupados por causa (HU-4.4 CA1)
@@ -945,6 +956,7 @@ def dashboard():
         eventos_hoy=len(events_today),
         usuarios_activos=unique_users,
         alertas_criticas=len(critical_alerts),
+        total_anomalias=len(anomalias_detectadas),  # HU-6.3
         registros_corruptos=registros_corruptos,
         total_exportaciones=total_exportaciones,
         filas_exportadas_total=filas_exportadas_total,
@@ -1079,6 +1091,9 @@ def eventos():
     usuario_id = request.args.get('usuario_id')
     tipo_accion = request.args.get('tipo_accion')
     nivel_alerta = request.args.get('nivel_alerta')
+    solo_anomalias = request.args.get('solo_anomalias')
+    if solo_anomalias and not nivel_alerta:
+        nivel_alerta = 'ANOMALIA'
     dataset_nombre = request.args.get('dataset_nombre')
     fecha_inicio = request.args.get('fecha_inicio')
     fecha_fin = request.args.get('fecha_fin')
@@ -1126,6 +1141,7 @@ def eventos():
             'usuario_id': usuario_id,
             'tipo_accion': tipo_accion,
             'nivel_alerta': nivel_alerta,
+            'solo_anomalias': solo_anomalias or (nivel_alerta == 'ANOMALIA'),
             'dataset_nombre': dataset_nombre,
             'fecha_inicio': fecha_inicio,
             'fecha_fin': fecha_fin,
