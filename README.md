@@ -599,6 +599,24 @@ para que HU-7.3 la lea desde código. `tests/test_matriz_normativa.py` falla si
 una prueba o un archivo citados como evidencia desaparecen, o si el CSV y el
 anexo dejan de coincidir.
 
+## Modelo de amenazas STRIDE (HU-6.4)
+
+[`docs/modelo_amenazas_stride.md`](docs/modelo_amenazas_stride.md) es el anexo
+con el modelo de amenazas de la arquitectura completa: diagrama de flujo de
+datos con límites de confianza, activos, actores y superficies de ataque, y
+54 amenazas (Spoofing, Tampering, Repudiation, Information Disclosure, Denial
+of Service y Elevation of Privilege) sobre la librería, el canal de
+transmisión, el servidor central y el dashboard. Cada amenaza tiene su
+mitigación implementada o planeada, la HU y los controles de la matriz
+HU-6.6 que la respaldan, y un plan de mitigación priorizado.
+
+`tests/test_modelo_amenazas.py` verifica que el anexo y
+[`docs/modelo_amenazas_stride.csv`](docs/modelo_amenazas_stride.csv) coincidan
+y cubran las seis categorías en los cuatro componentes; prueba las
+mitigaciones que no tenían prueba propia, y reproduce como `xfail` estricto
+los riesgos abiertos confirmados, para que la suite avise cuando uno se
+corrija y el anexo deba actualizarse.
+
 ## Benchmark de overhead de rendimiento (HU-6.7)
 
 [`benchmarks/overhead_referencia.py`](benchmarks/overhead_referencia.py) mide el impacto en tiempo de ejecución de la librería sobre operaciones reales de Pandas con y sin auditoría activa (CA1), sobre tres tamaños de dataset (CA2: 50.000, 200.000 y 1.000.000 filas).
