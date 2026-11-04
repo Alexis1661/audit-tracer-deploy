@@ -6,7 +6,14 @@ Sistema de auditoría de trazabilidad para entornos de ciencia de datos en salud
 Este sistema registra, almacena y reporta automáticamente todas las operaciones que un usuario realiza sobre datos clínicos sensibles dentro de Jupyter Notebooks y scripts Python. 
 Cumple con normativas como HIPAA §164.312(b) y §164.312(c)(1), Ley 1581 de 2012 e ISO/IEC 27001:2022.
 
-## Instalación
+## Instalación y Despliegue (HU-5.3)
+
+Para la guía técnica exhaustiva con pasos de instalación local, despliegue en servidor/cloud (Render, Railway, Linux Systemd con Nginx), lista completa de dependencias, configuración de variables de entorno y ejemplo funcional mínimo paso a paso, consulta:
+* [`docs/guia_instalacion.md`](docs/guia_instalacion.md)
+
+Para la guía rápida de uso para científicos de datos en notebooks o scripts, consulta:
+* [`docs/guia_instalacion_uso.md`](docs/guia_instalacion_uso.md)
+
 ```bash
 pip install -r requirements.txt
 ```
