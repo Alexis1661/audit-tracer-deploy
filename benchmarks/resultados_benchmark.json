@@ -1,0 +1,1273 @@
+{
+  "benchmark": "HU-6.7 — Benchmark de overhead de rendimiento",
+  "timestamp": "2026-11-03 22:49:38",
+  "umbral_aceptable_pct": 5.0,
+  "corridas_por_modo": 3,
+  "tamanos_evaluados": [
+    50000,
+    200000,
+    1000000
+  ],
+  "resultados": [
+    {
+      "filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "corridas": 3,
+      "modos": {
+        "sin_auditoria": {
+          "operaciones": {
+            "lectura": {
+              "promedio_s": 0.11831639999824499,
+              "mediana_s": 0.11301719999755733,
+              "desv_std_s": 0.01105706582295653,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                0.13102570000046398,
+                0.11090629999671364,
+                0.11301719999755733
+              ]
+            },
+            "transformacion": {
+              "promedio_s": 0.04015086666913703,
+              "mediana_s": 0.03938340000604512,
+              "desv_std_s": 0.0015391078697995183,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                0.04192279999551829,
+                0.03914640000584768,
+                0.03938340000604512
+              ]
+            },
+            "exportacion": {
+              "promedio_s": 0.32425249999748,
+              "mediana_s": 0.32119519999832846,
+              "desv_std_s": 0.013176506460084014,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                0.3128733999983524,
+                0.32119519999832846,
+                0.33868889999575913
+              ]
+            },
+            "cuerpo": {
+              "promedio_s": 0.4827267333360699,
+              "mediana_s": 0.48582900000474183,
+              "desv_std_s": 0.010276699684217887,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                0.48582900000474183,
+                0.4712562999993679,
+                0.49109490000410005
+              ]
+            },
+            "imports": {
+              "promedio_s": 1.6350702999989153,
+              "mediana_s": 1.6554109999997308,
+              "desv_std_s": 0.04356832628257633,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                1.664748299997882,
+                1.6554109999997308,
+                1.585051599999133
+              ]
+            },
+            "total": {
+              "promedio_s": 2.1177970333349854,
+              "mediana_s": 2.1266672999990988,
+              "desv_std_s": 0.03799996342309672,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                2.150577300002624,
+                2.1266672999990988,
+                2.076146500003233
+              ]
+            },
+            "proceso": {
+              "promedio_s": 2.3309762666661604,
+              "mediana_s": 2.327679399997578,
+              "desv_std_s": 0.05786658079394431,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                2.3904208000021754,
+                2.327679399997578,
+                2.2748285999987274
+              ]
+            }
+          },
+          "promedio_s": 2.1177970333349854,
+          "mediana_s": 2.1266672999990988,
+          "desv_std_s": 0.03799996342309672,
+          "overhead_pct": 0.0,
+          "overhead_mediana_pct": 0.0,
+          "imports_promedio_s": 1.6350702999989153,
+          "cuerpo_promedio_s": 0.4827267333360699,
+          "proceso_promedio_s": 2.3309762666661604,
+          "overhead_proceso_pct": 0.0
+        },
+        "con_auditoria": {
+          "operaciones": {
+            "lectura": {
+              "promedio_s": 0.12286873333505355,
+              "mediana_s": 0.11485150000225985,
+              "desv_std_s": 0.014541841023175376,
+              "overhead_pct": 3.8475928416314935,
+              "overhead_mediana_pct": 1.6230272956171028,
+              "corridas_s": [
+                0.13965460000326857,
+                0.11410009999963222,
+                0.11485150000225985
+              ]
+            },
+            "transformacion": {
+              "promedio_s": 0.06269923333456973,
+              "mediana_s": 0.06301669999811566,
+              "desv_std_s": 0.003861499928383935,
+              "overhead_pct": 56.15910324238421,
+              "overhead_mediana_pct": 60.00827756984658,
+              "corridas_s": [
+                0.06639220000215573,
+                0.05868880000343779,
+                0.06301669999811566
+              ]
+            },
+            "exportacion": {
+              "promedio_s": 0.31910840000152046,
+              "mediana_s": 0.32551750000129687,
+              "desv_std_s": 0.017106826414720725,
+              "overhead_pct": -1.586448831080571,
+              "overhead_mediana_pct": 1.3456925891143137,
+              "corridas_s": [
+                0.3320852000033483,
+                0.32551750000129687,
+                0.2997224999999162
+              ]
+            },
+            "cuerpo": {
+              "promedio_s": 0.5046796333335806,
+              "mediana_s": 0.4983098000011523,
+              "desv_std_s": 0.030769292938529,
+              "overhead_pct": 4.547686813571861,
+              "overhead_mediana_pct": 2.568969739617989,
+              "corridas_s": [
+                0.5381352999975206,
+                0.4983098000011523,
+                0.47759380000206875
+              ]
+            },
+            "imports": {
+              "promedio_s": 1.9179046666661936,
+              "mediana_s": 1.803916400000162,
+              "desv_std_s": 0.20950639402002513,
+              "overhead_pct": 17.2979942616208,
+              "overhead_mediana_pct": 8.970908130999206,
+              "corridas_s": [
+                2.1596904000034556,
+                1.803916400000162,
+                1.7901071999949636
+              ]
+            },
+            "total": {
+              "promedio_s": 2.4225842999997744,
+              "mediana_s": 2.3022262000013143,
+              "desv_std_s": 0.23899031060861056,
+              "overhead_pct": 14.391712797180926,
+              "overhead_mediana_pct": 8.25511823134206,
+              "corridas_s": [
+                2.697825700000976,
+                2.3022262000013143,
+                2.2677009999970323
+              ]
+            },
+            "proceso": {
+              "promedio_s": 2.665970433333617,
+              "mediana_s": 2.5276318000032916,
+              "desv_std_s": 0.2654952069210795,
+              "overhead_pct": 14.371410445400052,
+              "overhead_mediana_pct": 8.590203616783377,
+              "corridas_s": [
+                2.9720670000024256,
+                2.5276318000032916,
+                2.498212499995134
+              ]
+            }
+          },
+          "promedio_s": 2.4225842999997744,
+          "mediana_s": 2.3022262000013143,
+          "desv_std_s": 0.23899031060861056,
+          "overhead_pct": 14.391712797180926,
+          "overhead_mediana_pct": 8.25511823134206,
+          "imports_promedio_s": 1.9179046666661936,
+          "cuerpo_promedio_s": 0.5046796333335806,
+          "proceso_promedio_s": 2.665970433333617,
+          "overhead_proceso_pct": 14.371410445400052
+        },
+        "con_sync_caido": {
+          "operaciones": {
+            "lectura": {
+              "promedio_s": 0.17324279999835804,
+              "mediana_s": 0.14804849999927683,
+              "desv_std_s": 0.04427333812714548,
+              "overhead_pct": 46.42331916871015,
+              "overhead_mediana_pct": 30.996432403631168,
+              "corridas_s": [
+                0.22436349999770755,
+                0.14731639999808976,
+                0.14804849999927683
+              ]
+            },
+            "transformacion": {
+              "promedio_s": 0.09992743333471783,
+              "mediana_s": 0.0755289000007906,
+              "desv_std_s": 0.043276092290667104,
+              "overhead_pct": 148.87989133128613,
+              "overhead_mediana_pct": 91.77851579395724,
+              "corridas_s": [
+                0.1498938000004273,
+                0.07435960000293562,
+                0.0755289000007906
+              ]
+            },
+            "exportacion": {
+              "promedio_s": 0.35609593333356315,
+              "mediana_s": 0.35706570000184,
+              "desv_std_s": 0.00992036380672954,
+              "overhead_pct": 9.82056679172269,
+              "overhead_mediana_pct": 11.167819445526654,
+              "corridas_s": [
+                0.36549579999700654,
+                0.3457263000018429,
+                0.35706570000184
+              ]
+            },
+            "cuerpo": {
+              "promedio_s": 0.6292706333333626,
+              "mediana_s": 0.5806464999986929,
+              "desv_std_s": 0.09591464386987274,
+              "overhead_pct": 30.357527329084178,
+              "overhead_mediana_pct": 19.51664062726301,
+              "corridas_s": [
+                0.739759199997934,
+                0.567406200003461,
+                0.5806464999986929
+              ]
+            },
+            "imports": {
+              "promedio_s": 1.8768616666687497,
+              "mediana_s": 1.8499198000063188,
+              "desv_std_s": 0.1280610796641237,
+              "overhead_pct": 14.787826961935199,
+              "overhead_mediana_pct": 11.749879637541348,
+              "corridas_s": [
+                2.016250200002105,
+                1.7644149999978254,
+                1.8499198000063188
+              ]
+            },
+            "total": {
+              "promedio_s": 2.5061323000021125,
+              "mediana_s": 2.4305663000050117,
+              "desv_std_s": 0.22196074545111982,
+              "overhead_pct": 18.336755626463365,
+              "overhead_mediana_pct": 14.289917374760112,
+              "corridas_s": [
+                2.756009400000039,
+                2.3318212000012863,
+                2.4305663000050117
+              ]
+            },
+            "proceso": {
+              "promedio_s": 2.765068099996521,
+              "mediana_s": 2.6926574999961304,
+              "desv_std_s": 0.2276781414177648,
+              "overhead_pct": 18.622747881994236,
+              "overhead_mediana_pct": 15.679912792068018,
+              "corridas_s": [
+                3.0201451999964775,
+                2.582401599996956,
+                2.6926574999961304
+              ]
+            }
+          },
+          "promedio_s": 2.5061323000021125,
+          "mediana_s": 2.4305663000050117,
+          "desv_std_s": 0.22196074545111982,
+          "overhead_pct": 18.336755626463365,
+          "overhead_mediana_pct": 14.289917374760112,
+          "imports_promedio_s": 1.8768616666687497,
+          "cuerpo_promedio_s": 0.6292706333333626,
+          "proceso_promedio_s": 2.765068099996521,
+          "overhead_proceso_pct": 18.622747881994236
+        }
+      }
+    },
+    {
+      "filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "corridas": 3,
+      "modos": {
+        "sin_auditoria": {
+          "operaciones": {
+            "lectura": {
+              "promedio_s": 0.38284709999910166,
+              "mediana_s": 0.3828804000004311,
+              "desv_std_s": 0.015360777067200673,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                0.36746970000240253,
+                0.3981911999944714,
+                0.3828804000004311
+              ]
+            },
+            "transformacion": {
+              "promedio_s": 0.102648066667219,
+              "mediana_s": 0.1002742999990005,
+              "desv_std_s": 0.009679274385106944,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                0.0943764999974519,
+                0.1132934000052046,
+                0.1002742999990005
+              ]
+            },
+            "exportacion": {
+              "promedio_s": 1.2718559666658014,
+              "mediana_s": 1.2297647000013967,
+              "desv_std_s": 0.10106883899900276,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                1.2297647000013967,
+                1.387168000001111,
+                1.1986351999948965
+              ]
+            },
+            "cuerpo": {
+              "promedio_s": 1.7573597333345485,
+              "mediana_s": 1.691620800003875,
+              "desv_std_s": 0.12246919670181092,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                1.691620800003875,
+                1.898661200000788,
+                1.6817971999989823
+              ]
+            },
+            "imports": {
+              "promedio_s": 1.6227683666681212,
+              "mediana_s": 1.6194084000017028,
+              "desv_std_s": 0.03648277663448598,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                1.5880818000005092,
+                1.6608149000021513,
+                1.6194084000017028
+              ]
+            },
+            "total": {
+              "promedio_s": 3.3801281000026697,
+              "mediana_s": 3.301205600000685,
+              "desv_std_s": 0.15569159765473153,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                3.2797026000043843,
+                3.5594761000029393,
+                3.301205600000685
+              ]
+            },
+            "proceso": {
+              "promedio_s": 3.6189147333352594,
+              "mediana_s": 3.5124264000041876,
+              "desv_std_s": 0.21936079406847206,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                3.4731253999998444,
+                3.871192400001746,
+                3.5124264000041876
+              ]
+            }
+          },
+          "promedio_s": 3.3801281000026697,
+          "mediana_s": 3.301205600000685,
+          "desv_std_s": 0.15569159765473153,
+          "overhead_pct": 0.0,
+          "overhead_mediana_pct": 0.0,
+          "imports_promedio_s": 1.6227683666681212,
+          "cuerpo_promedio_s": 1.7573597333345485,
+          "proceso_promedio_s": 3.6189147333352594,
+          "overhead_proceso_pct": 0.0
+        },
+        "con_auditoria": {
+          "operaciones": {
+            "lectura": {
+              "promedio_s": 0.40928490000078455,
+              "mediana_s": 0.3904640999971889,
+              "desv_std_s": 0.03969045627266669,
+              "overhead_pct": 6.9055766653959045,
+              "overhead_mediana_pct": 1.9806968433874514,
+              "corridas_s": [
+                0.3904640999971889,
+                0.45488460000342457,
+                0.3825060000017402
+              ]
+            },
+            "transformacion": {
+              "promedio_s": 0.1387056333333021,
+              "mediana_s": 0.1320311000017682,
+              "desv_std_s": 0.01896486099664818,
+              "overhead_pct": 35.12737047740053,
+              "overhead_mediana_pct": 31.669929386776317,
+              "corridas_s": [
+                0.1320311000017682,
+                0.16010539999842877,
+                0.12398039999970933
+              ]
+            },
+            "exportacion": {
+              "promedio_s": 1.5452760333331146,
+              "mediana_s": 1.2890576999998302,
+              "desv_std_s": 0.4483131591890683,
+              "overhead_pct": 21.497722527818144,
+              "overhead_mediana_pct": 4.821491460794587,
+              "corridas_s": [
+                1.2890576999998302,
+                2.0629346999994596,
+                1.2838357000000542
+              ]
+            },
+            "cuerpo": {
+              "promedio_s": 2.093270233332684,
+              "mediana_s": 1.8115563999963342,
+              "desv_std_s": 0.5064403505881052,
+              "overhead_pct": 19.114498507414474,
+              "overhead_mediana_pct": 7.08998139489562,
+              "corridas_s": [
+                1.8115563999963342,
+                2.677928700002667,
+                1.7903255999990506
+              ]
+            },
+            "imports": {
+              "promedio_s": 1.9178507333320642,
+              "mediana_s": 1.8426904000007198,
+              "desv_std_s": 0.143662222367507,
+              "overhead_pct": 18.18388703680539,
+              "overhead_mediana_pct": 13.787874633649066,
+              "corridas_s": [
+                1.8426904000007198,
+                2.083501299995987,
+                1.827360499999486
+              ]
+            },
+            "total": {
+              "promedio_s": 4.011120966664748,
+              "mediana_s": 3.654246799997054,
+              "desv_std_s": 0.6500437718515121,
+              "overhead_pct": 18.667720512177635,
+              "overhead_mediana_pct": 10.694311193349959,
+              "corridas_s": [
+                3.654246799997054,
+                4.761429999998654,
+                3.6176860999985365
+              ]
+            },
+            "proceso": {
+              "promedio_s": 4.328040899999905,
+              "mediana_s": 3.892513200000394,
+              "desv_std_s": 0.7577676829778861,
+              "overhead_pct": 19.594995155111103,
+              "overhead_mediana_pct": 10.821203256977952,
+              "corridas_s": [
+                3.892513200000394,
+                5.20303270000295,
+                3.888576799996372
+              ]
+            }
+          },
+          "promedio_s": 4.011120966664748,
+          "mediana_s": 3.654246799997054,
+          "desv_std_s": 0.6500437718515121,
+          "overhead_pct": 18.667720512177635,
+          "overhead_mediana_pct": 10.694311193349959,
+          "imports_promedio_s": 1.9178507333320642,
+          "cuerpo_promedio_s": 2.093270233332684,
+          "proceso_promedio_s": 4.328040899999905,
+          "overhead_proceso_pct": 19.594995155111103
+        },
+        "con_sync_caido": {
+          "operaciones": {
+            "lectura": {
+              "promedio_s": 0.43521856666969444,
+              "mediana_s": 0.4361094000050798,
+              "desv_std_s": 0.00405216853477503,
+              "overhead_pct": 13.67947325987729,
+              "overhead_mediana_pct": 13.902252506158257,
+              "corridas_s": [
+                0.4361094000050798,
+                0.4387512000030256,
+                0.430795100000978
+              ]
+            },
+            "transformacion": {
+              "promedio_s": 0.14378566666467427,
+              "mediana_s": 0.14554469999711728,
+              "desv_std_s": 0.010223779726657804,
+              "overhead_pct": 40.07635149215402,
+              "overhead_mediana_pct": 45.146562976323956,
+              "corridas_s": [
+                0.15301580000232207,
+                0.14554469999711728,
+                0.13279649999458343
+              ]
+            },
+            "exportacion": {
+              "promedio_s": 1.3042671666674626,
+              "mediana_s": 1.2939340000011725,
+              "desv_std_s": 0.03516253364789572,
+              "overhead_pct": 2.5483388725712297,
+              "overhead_mediana_pct": 5.2180144705489555,
+              "corridas_s": [
+                1.2754290000011679,
+                1.3434385000000475,
+                1.2939340000011725
+              ]
+            },
+            "cuerpo": {
+              "promedio_s": 1.8832759666693164,
+              "mediana_s": 1.8645574000038323,
+              "desv_std_s": 0.03866657396931793,
+              "overhead_pct": 7.165080145306664,
+              "overhead_mediana_pct": 10.223130384750595,
+              "corridas_s": [
+                1.8645574000038323,
+                1.927739600003406,
+                1.857530900000711
+              ]
+            },
+            "imports": {
+              "promedio_s": 1.9061784999988352,
+              "mediana_s": 1.8813155999960145,
+              "desv_std_s": 0.07279582943792401,
+              "overhead_pct": 17.46460795958289,
+              "overhead_mediana_pct": 16.173017257044997,
+              "corridas_s": [
+                1.9881485000005341,
+                1.8813155999960145,
+                1.849071399999957
+              ]
+            },
+            "total": {
+              "promedio_s": 3.7894544666681518,
+              "mediana_s": 3.8090551999994204,
+              "desv_std_s": 0.07499804693358893,
+              "overhead_pct": 12.109788580650502,
+              "overhead_mediana_pct": 15.383761617229474,
+              "corridas_s": [
+                3.8527059000043664,
+                3.8090551999994204,
+                3.706602300000668
+              ]
+            },
+            "proceso": {
+              "promedio_s": 4.074603299998368,
+              "mediana_s": 4.115257299999939,
+              "desv_std_s": 0.08712733552829749,
+              "overhead_pct": 12.591856958263776,
+              "overhead_mediana_pct": 17.162805176359935,
+              "corridas_s": [
+                4.133973299998615,
+                4.115257299999939,
+                3.974579299996549
+              ]
+            }
+          },
+          "promedio_s": 3.7894544666681518,
+          "mediana_s": 3.8090551999994204,
+          "desv_std_s": 0.07499804693358893,
+          "overhead_pct": 12.109788580650502,
+          "overhead_mediana_pct": 15.383761617229474,
+          "imports_promedio_s": 1.9061784999988352,
+          "cuerpo_promedio_s": 1.8832759666693164,
+          "proceso_promedio_s": 4.074603299998368,
+          "overhead_proceso_pct": 12.591856958263776
+        }
+      }
+    },
+    {
+      "filas": 1000000,
+      "categoria": "Grande (~90 MB)",
+      "corridas": 3,
+      "modos": {
+        "sin_auditoria": {
+          "operaciones": {
+            "lectura": {
+              "promedio_s": 1.7884908333338292,
+              "mediana_s": 1.7563558999972884,
+              "desv_std_s": 0.07476335801518405,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                1.8739490000007208,
+                1.7563558999972884,
+                1.7351676000034786
+              ]
+            },
+            "transformacion": {
+              "promedio_s": 0.408440233336781,
+              "mediana_s": 0.41304670000681654,
+              "desv_std_s": 0.03300369127924301,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                0.43889869999838993,
+                0.3733753000051365,
+                0.41304670000681654
+              ]
+            },
+            "exportacion": {
+              "promedio_s": 6.272796633333201,
+              "mediana_s": 6.203449000000546,
+              "desv_std_s": 0.19181426268876547,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                6.203449000000546,
+                6.489640400002827,
+                6.125300499996229
+              ]
+            },
+            "cuerpo": {
+              "promedio_s": 8.469737466667235,
+              "mediana_s": 8.516307500001858,
+              "desv_std_s": 0.17756843226535654,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                8.516307500001858,
+                8.619380099997215,
+                8.273524800002633
+              ]
+            },
+            "imports": {
+              "promedio_s": 1.5957037333355402,
+              "mediana_s": 1.6058377000008477,
+              "desv_std_s": 0.029859436608488162,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                1.6191773000027752,
+                1.5620962000029976,
+                1.6058377000008477
+              ]
+            },
+            "total": {
+              "promedio_s": 10.065441200002775,
+              "mediana_s": 10.135484800004633,
+              "desv_std_s": 0.16278134556217289,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                10.135484800004633,
+                10.181476300000213,
+                9.87936250000348
+              ]
+            },
+            "proceso": {
+              "promedio_s": 10.285457833332961,
+              "mediana_s": 10.354837899998529,
+              "desv_std_s": 0.165906858476939,
+              "overhead_pct": 0.0,
+              "overhead_mediana_pct": 0.0,
+              "corridas_s": [
+                10.354837899998529,
+                10.405412200001592,
+                10.09612339999876
+              ]
+            }
+          },
+          "promedio_s": 10.065441200002775,
+          "mediana_s": 10.135484800004633,
+          "desv_std_s": 0.16278134556217289,
+          "overhead_pct": 0.0,
+          "overhead_mediana_pct": 0.0,
+          "imports_promedio_s": 1.5957037333355402,
+          "cuerpo_promedio_s": 8.469737466667235,
+          "proceso_promedio_s": 10.285457833332961,
+          "overhead_proceso_pct": 0.0
+        },
+        "con_auditoria": {
+          "operaciones": {
+            "lectura": {
+              "promedio_s": 1.7572836999994859,
+              "mediana_s": 1.7625571000025957,
+              "desv_std_s": 0.016035667972488666,
+              "overhead_pct": -1.744886401020675,
+              "overhead_mediana_pct": 0.3530719488753334,
+              "corridas_s": [
+                1.770018600000185,
+                1.7392753999956767,
+                1.7625571000025957
+              ]
+            },
+            "transformacion": {
+              "promedio_s": 0.4041151666654817,
+              "mediana_s": 0.40236739999818383,
+              "desv_std_s": 0.0069014755790984764,
+              "overhead_pct": -1.0589227794640477,
+              "overhead_mediana_pct": -2.5854945720317986,
+              "corridas_s": [
+                0.40236739999818383,
+                0.3982555999973556,
+                0.4117225000009057
+              ]
+            },
+            "exportacion": {
+              "promedio_s": 6.148619933332763,
+              "mediana_s": 6.1096117999986745,
+              "desv_std_s": 0.0820990918479663,
+              "overhead_pct": -1.979606661254905,
+              "overhead_mediana_pct": -1.5126617467454542,
+              "corridas_s": [
+                6.1096117999986745,
+                6.093297300001723,
+                6.242950699997891
+              ]
+            },
+            "cuerpo": {
+              "promedio_s": 8.310022233332953,
+              "mediana_s": 8.28200089999882,
+              "desv_std_s": 0.09630867054959966,
+              "overhead_pct": -1.8857164577159964,
+              "overhead_mediana_pct": -2.751269843215343,
+              "corridas_s": [
+                8.28200089999882,
+                8.230831699998816,
+                8.417234100001224
+              ]
+            },
+            "imports": {
+              "promedio_s": 1.766238733335437,
+              "mediana_s": 1.7570571000032942,
+              "desv_std_s": 0.06567389648078824,
+              "overhead_pct": 10.687134236593105,
+              "overhead_mediana_pct": 9.416854517886001,
+              "corridas_s": [
+                1.7570571000032942,
+                1.8360203000047477,
+                1.705638799998269
+              ]
+            },
+            "total": {
+              "promedio_s": 10.076260966668391,
+              "mediana_s": 10.066852000003564,
+              "desv_std_s": 0.04269228098459356,
+              "overhead_pct": 0.10749421163587973,
+              "overhead_mediana_pct": -0.6771535980305313,
+              "corridas_s": [
+                10.039058000002115,
+                10.066852000003564,
+                10.122872899999493
+              ]
+            },
+            "proceso": {
+              "promedio_s": 10.325526100001298,
+              "mediana_s": 10.319421300002432,
+              "desv_std_s": 0.041160057847132336,
+              "overhead_pct": 0.38956230551531024,
+              "overhead_mediana_pct": -0.3420294971117023,
+              "corridas_s": [
+                10.28775940000196,
+                10.319421300002432,
+                10.369397599999502
+              ]
+            }
+          },
+          "promedio_s": 10.076260966668391,
+          "mediana_s": 10.066852000003564,
+          "desv_std_s": 0.04269228098459356,
+          "overhead_pct": 0.10749421163587973,
+          "overhead_mediana_pct": -0.6771535980305313,
+          "imports_promedio_s": 1.766238733335437,
+          "cuerpo_promedio_s": 8.310022233332953,
+          "proceso_promedio_s": 10.325526100001298,
+          "overhead_proceso_pct": 0.38956230551531024
+        },
+        "con_sync_caido": {
+          "operaciones": {
+            "lectura": {
+              "promedio_s": 1.7762378666666336,
+              "mediana_s": 1.7791067999933148,
+              "desv_std_s": 0.015458176984496669,
+              "overhead_pct": -0.6851008928212095,
+              "overhead_mediana_pct": 1.2953468027784998,
+              "corridas_s": [
+                1.75954620000266,
+                1.7791067999933148,
+                1.790060600003926
+              ]
+            },
+            "transformacion": {
+              "promedio_s": 0.40310506666476914,
+              "mediana_s": 0.40293759999622125,
+              "desv_std_s": 0.021363592291673072,
+              "overhead_pct": -1.3062294643272092,
+              "overhead_mediana_pct": -2.447447228225877,
+              "corridas_s": [
+                0.3818256999948062,
+                0.40293759999622125,
+                0.42455190000328
+              ]
+            },
+            "exportacion": {
+              "promedio_s": 6.292523033334874,
+              "mediana_s": 6.267122500001278,
+              "desv_std_s": 0.045594279408078614,
+              "overhead_pct": 0.31447536329885656,
+              "overhead_mediana_pct": 1.0264209474556236,
+              "corridas_s": [
+                6.265286499998183,
+                6.34516010000516,
+                6.267122500001278
+              ]
+            },
+            "cuerpo": {
+              "promedio_s": 8.47186973333252,
+              "mediana_s": 8.481738700000278,
+              "desv_std_s": 0.06087649962738013,
+              "overhead_pct": 0.025175121114161463,
+              "overhead_mediana_pct": -0.40591300867861174,
+              "corridas_s": [
+                8.40666169999895,
+                8.527208799998334,
+                8.481738700000278
+              ]
+            },
+            "imports": {
+              "promedio_s": 1.7417035333346575,
+              "mediana_s": 1.738253800001985,
+              "desv_std_s": 0.014854629123410415,
+              "overhead_pct": 9.14955558159473,
+              "overhead_mediana_pct": 8.24592049377514,
+              "corridas_s": [
+                1.7579795000056038,
+                1.738253800001985,
+                1.728877299996384
+              ]
+            },
+            "total": {
+              "promedio_s": 10.213573266667177,
+              "mediana_s": 10.210615999996662,
+              "desv_std_s": 0.05047571439709373,
+              "overhead_pct": 1.4716897523017822,
+              "overhead_mediana_pct": 0.7412689326118337,
+              "corridas_s": [
+                10.164641200004553,
+                10.265462600000319,
+                10.210615999996662
+              ]
+            },
+            "proceso": {
+              "promedio_s": 10.491026499999862,
+              "mediana_s": 10.477431300001626,
+              "desv_std_s": 0.05601240236037114,
+              "overhead_pct": 1.998634090946315,
+              "overhead_mediana_pct": 1.1839238932278688,
+              "corridas_s": [
+                10.443063099999563,
+                10.552585099998396,
+                10.477431300001626
+              ]
+            }
+          },
+          "promedio_s": 10.213573266667177,
+          "mediana_s": 10.210615999996662,
+          "desv_std_s": 0.05047571439709373,
+          "overhead_pct": 1.4716897523017822,
+          "overhead_mediana_pct": 0.7412689326118337,
+          "imports_promedio_s": 1.7417035333346575,
+          "cuerpo_promedio_s": 8.47186973333252,
+          "proceso_promedio_s": 10.491026499999862,
+          "overhead_proceso_pct": 1.998634090946315
+        }
+      }
+    }
+  ],
+  "hallazgos_optimizacion": [
+    {
+      "tamano_filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "modo": "con_auditoria",
+      "operacion": "transformacion",
+      "overhead_pct": 56.16,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 22.55,
+      "tiempo_base_s": 0.0402,
+      "tiempo_modo_s": 0.0627,
+      "supera_umbral": true,
+      "causa_raiz": "Envoltura de DataFrame (AuditedTransformDataFrame) e introspección de argumentos en pandas.",
+      "recomendacion": "Cachear metadatos de transformaciones repetidas para evitar resolución reflexiva continua."
+    },
+    {
+      "tamano_filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "modo": "con_auditoria",
+      "operacion": "imports",
+      "overhead_pct": 17.3,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 282.83,
+      "tiempo_base_s": 1.6351,
+      "tiempo_modo_s": 1.9179,
+      "supera_umbral": true,
+      "causa_raiz": "Costo fijo de importación de dependencias criptográficas (cryptography, ed25519) e inicialización perezosa de la base SQLite local.",
+      "recomendacion": "Implementar lazy-import para que cryptography y schemas solo se importen cuando se capture el primer evento, evitando demoras al arrancar scripts rápidos."
+    },
+    {
+      "tamano_filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "modo": "con_auditoria",
+      "operacion": "total",
+      "overhead_pct": 14.39,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 304.79,
+      "tiempo_base_s": 2.1178,
+      "tiempo_modo_s": 2.4226,
+      "supera_umbral": true,
+      "causa_raiz": "El tiempo total en scripts de ejecución corta está dominado por la inicialización fija de imports e interceptores, amplificando el overhead porcentual relativo.",
+      "recomendacion": "Optimizar la fase de bootstrap de la librería para reducir el tiempo de inicialización a menos de 80ms."
+    },
+    {
+      "tamano_filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "modo": "con_auditoria",
+      "operacion": "proceso",
+      "overhead_pct": 14.37,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 334.99,
+      "tiempo_base_s": 2.331,
+      "tiempo_modo_s": 2.666,
+      "supera_umbral": true,
+      "causa_raiz": "Tiempo de vida del proceso Python que incluye el arranque, la ejecución del script y el flush final de colas antes de atexit.",
+      "recomendacion": "Asegurar que el hilo de flush y sync cliente termine inmediatamente si la cola está vacía."
+    },
+    {
+      "tamano_filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "lectura",
+      "overhead_pct": 46.42,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 54.93,
+      "tiempo_base_s": 0.1183,
+      "tiempo_modo_s": 0.1732,
+      "supera_umbral": true,
+      "causa_raiz": "Intercepción síncrona de pd.read_csv: inspección del DataFrame, cálculo de SHA-256 e inserción SQLite.",
+      "recomendacion": "Diferir el hashing y persistencia de eventos de lectura a un hilo secundario en memoria."
+    },
+    {
+      "tamano_filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "transformacion",
+      "overhead_pct": 148.88,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 59.78,
+      "tiempo_base_s": 0.0402,
+      "tiempo_modo_s": 0.0999,
+      "supera_umbral": true,
+      "causa_raiz": "Envoltura de DataFrame (AuditedTransformDataFrame) e introspección de argumentos en pandas.",
+      "recomendacion": "Cachear metadatos de transformaciones repetidas para evitar resolución reflexiva continua."
+    },
+    {
+      "tamano_filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "exportacion",
+      "overhead_pct": 9.82,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 31.84,
+      "tiempo_base_s": 0.3243,
+      "tiempo_modo_s": 0.3561,
+      "supera_umbral": true,
+      "causa_raiz": "Validación de umbrales de exportación masiva y persistencia síncrona en SQLite.",
+      "recomendacion": "Desacoplar la persistencia del archivo final respecto a la escritura del evento de auditoría."
+    },
+    {
+      "tamano_filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "cuerpo",
+      "overhead_pct": 30.36,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 146.54,
+      "tiempo_base_s": 0.4827,
+      "tiempo_modo_s": 0.6293,
+      "supera_umbral": true,
+      "causa_raiz": "Acumulación de interceptores en la cadena de procesamiento de pandas.",
+      "recomendacion": "Agrupar eventos atómicos en lotes (batching) cuando se ejecuten múltiples operaciones consecutivas."
+    },
+    {
+      "tamano_filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "imports",
+      "overhead_pct": 14.79,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 241.79,
+      "tiempo_base_s": 1.6351,
+      "tiempo_modo_s": 1.8769,
+      "supera_umbral": true,
+      "causa_raiz": "Costo fijo de importación de dependencias criptográficas (cryptography, ed25519) e inicialización perezosa de la base SQLite local.",
+      "recomendacion": "Implementar lazy-import para que cryptography y schemas solo se importen cuando se capture el primer evento, evitando demoras al arrancar scripts rápidos."
+    },
+    {
+      "tamano_filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "total",
+      "overhead_pct": 18.34,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 388.34,
+      "tiempo_base_s": 2.1178,
+      "tiempo_modo_s": 2.5061,
+      "supera_umbral": true,
+      "causa_raiz": "El tiempo total en scripts de ejecución corta está dominado por la inicialización fija de imports e interceptores, amplificando el overhead porcentual relativo.",
+      "recomendacion": "Optimizar la fase de bootstrap de la librería para reducir el tiempo de inicialización a menos de 80ms."
+    },
+    {
+      "tamano_filas": 50000,
+      "categoria": "Pequeño (~4 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "proceso",
+      "overhead_pct": 18.62,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 434.09,
+      "tiempo_base_s": 2.331,
+      "tiempo_modo_s": 2.7651,
+      "supera_umbral": true,
+      "causa_raiz": "Tiempo de vida del proceso Python que incluye el arranque, la ejecución del script y el flush final de colas antes de atexit.",
+      "recomendacion": "Asegurar que el hilo de flush y sync cliente termine inmediatamente si la cola está vacía."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_auditoria",
+      "operacion": "lectura",
+      "overhead_pct": 6.91,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 26.44,
+      "tiempo_base_s": 0.3828,
+      "tiempo_modo_s": 0.4093,
+      "supera_umbral": true,
+      "causa_raiz": "Intercepción síncrona de pd.read_csv: inspección del DataFrame, cálculo de SHA-256 e inserción SQLite.",
+      "recomendacion": "Diferir el hashing y persistencia de eventos de lectura a un hilo secundario en memoria."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_auditoria",
+      "operacion": "transformacion",
+      "overhead_pct": 35.13,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 36.06,
+      "tiempo_base_s": 0.1026,
+      "tiempo_modo_s": 0.1387,
+      "supera_umbral": true,
+      "causa_raiz": "Envoltura de DataFrame (AuditedTransformDataFrame) e introspección de argumentos en pandas.",
+      "recomendacion": "Cachear metadatos de transformaciones repetidas para evitar resolución reflexiva continua."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_auditoria",
+      "operacion": "exportacion",
+      "overhead_pct": 21.5,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 273.42,
+      "tiempo_base_s": 1.2719,
+      "tiempo_modo_s": 1.5453,
+      "supera_umbral": true,
+      "causa_raiz": "Validación de umbrales de exportación masiva y persistencia síncrona en SQLite.",
+      "recomendacion": "Desacoplar la persistencia del archivo final respecto a la escritura del evento de auditoría."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_auditoria",
+      "operacion": "cuerpo",
+      "overhead_pct": 19.11,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 335.91,
+      "tiempo_base_s": 1.7574,
+      "tiempo_modo_s": 2.0933,
+      "supera_umbral": true,
+      "causa_raiz": "Acumulación de interceptores en la cadena de procesamiento de pandas.",
+      "recomendacion": "Agrupar eventos atómicos en lotes (batching) cuando se ejecuten múltiples operaciones consecutivas."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_auditoria",
+      "operacion": "imports",
+      "overhead_pct": 18.18,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 295.08,
+      "tiempo_base_s": 1.6228,
+      "tiempo_modo_s": 1.9179,
+      "supera_umbral": true,
+      "causa_raiz": "Costo fijo de importación de dependencias criptográficas (cryptography, ed25519) e inicialización perezosa de la base SQLite local.",
+      "recomendacion": "Implementar lazy-import para que cryptography y schemas solo se importen cuando se capture el primer evento, evitando demoras al arrancar scripts rápidos."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_auditoria",
+      "operacion": "total",
+      "overhead_pct": 18.67,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 630.99,
+      "tiempo_base_s": 3.3801,
+      "tiempo_modo_s": 4.0111,
+      "supera_umbral": true,
+      "causa_raiz": "El tiempo total en scripts de ejecución corta está dominado por la inicialización fija de imports e interceptores, amplificando el overhead porcentual relativo.",
+      "recomendacion": "Optimizar la fase de bootstrap de la librería para reducir el tiempo de inicialización a menos de 80ms."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_auditoria",
+      "operacion": "proceso",
+      "overhead_pct": 19.59,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 709.13,
+      "tiempo_base_s": 3.6189,
+      "tiempo_modo_s": 4.328,
+      "supera_umbral": true,
+      "causa_raiz": "Tiempo de vida del proceso Python que incluye el arranque, la ejecución del script y el flush final de colas antes de atexit.",
+      "recomendacion": "Asegurar que el hilo de flush y sync cliente termine inmediatamente si la cola está vacía."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "lectura",
+      "overhead_pct": 13.68,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 52.37,
+      "tiempo_base_s": 0.3828,
+      "tiempo_modo_s": 0.4352,
+      "supera_umbral": true,
+      "causa_raiz": "Intercepción síncrona de pd.read_csv: inspección del DataFrame, cálculo de SHA-256 e inserción SQLite.",
+      "recomendacion": "Diferir el hashing y persistencia de eventos de lectura a un hilo secundario en memoria."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "transformacion",
+      "overhead_pct": 40.08,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 41.14,
+      "tiempo_base_s": 0.1026,
+      "tiempo_modo_s": 0.1438,
+      "supera_umbral": true,
+      "causa_raiz": "Envoltura de DataFrame (AuditedTransformDataFrame) e introspección de argumentos en pandas.",
+      "recomendacion": "Cachear metadatos de transformaciones repetidas para evitar resolución reflexiva continua."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "cuerpo",
+      "overhead_pct": 7.17,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 125.92,
+      "tiempo_base_s": 1.7574,
+      "tiempo_modo_s": 1.8833,
+      "supera_umbral": true,
+      "causa_raiz": "Acumulación de interceptores en la cadena de procesamiento de pandas.",
+      "recomendacion": "Agrupar eventos atómicos en lotes (batching) cuando se ejecuten múltiples operaciones consecutivas."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "imports",
+      "overhead_pct": 17.46,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 283.41,
+      "tiempo_base_s": 1.6228,
+      "tiempo_modo_s": 1.9062,
+      "supera_umbral": true,
+      "causa_raiz": "Costo fijo de importación de dependencias criptográficas (cryptography, ed25519) e inicialización perezosa de la base SQLite local.",
+      "recomendacion": "Implementar lazy-import para que cryptography y schemas solo se importen cuando se capture el primer evento, evitando demoras al arrancar scripts rápidos."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "total",
+      "overhead_pct": 12.11,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 409.33,
+      "tiempo_base_s": 3.3801,
+      "tiempo_modo_s": 3.7895,
+      "supera_umbral": true,
+      "causa_raiz": "El tiempo total en scripts de ejecución corta está dominado por la inicialización fija de imports e interceptores, amplificando el overhead porcentual relativo.",
+      "recomendacion": "Optimizar la fase de bootstrap de la librería para reducir el tiempo de inicialización a menos de 80ms."
+    },
+    {
+      "tamano_filas": 200000,
+      "categoria": "Mediano (~18 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "proceso",
+      "overhead_pct": 12.59,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 455.69,
+      "tiempo_base_s": 3.6189,
+      "tiempo_modo_s": 4.0746,
+      "supera_umbral": true,
+      "causa_raiz": "Tiempo de vida del proceso Python que incluye el arranque, la ejecución del script y el flush final de colas antes de atexit.",
+      "recomendacion": "Asegurar que el hilo de flush y sync cliente termine inmediatamente si la cola está vacía."
+    },
+    {
+      "tamano_filas": 1000000,
+      "categoria": "Grande (~90 MB)",
+      "modo": "con_auditoria",
+      "operacion": "imports",
+      "overhead_pct": 10.69,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 170.53,
+      "tiempo_base_s": 1.5957,
+      "tiempo_modo_s": 1.7662,
+      "supera_umbral": true,
+      "causa_raiz": "Costo fijo de importación de dependencias criptográficas (cryptography, ed25519) e inicialización perezosa de la base SQLite local.",
+      "recomendacion": "Implementar lazy-import para que cryptography y schemas solo se importen cuando se capture el primer evento, evitando demoras al arrancar scripts rápidos."
+    },
+    {
+      "tamano_filas": 1000000,
+      "categoria": "Grande (~90 MB)",
+      "modo": "con_sync_caido",
+      "operacion": "imports",
+      "overhead_pct": 9.15,
+      "umbral_pct": 5.0,
+      "diferencia_ms": 146.0,
+      "tiempo_base_s": 1.5957,
+      "tiempo_modo_s": 1.7417,
+      "supera_umbral": true,
+      "causa_raiz": "Costo fijo de importación de dependencias criptográficas (cryptography, ed25519) e inicialización perezosa de la base SQLite local.",
+      "recomendacion": "Implementar lazy-import para que cryptography y schemas solo se importen cuando se capture el primer evento, evitando demoras al arrancar scripts rápidos."
+    }
+  ]
+}
