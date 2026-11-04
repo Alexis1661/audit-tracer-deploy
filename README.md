@@ -14,6 +14,9 @@ Para la guía técnica exhaustiva con pasos de instalación local, despliegue en
 Para la guía rápida de uso para científicos de datos en notebooks o scripts, consulta:
 * [`docs/guia_instalacion_uso.md`](docs/guia_instalacion_uso.md)
 
+Para los lineamientos formales de seguridad, políticas de manejo de datos sensibles (Ley 1581 / HIPAA), recomendaciones contra accesos no autorizados y lineamientos de auditoría, consulta:
+* [`docs/lineamientos_buenas_practicas_seguridad.md`](docs/lineamientos_buenas_practicas_seguridad.md)
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -629,3 +632,13 @@ Para reproducir:
 python benchmarks/overhead_referencia.py --filas 50000 200000 1000000 --corridas 3 --salida-json benchmarks/resultados_benchmark.json
 python -m pytest tests/test_benchmark_overhead.py -v
 ```
+
+## Lineamientos y Buenas Prácticas de Seguridad (PDGTRAZDSA-88, 89, 90)
+
+El documento [`docs/lineamientos_buenas_practicas_seguridad.md`](docs/lineamientos_buenas_practicas_seguridad.md) establece los lineamientos obligatorios y directrices de uso seguro del sistema para científicos de datos, analistas y oficiales de cumplimiento:
+
+- **Manejo de Datos Sensibles (CA1 / PDGTRAZDSA-88):** Clasificación de datos clínicos, principio de necesidad mínima (*Minimum Necessary*), seudonimización obligatoria previa a la analítica, directrices para almacenamiento local temporal y control estricto de exportaciones masivas.
+- **Recomendaciones de Seguridad (CA2 / PDGTRAZDSA-89):** Prohibición estricta de cuentas genéricas (identidad única obligatoria), gestión de tokens personales acotados con expiración y revocación inmediata, login seguro por dispositivo (`device_login`) para Google Colab/JupyterHub, RBAC (4 roles segregados), bloqueo automático ante fuerza bruta (5 fallos en 5 minutos) y forzado de TLS 1.3 / HTTPS.
+- **Auditoría y Trazabilidad (CA3 / PDGTRAZDSA-90):** Principio de inmutabilidad garantizado por triggers SQL en base de datos central, verificación de integridad SHA-256 campo a campo, no repudio mediante firmas digitales asimétricas Ed25519, verificación logarítmica y anclaje externo con Árboles de Merkle, y detección proactiva de anomalías (volumen, horario y correlación).
+- **Alineación Normativa (CA4):** Mapeo exhaustivo frente a la Ley Estatutaria 1581 de 2012 (Colombia), HIPAA Security & Privacy Rule (45 CFR Parte 164) e ISO/IEC 27001:2022 (Anexo A).
+- **Escenarios Reales y Checklists (CA5):** Ejemplos prácticos de uso seguro en notebooks, mitigación de exfiltraciones no autorizadas, reportes normativos para auditoría externa y listas de chequeo de gobernanza periódica.
