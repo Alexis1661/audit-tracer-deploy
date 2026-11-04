@@ -79,7 +79,45 @@ def _execute_insert(conn: sqlite3.Connection, prepared_event: Dict) -> int:
     cursor.execute(query, values)
     conn.commit()
 
-    return cursor.lastrowid
+    event_id = cursor.lastrowid
+    _ejecutar_hooks_post_insercion(conn, event_id, prepared_event)
+    return event_id
+
+
+# ──────────────────────────────────────────────────────────────
+# HU-7.2 — Hooks post-inserción (alertas en tiempo real)
+# ──────────────────────────────────────────────────────────────
+#
+# Funciones f(conn, event_id, evento) que se ejecutan DESPUÉS del COMMIT de
+# cada INSERT en audit_log. El despachador de alertas (audit_tracer/alerts)
+# se registra aquí para enterarse de cada evento nuevo sin que este módulo
+# dependa de él. CA4: un hook que falla nunca afecta el registro — el evento
+# ya está persistido cuando el hook corre, y su excepción se atrapa y va al
+# log interno.
+
+_hooks_post_insercion: List = []
+
+
+def registrar_hook_post_insercion(hook) -> None:
+    if hook not in _hooks_post_insercion:
+        _hooks_post_insercion.append(hook)
+
+
+def eliminar_hook_post_insercion(hook) -> None:
+    if hook in _hooks_post_insercion:
+        _hooks_post_insercion.remove(hook)
+
+
+def _ejecutar_hooks_post_insercion(conn: sqlite3.Connection, event_id: int, evento: Dict) -> None:
+    for hook in list(_hooks_post_insercion):
+        try:
+            hook(conn, event_id, evento)
+        except Exception as exc:
+            try:
+                from ..utils.error_log import log_internal_error
+                log_internal_error("HU-7.2: hook post-inserción falló (el evento sí se registró)", exc)
+            except Exception:
+                pass
 
 
 def insert_event(conn: sqlite3.Connection, event: Dict) -> int:
