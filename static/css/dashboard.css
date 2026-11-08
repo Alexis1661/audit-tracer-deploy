@@ -26,9 +26,8 @@
     color: var(--clr-text-main);
 }
 
-/* El contenedor animado no debe cambiar el anclaje de los modales. */
-#app-wrapper:has(.dashboard-layout) {
-    transform: none !important;
+html:has(.dashboard-layout) {
+    background-color: var(--clr-main-bg);
 }
 
 /* Navegación */
