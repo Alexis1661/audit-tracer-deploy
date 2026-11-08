@@ -7,9 +7,9 @@
 <style>
     /* ── Layout general ───────────────────────────────────────── */
     .merkle-hero {
-        background: linear-gradient(135deg, #0F172A 0%, #1E3A5F 60%, #0F4C75 100%);
-        border-radius: 20px;
-        padding: 32px 36px;
+        background: linear-gradient(135deg, var(--clr-sidebar-bg), #204a74);
+        border-radius: var(--panel-radius);
+        padding: clamp(18px, 3vw, 32px);
         margin-bottom: 28px;
         color: #fff;
         position: relative;
@@ -28,12 +28,13 @@
 
     /* ── Tarjetas de resultado ────────────────────────────────── */
     .result-card {
-        border-radius: 16px;
+        border-radius: var(--panel-radius);
         border: 1px solid var(--clr-border);
-        padding: 24px 28px;
+        padding: clamp(16px, 2.4vw, 24px);
         margin-bottom: 24px;
-        background: white;
+        background: var(--clr-card-bg);
         box-shadow: var(--shadow-sm);
+        overflow-wrap: anywhere;
     }
     .result-card.ok   { border-left: 5px solid #10B981; }
     .result-card.fail { border-left: 5px solid #EF4444; }
@@ -51,10 +52,10 @@
 
     /* ── Formulario de verificación ──────────────────────────── */
     .verify-form-card {
-        background: white;
-        border-radius: 16px;
+        background: var(--clr-card-bg);
+        border-radius: var(--panel-radius);
         border: 1px solid var(--clr-border);
-        padding: 24px 28px;
+        padding: clamp(16px, 2.4vw, 24px);
         margin-bottom: 24px;
         box-shadow: var(--shadow-sm);
     }
@@ -63,7 +64,7 @@
         margin: 0 0 16px;
     }
     .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
-    .form-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 220px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; flex: 1 1 220px; min-width: 0; }
     .form-group label { font-size: 11px; font-weight: 700; text-transform: uppercase;
                         letter-spacing: .5px; color: var(--clr-text-muted); }
     .form-group input {
@@ -74,17 +75,17 @@
     }
     .form-group input:focus { outline: none; border-color: #3B82F6; }
     .btn-verify {
-        padding: 10px 22px; background: #1D4ED8; color: white;
+        padding: 10px 22px; background: var(--clr-accent-blue); color: white;
         border: none; border-radius: 10px; font-size: 13px; font-weight: 600;
         cursor: pointer; transition: background .2s, transform .1s; white-space: nowrap;
     }
     .btn-verify:hover { background: #1E40AF; transform: translateY(-1px); }
 
     /* ── Tabla de anclas ──────────────────────────────────────── */
-    .anchors-table { width: 100%; border-collapse: collapse; }
+    .anchors-table { width: 100%; min-width: 42rem; border-collapse: collapse; }
     .anchors-table th {
         font-size: 11px; font-weight: 700; text-transform: uppercase;
-        letter-spacing: .5px; color: var(--clr-text-muted);
+        letter-spacing: .5px; color: var(--clr-text-muted); background: var(--clr-main-bg);
         padding: 10px 14px; border-bottom: 2px solid var(--clr-border);
         text-align: left;
     }
@@ -101,13 +102,13 @@
     }
 
     /* ── Grid y campos ────────────────────────────────────────── */
-    .detail-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .detail-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 16px; }
     .detail-item { display: flex; flex-direction: column; gap: 4px; }
     .detail-label {
         font-size: 11px; font-weight: 700; text-transform: uppercase;
         letter-spacing: .5px; color: var(--clr-text-muted);
     }
-    .detail-value { font-size: 13px; font-weight: 600; color: var(--clr-text-main); word-break: break-all; }
+    .detail-value { font-size: 13px; font-weight: 600; color: var(--clr-text-main); }
 
     /* ── Pendientes ───────────────────────────────────────────── */
     .pending-chip {
@@ -333,9 +334,9 @@
 
         <!-- Tabla de todos los anclajes verificados ───────────────── -->
         {% if todos_anchors is defined and todos_anchors %}
-        <div class="result-card" style="padding:24px 28px;">
+        <div class="result-card">
             <div style="font-size:16px;font-weight:700;margin-bottom:20px;">📋 Historial de anclajes verificados</div>
-            <div style="overflow-x:auto;">
+            <div class="audit-table-container" role="region" aria-label="Historial de anclajes verificados" tabindex="0">
             <table class="anchors-table">
                 <thead>
                     <tr>

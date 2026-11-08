@@ -20,7 +20,7 @@
 
         <div class="nav-section">
             <div class="nav-section__title">Principal</div>
-            <a href="#" class="nav-item active">
+            <a href="#" class="nav-item active" aria-current="page">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                 Dashboard
             </a>
@@ -84,20 +84,17 @@
         <header class="header">
             <div class="header__title">
                 <h1>Bienvenido, {{ session.get('nombre') }}</h1>
-                <p>Panel de Auditoría de Salud — Última actualización: hoy a las {{ now_date }}</p>
+                <p>Panel de Auditoría de Salud — Actualizado el {{ now_date }}</p>
             </div>
-            <div style="background: white; border: 1px solid var(--clr-border); padding: 8px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                <div style="width: 8px; height: 8px; background: #34C759; border-radius: 50%;"></div>
-                Sistema Activo
-            </div>
+            <span class="system-status">Sistema Activo</span>
         </header>
 
         {# ── STATS GRID ── #}
-        <div class="stats-grid">
+        <div class="stats-grid stats-grid--overview">
             <div class="stat-card">
                 <div class="stat-card__header">
                     <div class="stat-card__icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></div>
-                    <span style="font-size: 11px; color: #34C759; font-weight: 700;">+12%</span>
+                    <span class="badge badge-success">+12%</span>
                 </div>
                 <div class="stat-card__value">{{ total_eventos }}</div>
                 <div class="stat-card__label">Total de Eventos</div>
@@ -120,9 +117,9 @@
                 <div class="stat-card__header">
                     <div class="stat-card__icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
                     {% if registros_corruptos > 0 %}
-                    <span style="font-size: 11px; color: #FF3B30; font-weight: 700;">Crítico</span>
+                    <span class="badge badge-critico">Crítico</span>
                     {% else %}
-                    <span style="font-size: 11px; color: #34C759; font-weight: 700;">OK</span>
+                    <span class="badge badge-success">OK</span>
                     {% endif %}
                 </div>
                 <div class="stat-card__value">{{ registros_corruptos }}</div>
@@ -134,73 +131,76 @@
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                     </div>
                     {% if accesos_fallidos_criticos_hoy > 0 %}
-                    <span style="font-size: 11px; color: #FF3B30; font-weight: 700;">{{ accesos_fallidos_criticos_hoy }} crítico{{ 's' if accesos_fallidos_criticos_hoy != 1 else '' }}</span>
+                    <span class="badge badge-critico">{{ accesos_fallidos_criticos_hoy }} crítico{{ 's' if accesos_fallidos_criticos_hoy != 1 else '' }}</span>
                     {% elif accesos_fallidos_hoy > 0 %}
-                    <span style="font-size: 11px; color: #D97706; font-weight: 700;">Revisar</span>
+                    <span class="badge badge-advertencia">Revisar</span>
                     {% else %}
-                    <span style="font-size: 11px; color: #34C759; font-weight: 700;">OK</span>
+                    <span class="badge badge-success">OK</span>
                     {% endif %}
                 </div>
-                <div class="stat-card__value" style="{% if accesos_fallidos_hoy > 0 %}color: #FF3B30;{% endif %}">
+                <div class="stat-card__value" style="{% if accesos_fallidos_hoy > 0 %}color: #a5283a;{% endif %}">
                     {{ accesos_fallidos_hoy }}
                 </div>
-                <div class="stat-card__label">Accesos Fallidos Hoy · <a href="{{ url_for('eventos', tipo_accion='ACCESO_FALLIDO') }}" style="color: inherit; text-decoration: underline; font-weight: 700;">Ver detalle</a></div>
+                <div class="stat-card__label">Accesos Fallidos Hoy · <a href="{{ url_for('eventos', tipo_accion='ACCESO_FALLIDO') }}">Ver detalle</a></div>
             </div>
             <div class="stat-card">
                 <div class="stat-card__header">
                     <div class="stat-card__icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></div>
                     {% if exportaciones_criticas > 0 %}
-                    <span style="font-size: 11px; color: #FF3B30; font-weight: 700;">{{ exportaciones_criticas }} crítica{{ 's' if exportaciones_criticas != 1 else '' }}</span>
+                    <span class="badge badge-critico">{{ exportaciones_criticas }} crítica{{ 's' if exportaciones_criticas != 1 else '' }}</span>
                     {% endif %}
                 </div>
                 <div class="stat-card__value">{{ total_exportaciones }}</div>
                 <div class="stat-card__label">Exportaciones de Datos · {{ filas_exportadas_total }} filas</div>
             </div>
         </div>
-
-        {# ── ANÁLISIS DE EVENTOS (datos reales) ── #}
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-            <h2 style="font-size: 20px; font-weight: 800;">Análisis de Eventos</h2>
-            <a href="{{ url_for('reportes') }}" style="font-size: 13px; font-weight: 700; color: var(--clr-accent-blue); text-decoration: none;">Ver reportes completos →</a>
         </div>
-        <div class="preview-section">
-            <div class="preview-grid">
-                <div class="mock-graph" style="background: linear-gradient(180deg, #F5F5F7 0%, #FFFFFF 100%); display: flex; align-items: flex-end; padding: 20px; gap: 10px;">
-                    {% for item in eventos_por_tipo %}
-                    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%;">
-                        <div style="font-size: 12px; font-weight: 700; margin-bottom: 6px;">{{ item.count }}</div>
-                        <div style="width: 100%; height: {{ item.pct }}%; min-height: 4px; background: var(--clr-accent-blue); opacity: {{ '0.9' if loop.first else '0.4' }}; border-radius: 4px;"></div>
-                        <div style="font-size: 10px; color: var(--clr-text-muted); margin-top: 8px; text-align: center; word-break: break-word;">{{ item.tipo }}</div>
+
+        {# ── ANÁLISIS DE EVENTOS ── #}
+        <div class="section-heading">
+            <h2>Análisis de Eventos</h2>
+            <a href="{{ url_for('reportes') }}">Ver reportes completos →</a>
+        </div>
+        <div class="report-grid">
+            <section class="report-card">
+                <h3>Eventos por Tipo de Acción</h3>
+                {% for item in eventos_por_tipo %}
+                <div class="distribution">
+                    <span class="distribution__label">{{ item.tipo }}</span>
+                    <span class="distribution__track" aria-hidden="true">
+                        <span class="distribution__bar" style="width: {{ item.pct }}%;{% if item.count %} min-width: 3px;{% endif %}"></span>
+                    </span>
+                    <strong class="distribution__count">{{ item.count }}</strong>
+                </div>
+                {% else %}
+                <p>Aún no hay eventos registrados.</p>
+                {% endfor %}
+            </section>
+
+            <div class="report-stack">
+                <section class="report-card">
+                    <h3>Niveles de Alerta</h3>
+                    {% for item in alertas_por_nivel %}
+                    <div class="distribution distribution--{{ item.nivel | lower }}">
+                        <span class="distribution__label"><span class="badge badge-{{ item.nivel | lower }}">{{ item.nivel }}</span></span>
+                        <span class="distribution__track" aria-hidden="true">
+                            <span class="distribution__bar" style="width: {{ item.pct }}%;{% if item.count %} min-width: 3px;{% endif %}"></span>
+                        </span>
+                        <strong class="distribution__count">{{ item.count }}</strong>
+                    </div>
+                    {% endfor %}
+                </section>
+                <section class="report-card">
+                    <h3>Críticos por Causa</h3>
+                    {% for causa, count in criticos_por_causa %}
+                    <div class="cause-row">
+                        <span>{{ causa }}</span>
+                        <strong>{{ count }}</strong>
                     </div>
                     {% else %}
-                    <div style="margin: auto; color: var(--clr-text-muted); font-size: 13px;">Aún no hay eventos registrados.</div>
+                    <p>Sin eventos críticos aún.</p>
                     {% endfor %}
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 24px;">
-                    <div class="mock-graph" style="padding: 20px;">
-                        <div style="font-size: 11px; font-weight: 700; color: var(--clr-text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px;">Niveles de Alerta</div>
-                        {% for item in alertas_por_nivel %}
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                            <span class="badge badge-{{ item.nivel | lower }}" style="width: 92px; text-align: center; flex-shrink: 0;">{{ item.nivel }}</span>
-                            <div style="flex: 1; height: 8px; background: #F5F5F7; border-radius: 4px; overflow: hidden;">
-                                <div style="width: {{ item.pct }}%; height: 100%; background: var(--clr-accent-blue);"></div>
-                            </div>
-                            <span style="font-size: 12px; font-weight: 700; width: 20px; text-align: right;">{{ item.count }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    <div class="mock-graph" style="padding: 20px;">
-                        <div style="font-size: 11px; font-weight: 700; color: var(--clr-text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px;">Críticos por Causa</div>
-                        {% for causa, count in criticos_por_causa %}
-                        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 8px;">
-                            <span>{{ causa }}</span>
-                            <span style="font-weight: 700;">{{ count }}</span>
-                        </div>
-                        {% else %}
-                        <div style="font-size: 12px; color: var(--clr-text-muted);">Sin eventos críticos aún.</div>
-                        {% endfor %}
-                    </div>
-                </div>
+                </section>
             </div>
         </div>
 
