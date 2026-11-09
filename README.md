@@ -11,6 +11,30 @@ Cumple con normativas como HIPAA §164.312(b) y §164.312(c)(1), Ley 1581 de 201
 pip install -r requirements.txt
 ```
 
+## Espacio de auditoría
+
+Entra al panel y abre **Explorar** para acceder a la línea de tiempo, las
+búsquedas guardadas y la actividad en vivo. Los usuarios con permisos de consulta de
+reportes y visualización de alertas pueden gestionar revisiones y configurar avisos.
+
+Las notificaciones del panel están disponibles de inmediato. Para habilitar los
+avisos por correo, configura `AUDIT_SMTP_HOST` y `AUDIT_SMTP_FROM` en el servidor
+web y en el proceso de correo. Define `AUDIT_SMTP_USER` y
+`AUDIT_SMTP_PASSWORD` en el proceso de correo si el proveedor exige autenticación.
+Se usa STARTTLS en el puerto 587 por defecto. Para TLS implícito define
+`AUDIT_SMTP_TLS=implicit` (puerto 465). `AUDIT_SMTP_PORT` permite cambiar el puerto.
+
+Ejecuta el proceso de envío junto al servidor web, con acceso al mismo archivo
+`audit_central.db`:
+
+```bash
+python -m flask --app app audit-email --watch
+```
+
+Cada usuario activa el correo desde **Notificaciones**. El proceso agrupa las
+nuevas alertas críticas y envía como máximo un resumen cada 15 minutos por
+destinatario. Los correos contienen identificadores de eventos.
+
 ## Pruebas
 Para correr las pruebas:
 ```bash
@@ -33,8 +57,10 @@ Todo evento en `audit_log` queda asociado a un `usuario_id` y a un `sesion_id`, 
 
 - **App web (`app.py`)**: al iniciar sesión, `auth.autenticacion.login()` valida las
   credenciales contra `usuarios` y `app.py` guarda `usuario_id`/`sesion_id` en la
-  sesión de Flask (cookie firmada). Todas las rutas que auditan usan esos valores,
-  nunca uno enviado directamente por el cliente.
+  sesión de Flask (cookie firmada) junto al identificador del token web. Cada
+  solicitud protegida consulta su vigencia y el estado de la cuenta. La sesión
+  web vence al cabo de una hora y cerrar sesión revoca su token. Los tokens de API y
+  notebooks conservan su propia vigencia.
 - **Modo librería (`import audit_tracer`)**: `SessionTracker` mantiene la sesión
   activa (`sesion_id` fijo) del proceso/notebook. El usuario permanece en
   `DESCONOCIDO` hasta que se llama a `audit_tracer.login(email, password)`, que

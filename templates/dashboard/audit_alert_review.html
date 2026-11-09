@@ -1,0 +1,65 @@
+{% extends "dashboard/audit_workspace.html" %}
+{% block title %}Revisión de alerta #{{ event.event_id }}{% endblock %}
+{% block workspace %}
+<header class="header">
+    <div class="header__title">
+        <h1>Revisión de alerta #{{ event.event_id }}</h1>
+        <p>{{ event.tipo_accion | replace('_', ' ') }} · {{ event.timestamp[:19] | replace('T', ' ') }} UTC</p>
+    </div>
+    <div class="header__actions">
+        <a class="btn btn-outline" href="{{ url_for('audit.alerts') }}">Volver a alertas</a>
+        <a class="btn btn-outline" href="{{ url_for('detalle_evento', event_id=event.event_id) }}">Ver evidencia del evento</a>
+    </div>
+</header>
+<section class="audit-panel audit-stack">
+    <h2>Seguimiento <span class="badge badge-{{ event.nivel_alerta | lower }}">{{ event.nivel_alerta }}</span></h2>
+    {% if event.motivo_alerta %}<p>{{ event.motivo_alerta }}</p>{% endif %}
+    <form class="audit-stack" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="version" value="{{ event.version }}">
+        <div class="audit-grid">
+            <div>
+                <label class="form-label" for="review-state">Estado de revisión</label>
+                <select class="form-select" id="review-state" name="estado" required>
+                    {% for state in states %}<option value="{{ state }}" {% if state == event.estado %}selected{% endif %}>{{ state | replace('_', ' ') }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label" for="assignee">Responsable</label>
+                <select class="form-select" id="assignee" name="responsable_id">
+                    <option value="">Sin asignar</option>
+                    {% if event.responsable_id and event.responsable_id not in assignees | map(attribute='usuario_id') | list %}
+                    <option value="{{ event.responsable_id }}" selected>Responsable anterior no disponible</option>
+                    {% endif %}
+                    {% for user in assignees %}
+                    <option value="{{ user.usuario_id }}" {% if event.responsable_id == user.usuario_id %}selected{% endif %}>{{ user.email }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div>
+            <label class="form-label" for="review-comment">Comentario de revisión (opcional)</label>
+            <textarea class="form-input" id="review-comment" name="comentario" maxlength="2000" rows="4" aria-describedby="review-guidance"></textarea>
+            <p id="review-guidance" class="audit-muted">Describe el hallazgo o la decisión sin incluir datos de pacientes.</p>
+        </div>
+        <div class="audit-actions"><button class="btn btn-primary">Guardar revisión</button></div>
+    </form>
+</section>
+<section class="audit-panel audit-stack">
+    <h2>Historial de revisión</h2>
+    {% for entry in history %}
+    <article>
+        <strong>{{ entry.autor or 'Cuenta anterior' }}</strong>
+        <span class="audit-muted">· {{ entry.fecha[:19] | replace('T', ' ') }} UTC</span>
+        <p>{{ entry.estado | replace('_', ' ') }} · {{ entry.responsable or 'Sin asignar' }}</p>
+        {% if entry.comentario %}<p class="audit-note">{{ entry.comentario }}</p>{% endif %}
+    </article>
+    {% else %}<p class="audit-muted">Todavía no hay revisiones para esta alerta.</p>{% endfor %}
+    {% if history_page > 1 or history_more %}
+    <nav class="audit-actions" aria-label="Páginas del historial">
+        {% if history_page > 1 %}<a class="btn btn-outline" href="{{ url_for('audit.alert_review', event_id=event.event_id, historial=history_page-1) }}">Más recientes</a>{% endif %}
+        {% if history_more %}<a class="btn btn-outline" href="{{ url_for('audit.alert_review', event_id=event.event_id, historial=history_page+1) }}">Más antiguas</a>{% endif %}
+    </nav>
+    {% endif %}
+</section>
+{% endblock %}

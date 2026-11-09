@@ -16,6 +16,7 @@ import json
 import os
 import shutil
 import tempfile
+from conftest import clonar_bd_web, crear_sesion_web
 import pytest
 
 from audit_tracer.db import get_connection
@@ -52,16 +53,13 @@ def db_conn():
 
 
 @pytest.fixture
-def flask_client():
+def flask_client(seeded_db, tmp_path, monkeypatch):
     """Cliente de prueba Flask autenticado como AUDITOR."""
+    clonar_bd_web(seeded_db["conn"], tmp_path, monkeypatch)
     app.config["TESTING"] = True
     app.config["WTF_CSRF_ENABLED"] = False
     with app.test_client() as client:
-        with client.session_transaction() as sess:
-            sess["usuario_id"] = "auditor_test"
-            sess["rol"] = "AUDITOR"
-            sess["nombre"] = "Auditor Externo"
-            sess["sesion_id"] = "s_merkle_auditor"
+        crear_sesion_web(client, "auditor_test", "AUDITOR", "Auditor Externo", "s_merkle_auditor")
         yield client
 
 
@@ -321,7 +319,6 @@ class TestEndpointsMerkle:
 
     def test_endpoint_verificar_evento_individual(self, flask_client, seeded_db, monkeypatch):
         """GET /merkle/verificar/<event_id> retorna la prueba y su validez."""
-        monkeypatch.setattr("app.get_db", lambda: seeded_db["conn"])
         event_id = seeded_db["lote_1"]["ids"][0]
 
         res = flask_client.get(f"/merkle/verificar/{event_id}")
@@ -334,7 +331,6 @@ class TestEndpointsMerkle:
 
     def test_endpoint_lote_merkle(self, flask_client, seeded_db, monkeypatch):
         """GET /merkle/lote/<batch_hour> retorna la raíz y total de hojas."""
-        monkeypatch.setattr("app.get_db", lambda: seeded_db["conn"])
 
         res = flask_client.get("/merkle/lote/2026-10-22T10")
         assert res.status_code == 200
@@ -343,20 +339,18 @@ class TestEndpointsMerkle:
         assert data["leaf_count"] == 4
         assert len(data["root"]) == 64
 
-    def test_endpoint_publicar_restringido_a_roles_autorizados(self, seeded_db, monkeypatch):
+    def test_endpoint_publicar_restringido_a_roles_autorizados(self, seeded_db, monkeypatch, tmp_path):
         """POST /merkle/publicar rechaza usuarios sin rol ADMIN ni AUDITOR (ej. ANALISTA)."""
+        clonar_bd_web(seeded_db["conn"], tmp_path, monkeypatch)
         app.config["TESTING"] = True
         with app.test_client() as client:
-            with client.session_transaction() as sess:
-                sess["usuario_id"] = "analista_test"
-                sess["rol"] = "ANALISTA"
+            crear_sesion_web(client, "analista_test", "ANALISTA")
 
             res = client.post("/merkle/publicar", json={"batch_hour": "2026-10-22T10"})
             assert res.status_code == 403
 
     def test_endpoint_verificar_ancla_vista_get(self, flask_client, seeded_db, monkeypatch):
         """GET /merkle/verificar-ancla renderiza la pantalla de integridad Merkle."""
-        monkeypatch.setattr("app.get_db", lambda: seeded_db["conn"])
 
         res = flask_client.get("/merkle/verificar-ancla")
         assert res.status_code == 200

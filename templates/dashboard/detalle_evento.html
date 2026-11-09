@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "dashboard/panel_base.html" %}
 
 {% block title %}Detalle de Evento #{{ evento.event_id }} — Audit Tracer{% endblock %}
 
@@ -99,6 +99,21 @@
         background: #F0FDF4;
         border: 1px solid #BBF7D0;
         color: #166534;
+    }
+
+    .alert-signals {
+        list-style: disc;
+        padding-inline-start: 1.25rem;
+        margin: 8px 0;
+    }
+
+    .comparison-caption {
+        color: var(--clr-text-muted);
+        margin: 8px 0 12px;
+    }
+
+    .comparison-summary {
+        margin-top: 12px;
     }
 
     .recommendations-title {
@@ -270,8 +285,10 @@
         </div>
     </aside>
 
+    {% include "dashboard/_audit_toolbar.html" %}
+
     {# ── MAIN CONTENT ── #}
-    <main class="main-content">
+    <main id="panel-content" tabindex="-1" class="main-content">
         <header class="header" style="margin-bottom: 24px;">
             <div class="header__title">
                 <a href="{{ url_for('eventos') }}" class="btn btn-outline" style="margin-bottom: 16px; width: fit-content;">
@@ -282,6 +299,10 @@
                 <p>Trazabilidad clínica y análisis forense contextual (HU-7.4).</p>
             </div>
             <div class="header__actions">
+                {% if audit_alert_available and diagnostico.es_alerta %}
+                <a href="{{ url_for('audit.alert_review', event_id=evento.event_id) }}" class="btn btn-outline">Revisar alerta</a>
+                {% endif %}
+                <a href="{{ url_for('audit.relations', event_id=evento.event_id) }}" class="btn btn-outline">Ver relaciones</a>
                 {# HU-7.1 CA2: acceso al grafo de linaje del evento #}
                 {% if evento.dataset_nombre %}
                 <a href="{{ url_for('linaje', event_id=evento.event_id) }}" class="btn btn-outline">Ver linaje</a>
@@ -300,18 +321,60 @@
                 <h2>{{ explicacion.titulo }}</h2>
                 <span class="badge badge-{{ diagnostico.nivel | lower }}">{{ diagnostico.categoria_alerta }}</span>
             </div>
-            <p>{{ explicacion.descripcion | safe }}</p>
+            <p>{{ explicacion.descripcion }}</p>
 
             {% if diagnostico.es_alerta %}
             <div class="impact-box {{ diagnostico.clase_css }}">
-                <div style="font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                    Diagnóstico de Alerta: {{ diagnostico.motivo }}
-                </div>
-                <div><strong>Impacto Estimado:</strong> {{ diagnostico.impacto }}</div>
+                <h3>Señales que quedaron registradas</h3>
+                {% if diagnostico.senales %}
+                <ul class="alert-signals">
+                    {% for senal in diagnostico.senales %}
+                    <li>{{ senal }}</li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p>El evento conserva su clasificación, pero el registro no incluye el motivo.</p>
+                {% endif %}
+                <p><strong>Impacto estimado.</strong> {{ diagnostico.impacto }}</p>
             </div>
             {% endif %}
         </section>
+
+        {% if explicacion.es_transformacion %}
+        <section class="detail-card" aria-labelledby="comparison-title">
+            <h2 id="comparison-title">Comparador de cambios</h2>
+            {% set comparacion = explicacion.comparacion %}
+            {% if comparacion %}
+            <p class="comparison-caption">
+                {% if explicacion.es_combinacion %}Se compara el dataset izquierdo con el resultado de la combinación.{% endif %}
+                Las métricas son agregadas. Los valores de las celdas se mantienen ocultos.
+            </p>
+            <div class="audit-table-container" role="region" aria-labelledby="comparison-title" tabindex="0">
+                <table class="audit-table">
+                    <thead>
+                        <tr><th scope="col">Métrica</th><th scope="col">Antes</th><th scope="col">Después</th><th scope="col">Diferencia</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for metrica in comparacion.metricas %}
+                        <tr>
+                            <th scope="row">{{ metrica.nombre }}</th>
+                            <td>{{ metrica.antes }}</td>
+                            <td>{{ metrica.despues }}</td>
+                            <td>{{ '%+d' | format(metrica.cambio) if metrica.cambio else '0' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="comparison-summary">
+                <strong>Columnas incorporadas</strong> {{ comparacion.columnas_agregadas }} ·
+                <strong>Columnas retiradas</strong> {{ comparacion.columnas_retiradas }}.
+            </p>
+            {% else %}
+            <p class="comparison-caption">El registro de esta transformación no contiene mediciones de antes y después.</p>
+            {% endif %}
+        </section>
+        {% endif %}
 
         {# ── RECOMENDACIONES Y GUÍA DE MITIGACIÓN (HU-7.4 CA4) ── #}
         <section class="detail-card">
@@ -396,7 +459,7 @@
                 </div>
                 <div class="detail-item">
                     <span class="detail-label">Columnas Afectadas</span>
-                    <span class="detail-value">{{ evento.columnas_afectadas or '—' }}</span>
+                    <span class="detail-value">{{ explicacion.columnas_visibles or '—' }}</span>
                 </div>
                 <div class="detail-item">
                     <span class="detail-label">Ruta Destino (Exportación)</span>
@@ -417,8 +480,13 @@
                     </span>
                 </div>
                 <div class="detail-item">
+                    {% if explicacion.es_transformacion %}
+                    <span class="detail-label">Operación de transformación</span>
+                    <span class="detail-value">{{ explicacion.operacion_transformacion or '—' }}</span>
+                    {% else %}
                     <span class="detail-label">Motivo de Fallo (si aplica)</span>
                     <span class="detail-value" style="color: #DC2626; font-weight: 700;">{{ evento.motivo_fallo or '—' }}</span>
+                    {% endif %}
                 </div>
             </div>
 

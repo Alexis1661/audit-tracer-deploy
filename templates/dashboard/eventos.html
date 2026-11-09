@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "dashboard/panel_base.html" %}
 
 {% block title %}Eventos de Auditoría — Audit Tracer{% endblock %}
 
@@ -126,8 +126,10 @@
         </div>
     </aside>
 
+    {% include "dashboard/_audit_toolbar.html" %}
+
     {# ── MAIN CONTENT ── #}
-    <main class="main-content main-content--events">
+    <main id="panel-content" tabindex="-1" class="main-content main-content--events">
         <div class="event-controls">
             <header class="header">
                 <div class="header__title">

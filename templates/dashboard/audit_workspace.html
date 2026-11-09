@@ -1,0 +1,62 @@
+{% extends "dashboard/panel_base.html" %}
+
+{% block title %}Espacio de auditoría{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-layout">
+    <aside class="sidebar">
+        <a href="{{ url_for('dashboard') }}" class="sidebar__brand">
+            <span class="sidebar__brand-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            </span>
+            Audit Tracer
+        </a>
+        <nav class="audit-workspace-nav" aria-label="Secciones del panel">
+            <div class="nav-section">
+                <div class="nav-section__title">Espacio de auditoría</div>
+                {% set links = [
+                    ('audit.explore', 'Explorar eventos'),
+                    ('audit.alerts', 'Centro de alertas')
+                ] %}
+                {% for endpoint, label in links %}
+                    {% if audit_alert_available or endpoint != 'audit.alerts' %}
+                    {% set active = request.endpoint == endpoint or (endpoint == 'audit.explore' and request.endpoint == 'audit.relations') or (endpoint == 'audit.alerts' and request.endpoint == 'audit.alert_review') %}
+                    <a class="nav-item{% if active %} active{% endif %}" href="{{ url_for(endpoint) }}" {% if active %}aria-current="{% if request.endpoint == endpoint %}page{% else %}location{% endif %}"{% endif %}>{{ label }}</a>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            <div class="nav-section">
+                <div class="nav-section__title">Panel principal</div>
+                <a class="nav-item" href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a class="nav-item" href="{{ url_for('eventos') }}">Registro de eventos</a>
+                <a class="nav-item" href="{{ url_for('reportes') }}">Reportes</a>
+                <a class="nav-item" href="{{ url_for('linaje') }}">Linaje</a>
+                <a class="nav-item" href="{{ url_for('merkle_verificar_ancla') }}">Integridad Merkle</a>
+            </div>
+        </nav>
+        <div class="sidebar__footer">
+            <div class="user-profile">
+                {% set nombre = session.get('nombre') or 'Usuario' %}
+                <div class="user-avatar" aria-hidden="true">{{ nombre[0] | upper }}</div>
+                <div class="audit-workspace-profile">
+                    <strong title="{{ nombre }}">{{ nombre }}</strong>
+                    <div class="audit-muted">{{ session.get('rol', '') }}</div>
+                </div>
+            </div>
+            <a class="logout-link" href="{{ url_for('logout') }}">Cerrar sesión</a>
+        </div>
+    </aside>
+
+    {% include "dashboard/_audit_toolbar.html" %}
+    <main id="panel-content" tabindex="-1" class="main-content">
+        {% for category, message in get_flashed_messages(with_categories=true) %}
+        <p class="alert alert-{{ category }}" role="status">{{ message }}</p>
+        {% endfor %}
+        {% block workspace %}{% endblock %}
+    </main>
+</div>
+{% endblock %}

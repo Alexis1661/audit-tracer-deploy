@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "dashboard/panel_base.html" %}
 
 {% block title %}Gestión de Tokens de Acceso — Audit Tracer{% endblock %}
 
@@ -276,8 +276,10 @@
         </div>
     </aside>
 
+    {% include "dashboard/_audit_toolbar.html" %}
+
     {# ── MAIN CONTENT ── #}
-    <main class="main-content">
+    <main id="panel-content" tabindex="-1" class="main-content">
         <header class="header">
             <div class="header__title">
                 <h1>Tokens Personales de Acceso</h1>

@@ -18,6 +18,7 @@ partir de estructuras armadas a mano.
 import os
 
 import pandas as pd
+from conftest import crear_sesion_web
 import pytest
 
 import app as app_module
@@ -290,11 +291,7 @@ def central_db(tmp_path, monkeypatch):
 def _cliente(rol):
     app_module.app.config["TESTING"] = True
     client = app_module.app.test_client()
-    with client.session_transaction() as sess:
-        sess["usuario_id"] = "u-test"
-        sess["rol"] = rol
-        sess["nombre"] = "Test"
-        sess["sesion_id"] = "s-web"
+    crear_sesion_web(client, "u-test", rol, "Test", "s-web")
     return client
 
 

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block panel_assets %}
+{% if session.get('usuario_id') %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/audit_workspace.css') }}">
+<script src="{{ url_for('static', filename='js/audit_workspace.js') }}"></script>
+{% endif %}
+{% endblock %}
+
+{% block skip_link %}
+{% if session.get('usuario_id') %}
+<a class="audit-skip-link" href="#panel-content">Saltar al contenido</a>
+{% endif %}
+{% endblock %}

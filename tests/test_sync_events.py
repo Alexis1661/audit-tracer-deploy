@@ -21,6 +21,7 @@ import threading
 import time
 import uuid
 
+from conftest import crear_sesion_web
 import pytest
 import requests
 from werkzeug.serving import make_server
@@ -710,11 +711,7 @@ def admin_client(monkeypatch, tmp_path):
     monkeypatch.setattr(app_module, "get_db", lambda: get_central_connection(db_path))
     app_module.app.config["TESTING"] = True
     with app_module.app.test_client() as client:
-        with client.session_transaction() as sess:
-            sess["usuario_id"] = "admin1"
-            sess["rol"] = "ADMIN"
-            sess["nombre"] = "Admin Test"
-            sess["sesion_id"] = "s_admin"
+        crear_sesion_web(client, "admin1", "ADMIN", "Admin Test", "s_admin")
         yield client, db_path
 
 
@@ -748,10 +745,6 @@ class TestDashboardSincronizacion:
         monkeypatch.setattr(app_module, "get_db", lambda: get_central_connection(db_path))
         app_module.app.config["TESTING"] = True
         with app_module.app.test_client() as client:
-            with client.session_transaction() as sess:
-                sess["usuario_id"] = "analista1"
-                sess["rol"] = "ANALISTA"
-                sess["nombre"] = "Analista Test"
-                sess["sesion_id"] = "s1"
+            crear_sesion_web(client, "analista1", "ANALISTA", "Analista Test", "s1")
             resp = client.get("/admin/sincronizacion")
             assert resp.status_code in (302, 403)

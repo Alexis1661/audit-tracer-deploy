@@ -1,0 +1,187 @@
+{% extends "dashboard/audit_workspace.html" %}
+{% block title %}Explorar eventos{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/audit_explore.css') }}">
+{% endblock %}
+
+{% block workspace %}
+{% set extra_fields = ['usuario_id', 'dataset_nombre', 'sesion_id', 'fecha_inicio', 'fecha_fin', 'periodo'] %}
+{% set advanced_count = extra_fields | select('in', filters) | list | length %}
+<header class="header audit-page-heading">
+    <div class="header__title">
+        <h1>Explorar eventos</h1>
+        <p>Encuentra eventos y sigue sus relaciones desde la línea de tiempo.</p>
+    </div>
+    <div class="header__actions">
+        <a class="btn btn-outline" href="{{ url_for('eventos') }}">Ver tabla de eventos</a>
+        <a class="btn btn-outline" href="#actividad-en-vivo">Actividad en vivo</a>
+    </div>
+</header>
+
+<div class="audit-stack">
+<section class="audit-panel explorer-search" aria-label="Buscar y filtrar eventos">
+    <form action="{{ url_for('audit.explore') }}" method="get">
+        <div class="explorer-filter-row">
+            <label class="explorer-query">Buscar
+                <input class="form-input" type="search" name="q" maxlength="512" value="{{ filters.q or '' }}" placeholder="Evento #42, usuario, dataset, hash o sesión">
+            </label>
+            <label>Acción
+                <select class="form-select" name="tipo_accion">
+                    <option value="">Todas</option>
+                    {% if filters.tipo_accion and filters.tipo_accion not in actions %}
+                    <option value="{{ filters.tipo_accion }}" selected>{{ filters.tipo_accion }}</option>
+                    {% endif %}
+                    {% for action in actions %}
+                    <option value="{{ action }}"{% if filters.tipo_accion == action %} selected{% endif %}>{{ action | replace('_', ' ') }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Nivel de riesgo
+                <select class="form-select" name="nivel_alerta">
+                    <option value="">Todos</option>
+                    {% for level in levels %}
+                    <option value="{{ level }}"{% if filters.nivel_alerta == level %} selected{% endif %}>{{ level }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button class="btn btn-primary" type="submit">Buscar</button>
+        </div>
+        <div class="explorer-filter-tools">
+            <details class="explorer-filter-details"{% if advanced_count %} open{% endif %}>
+                <summary class="explorer-disclosure">Más filtros{% if advanced_count %} <span class="badge badge-normal">{{ advanced_count }}</span>{% endif %}</summary>
+                <div class="explorer-advanced-fields">
+                    <label>Usuario
+                        <input class="form-input" name="usuario_id" maxlength="512" value="{{ filters.usuario_id or '' }}" placeholder="ID del usuario">
+                    </label>
+                    <label>Dataset
+                        <input class="form-input" name="dataset_nombre" maxlength="512" value="{{ filters.dataset_nombre or '' }}">
+                    </label>
+                    <label>Sesión
+                        <input class="form-input" name="sesion_id" maxlength="512" value="{{ filters.sesion_id or '' }}">
+                    </label>
+                    <label>Desde
+                        <input class="form-input" type="date" name="fecha_inicio" value="{{ filters.fecha_inicio or '' }}" aria-describedby="explore-period-hint">
+                    </label>
+                    <label>Hasta
+                        <input class="form-input" type="date" name="fecha_fin" value="{{ filters.fecha_fin or '' }}" aria-describedby="explore-period-hint">
+                    </label>
+                    <label>Periodo
+                        <select class="form-select" name="periodo" aria-describedby="explore-period-hint">
+                            <option value="">Usar rango de fechas</option>
+                            <option value="mes_actual"{% if filters.periodo == 'mes_actual' %} selected{% endif %}>Este mes</option>
+                        </select>
+                    </label>
+                </div>
+                <p id="explore-period-hint" class="audit-muted explorer-period-hint">Las fechas usan UTC. «Este mes» se actualiza al abrir un filtro guardado.</p>
+                <button class="btn btn-primary" type="submit">Aplicar filtros</button>
+            </details>
+            {% if filters %}<a class="explorer-reset" href="{{ url_for('audit.explore') }}">Limpiar filtros</a>{% endif %}
+        </div>
+    </form>
+    <details class="explorer-saved-filters">
+        <summary class="explorer-disclosure">Filtros guardados <span class="audit-muted">({{ saved | length }})</span></summary>
+        {% if filters %}
+        <form action="{{ url_for('audit.save_filter') }}" method="post" class="audit-actions explorer-save-filter">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            {% for key, value in filters.items() if value %}
+            <input type="hidden" name="{{ key }}" value="{{ value }}">
+            {% endfor %}
+            <label>Nombre para los filtros aplicados
+                <input class="form-input" name="nombre" required maxlength="80" placeholder="Exportaciones críticas de este mes">
+            </label>
+            <button class="btn btn-outline" type="submit">Guardar filtro</button>
+        </form>
+        {% else %}
+        <p class="audit-muted">Aplica al menos un filtro para guardar la búsqueda.</p>
+        {% endif %}
+        {% if saved %}
+        <ul class="explorer-saved">
+            {% for item in saved %}
+            <li>
+                <a href="{{ url_for('audit.explore', **item.filtros) }}">{{ item.nombre }}</a>
+                <form method="post" action="{{ url_for('audit.delete_filter', filter_id=item.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button class="btn btn-outline" type="submit" aria-label="Eliminar filtro {{ item.nombre }}">Eliminar</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="audit-muted">Aún no tienes filtros guardados.</p>
+        {% endif %}
+    </details>
+</section>
+
+<div class="explorer-results">
+<section class="audit-panel explorer-timeline-panel" aria-labelledby="timeline-title">
+    <div class="audit-actions explorer-section-heading">
+        <div>
+            <h2 id="timeline-title">Línea de tiempo</h2>
+            <p class="audit-muted">Más recientes primero · UTC</p>
+        </div>
+    </div>
+    {% if events %}
+    {% set timeline = namespace(day=none) %}
+    <ol class="explorer-timeline">
+        {% for event in events %}
+        {% set risk = event.nivel_alerta or 'NORMAL' %}
+        {% set day = event.timestamp[:10] %}
+        <li{% if day != timeline.day %} class="explorer-day-start"{% endif %}>
+            {% if day != timeline.day %}
+            <time class="explorer-day" datetime="{{ day }}">{{ day }}</time>
+            {% set timeline.day = day %}
+            {% endif %}
+            <article>
+                <div class="audit-actions explorer-event-heading">
+                    <time datetime="{{ event.timestamp }}">{{ event.timestamp[11:19] }}</time>
+                    <h3><a href="{{ url_for('detalle_evento', event_id=event.event_id) }}">{{ event.tipo_accion | replace('_', ' ') | capitalize }} <span class="audit-muted">#{{ event.event_id }}</span></a></h3>
+                    <span class="badge badge-{{ risk | lower }}">{{ risk | capitalize }}</span>
+                </div>
+                <dl class="explorer-event-data">
+                    <div><dt>Usuario</dt><dd>{{ event.email or event.usuario_id or 'Sin identificar' }}</dd></div>
+                    <div><dt>Dataset</dt><dd>{{ event.dataset_nombre or '—' }}</dd></div>
+                    {% if event.sesion_id %}
+                    <div><dt>Sesión</dt><dd title="{{ event.sesion_id }}">{{ event.sesion_id }}</dd></div>
+                    {% endif %}
+                </dl>
+                <a class="explorer-link" href="{{ url_for('audit.relations', event_id=event.event_id) }}">Relaciones <span aria-hidden="true">↗</span></a>
+            </article>
+        </li>
+        {% endfor %}
+    </ol>
+    {% else %}
+    <p class="explorer-empty">No hay eventos para los filtros aplicados.</p>
+    {% endif %}
+    {% if page > 1 or has_next %}
+    <nav class="pagination" aria-label="Páginas de la línea de tiempo">
+        {% if page > 1 %}<a class="btn btn-outline" href="{{ url_for('audit.explore', page=page - 1, **filters) }}">Anterior</a>{% endif %}
+        <span aria-current="page">Página {{ page }}</span>
+        {% if has_next %}<a class="btn btn-outline" href="{{ url_for('audit.explore', page=page + 1, **filters) }}">Siguiente</a>{% endif %}
+    </nav>
+    {% endif %}
+</section>
+
+<section class="audit-panel explorer-live" id="actividad-en-vivo" tabindex="-1" aria-labelledby="activity-title" data-activity-url="{{ url_for('audit.activity') }}">
+    <div class="audit-actions explorer-section-heading">
+        <div>
+            <h2 id="activity-title">Actividad en vivo</h2>
+            <p class="audit-muted">Últimos eventos recibidos · UTC</p>
+        </div>
+        <button class="btn btn-outline" type="button" data-activity-toggle hidden>Pausar actividad</button>
+    </div>
+    <p class="audit-muted" role="status" data-activity-status></p>
+    <div class="explorer-activity-scroll" role="region" aria-label="Eventos recientes" tabindex="0">
+        <ul class="explorer-activity" data-activity-items></ul>
+    </div>
+    <noscript><p class="audit-muted">Activa JavaScript para consultar la actividad en vivo.</p></noscript>
+</section>
+</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/audit_explore.js') }}" defer></script>
+{% endblock %}

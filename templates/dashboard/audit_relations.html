@@ -1,0 +1,66 @@
+{% extends "dashboard/audit_workspace.html" %}
+{% block title %}Relaciones del evento #{{ event.event_id }}{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/audit_explore.css') }}">
+{% endblock %}
+
+{% block workspace %}
+<section class="audit-panel" aria-labelledby="relations-title">
+    <div class="audit-actions explorer-section-heading">
+        <div>
+            <h1 id="relations-title">Mapa de relaciones</h1>
+            <p class="audit-muted">Explora los eventos que comparten el mismo usuario, dataset o sesión.</p>
+        </div>
+        <a class="btn btn-outline" href="{{ url_for('audit.explore') }}">Ir a la línea de tiempo</a>
+    </div>
+    <div class="explorer-graph">
+        <a class="explorer-node explorer-node--hub" href="{{ url_for('detalle_evento', event_id=event.event_id) }}">
+            <span class="explorer-node-label">Evento central</span>
+            <strong>#{{ event.event_id }} · {{ event.tipo_accion | replace('_', ' ') }}</strong>
+            <span>Ver detalle del evento</span>
+        </a>
+        {% if relations %}
+        <ul class="explorer-graph-branches" aria-label="Entidades vinculadas al evento">
+            {% for relation in relations %}
+            <li>
+                <a class="explorer-node" href="#relacion-{{ loop.index }}">
+                    <span class="explorer-node-label">{{ relation.label }}</span>
+                    <strong>{{ (event.email or relation.value) if relation.filter == 'usuario_id' else relation.value }}</strong>
+                    <span>Ver eventos vinculados</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+    {% if not relations %}
+    <p class="explorer-empty">El evento no tiene un usuario, dataset o sesión identificables.</p>
+    {% endif %}
+</section>
+
+<div class="explorer-relation-groups">
+    {% for relation in relations %}
+    <section class="audit-panel explorer-relation" id="relacion-{{ loop.index }}" tabindex="-1" aria-labelledby="relacion-titulo-{{ loop.index }}">
+        <h2 id="relacion-titulo-{{ loop.index }}">Por {{ relation.label | lower }}</h2>
+        <p class="audit-muted explorer-relation-value">{{ relation.value }}</p>
+        {% if relation.events %}
+        <ul class="explorer-related-events">
+            {% for related in relation.events %}
+            {% set risk = related.nivel_alerta or 'NORMAL' %}
+            <li>
+                <a href="{{ url_for('detalle_evento', event_id=related.event_id) }}">#{{ related.event_id }} · {{ related.tipo_accion | replace('_', ' ') }}</a>
+                <span class="badge badge-{{ risk | lower }}">{{ risk }}</span>
+                <time datetime="{{ related.timestamp }}">{{ related.timestamp[:19] | replace('T', ' ') }} UTC</time>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="audit-muted">No hay otros eventos asociados.</p>
+        {% endif %}
+        <a class="btn btn-outline" href="{{ url_for('audit.explore', **{relation.filter: relation.value}) }}">Explorar todos</a>
+    </section>
+    {% endfor %}
+</div>
+{% endblock %}

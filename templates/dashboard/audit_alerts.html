@@ -1,0 +1,66 @@
+{% extends "dashboard/audit_workspace.html" %}
+{% block title %}Centro de alertas{% endblock %}
+{% block workspace %}
+{% set risk_labels = {'CRITICO': 'Crítica', 'ANOMALIA': 'Anomalía', 'ADVERTENCIA': 'Advertencia'} %}
+{% set state_labels = {'PENDIENTE': 'Pendiente', 'EN_REVISION': 'En revisión', 'RESUELTA': 'Resuelta'} %}
+<header class="header audit-page-heading">
+    <div class="header__title">
+        <h1>Centro de alertas</h1>
+        <p>Revisa las alertas del sistema y consulta su estado y responsable.</p>
+    </div>
+</header>
+<section class="audit-alert-list" aria-label="Alertas registradas">
+    <div class="audit-alert-controls">
+        <nav class="audit-alert-levels" aria-label="Filtrar alertas por nivel">
+            <a href="{{ url_for('audit.alerts', estado=state) }}" {% if not level %}aria-current="page"{% endif %}>
+                Todas <strong>{{ counts.values() | sum }}</strong>
+            </a>
+            {% for risk in levels | reverse %}
+            <a href="{{ url_for('audit.alerts', nivel=risk, estado=state) }}" {% if level == risk %}aria-current="page"{% endif %}>
+                {{ risk_labels[risk] }} <strong class="badge badge-{{ risk | lower }}">{{ counts.get(risk, 0) }}</strong>
+            </a>
+            {% endfor %}
+        </nav>
+        <form class="audit-alert-state" action="{{ url_for('audit.alerts') }}" method="get">
+            {% if level %}<input type="hidden" name="nivel" value="{{ level }}">{% endif %}
+            <label class="audit-visually-hidden" for="alert-state">Estado de revisión</label>
+            <select class="form-select" id="alert-state" name="estado">
+                <option value="">Todos los estados</option>
+                {% for option in states %}<option value="{{ option }}" {% if state == option %}selected{% endif %}>{{ state_labels[option] }}</option>{% endfor %}
+            </select>
+            <button class="btn btn-outline">Filtrar</button>
+            {% if level or state %}<a class="btn btn-outline" href="{{ url_for('audit.alerts') }}">Limpiar</a>{% endif %}
+        </form>
+    </div>
+    <div class="audit-table-container" role="region" aria-label="Tabla de alertas" tabindex="0">
+    <table class="audit-table audit-alert-table">
+        <thead><tr><th scope="col">Evento</th><th scope="col">Fecha (UTC)</th><th scope="col">Nivel</th><th scope="col">Estado</th><th scope="col">Responsable</th></tr></thead>
+        <tbody>
+            {% for alert in alerts %}
+            <tr>
+                <td>
+                    <a class="audit-alert-event" href="{{ url_for('audit.alert_review', event_id=alert.event_id) }}">
+                        <strong>{{ alert.tipo_accion | replace('_', ' ') | capitalize }}</strong>
+                        <span class="audit-muted">Evento #{{ alert.event_id }}</span>
+                    </a>
+                </td>
+                <td><time datetime="{{ alert.timestamp }}">{{ alert.timestamp[:10] }} <span class="audit-muted">{{ alert.timestamp[11:19] }}</span></time></td>
+                <td><span class="badge badge-{{ alert.nivel_alerta | lower }}">{{ risk_labels[alert.nivel_alerta] }}</span></td>
+                <td><span class="badge {{ 'badge-success' if alert.estado == 'RESUELTA' else 'badge-normal' }}">{{ state_labels[alert.estado] }}</span></td>
+                <td{% if not alert.responsable %} class="audit-muted"{% endif %}>{{ alert.responsable or 'Sin asignar' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="audit-alert-empty">No hay alertas para estos filtros.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% if page > 1 or has_next %}
+    <nav class="audit-actions audit-alert-pagination" aria-label="Páginas de alertas">
+        {% if page > 1 %}<a class="btn btn-outline" href="{{ url_for('audit.alerts', page=page-1, estado=state, nivel=level) }}">Anterior</a>{% endif %}
+        <span aria-current="page">Página {{ page }}</span>
+        {% if has_next %}<a class="btn btn-outline" href="{{ url_for('audit.alerts', page=page+1, estado=state, nivel=level) }}">Siguiente</a>{% endif %}
+    </nav>
+    {% endif %}
+</section>
+{% endblock %}

@@ -8,19 +8,24 @@ import os
 import secrets
 import sqlite3
 from collections import Counter
-from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, jsonify
+from contextlib import closing
+from flask import Flask, abort, render_template, request, redirect, url_for, session, flash, Response, jsonify, g
 
 # ── Importaciones del backend existente ─────────────────────────────────────
 from audit_tracer.db import get_central_connection, get_connection
+from audit_tracer.audit_mail import register_audit_mail_command
+from audit_tracer.audit_workspace import can_review_alerts, create_audit_blueprint
 from audit_tracer.auth.autenticacion import login as auth_login, logout as auth_logout
 from audit_tracer.auth.registro import register_user
 from audit_tracer.auth.gestion_roles import assign_role
 from audit_tracer.auth.tokens import (
     generar_token,
     validar_token,
+    validar_token_sesion,
     revocar_token,
     listar_tokens,
 )
+from audit_tracer.models.tokens import get_token_by_id
 from audit_tracer.auth.device_codes import (
     iniciar_login_dispositivo,
     confirmar_codigo,
@@ -86,6 +91,12 @@ app = Flask(__name__)
 # definida, se genera una aleatoria por proceso (las sesiones se pierden
 # al reiniciar, pero nunca quedan falsificables).
 app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=1),
+    SESSION_REFRESH_EACH_REQUEST=False,
+    SESSION_COOKIE_SAMESITE='Lax',
+)
+MENSAJE_SESION_INVALIDA = 'Tu sesión venció o dejó de ser válida. Vuelve a iniciar sesión.'
 
 # Hora de Colombia en todas las pantallas. Los timestamps se guardan en UTC
 # (hash, firmas y lotes de Merkle dependen de ese valor exacto); solo se
@@ -143,31 +154,46 @@ def get_db():
 
 
 # ── Decorador de protección de rutas ────────────────────────────────────────
-def _usuario_de_sesion_vigente() -> bool:
-    """True si el usuario de la sesión existe y está activo en la base central."""
+def _sesion_web_activa():
+    if not session.get('usuario_id') or not session.get('token_id'):
+        return False
     try:
-        conn = get_db()
-        try:
-            usuario = get_user_by_id(conn, session['usuario_id'])
-        finally:
-            conn.close()
-    except Exception:
-        return True  # ante un fallo de la base no se expulsa al usuario
-    return bool(usuario) and usuario.get('activo', 1) != 0
+        with closing(get_db()) as conn:
+            return validar_token_sesion(conn, session['token_id'], session['usuario_id'], session.get('rol'))
+    except sqlite3.Error:
+        app.logger.exception('No se pudo validar la sesión web.')
+        abort(503)
 
 
 def login_required(f):
     from functools import wraps
     @wraps(f)
     def decorated(*args, **kwargs):
-        if 'usuario_id' not in session:
-            flash('Debes iniciar sesión para acceder a esta página.', 'warning')
+        g.respuesta_privada = True
+        if not _sesion_web_activa():
+            sesion_anterior = bool(session.get('usuario_id'))
+            if sesion_anterior:
+                session.clear()
+            flash(MENSAJE_SESION_INVALIDA if sesion_anterior else 'Debes iniciar sesión para acceder a esta página.', 'warning')
             # HU-5.7 CA2: conserva a dónde iba (ej. /auth/dispositivo?codigo=...)
             # para volver ahí mismo después de un login exitoso.
-            destino = request.full_path if request.query_string else request.path
+            if request.method in ('GET', 'HEAD'):
+                destino = request.full_path if request.query_string else request.path
+            elif request.endpoint == 'confirmar_dispositivo_post':
+                codigo = request.form.get('codigo', '').strip().upper()
+                destino = url_for('confirmar_dispositivo', codigo=codigo) if codigo else url_for('confirmar_dispositivo')
+            else:
+                destino = None
             return redirect(url_for('login', next=destino))
         return f(*args, **kwargs)
     return decorated
+
+
+@app.after_request
+def impedir_cache_sesion(response):
+    if g.get('respuesta_privada') or request.endpoint in ('login', 'login_post', 'logout'):
+        response.headers['Cache-Control'] = 'no-store'
+    return response
 
 def _registrar_acceso_denegado(modulo: str, ruta: str) -> None:
     """HU-1.4 / HU-6.5 CA2 — Deja constancia en audit_log de un acceso bloqueado por rol."""
@@ -235,6 +261,19 @@ def modulo_required(modulo: str):
     return decorator
 
 
+app.register_blueprint(create_audit_blueprint(lambda: get_db(), login_required, modulo_required))
+register_audit_mail_command(app, lambda: get_db())
+
+
+@app.context_processor
+def audit_navigation():
+    role = session.get("rol", "") if session.get("usuario_id") else ""
+    return {
+        "audit_available": has_permission(role, "consulta_reportes"),
+        "audit_alert_available": can_review_alerts(role),
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # RUTAS PÚBLICAS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -249,15 +288,21 @@ def landing():
 
 def _next_es_seguro(next_url: str) -> bool:
     """Solo redirige a rutas relativas propias — nunca a una URL externa."""
-    return bool(next_url) and next_url.startswith('/') and not next_url.startswith('//')
+    return (
+        next_url.startswith('/') and not next_url.startswith('//')
+        and '\\' not in next_url and not any(ord(char) < 32 for char in next_url)
+    )
 
 
 @app.route('/login', methods=['GET'])
 def login():
     """Muestra el formulario de login."""
     next_url = request.args.get('next', '')
-    if 'usuario_id' in session:
-        return redirect(next_url if _next_es_seguro(next_url) else url_for('dashboard'))
+    if session.get('usuario_id'):
+        if _sesion_web_activa():
+            return redirect(next_url if _next_es_seguro(next_url) else url_for('dashboard'))
+        session.clear()
+        flash(MENSAJE_SESION_INVALIDA, 'warning')
     return render_template('auth/login.html', next=next_url)
 
 
@@ -269,15 +314,20 @@ def login_post():
     next_url = request.form.get('next', '')
 
     if not email or not password:
-        return render_template('auth/login.html', error='Todos los campos son requeridos.', next=next_url)
+        return render_template('auth/login.html', error='Ingresa el correo y la contraseña.', next=next_url, email=email)
 
     try:
-        conn = get_db()
-        sesion_id = generate_session_id()
-        result = auth_login(conn, email, password, sesion_id)
-        conn.close()
-    except Exception as e:
-        return render_template('auth/login.html', error=f'Error del sistema: {str(e)}', next=next_url)
+        with closing(get_db()) as conn:
+            result = auth_login(
+                conn, email, password, generate_session_id(),
+                token_lifetime=app.permanent_session_lifetime,
+            )
+    except Exception:
+        app.logger.exception('No se pudo iniciar la sesión web.')
+        return render_template(
+            'auth/login.html', error='El servicio de inicio de sesión no está disponible. Intenta de nuevo.',
+            next=next_url, email=email,
+        ), 503
 
     if result.get('success'):
         session.clear()
@@ -285,12 +335,11 @@ def login_post():
         session['rol'] = result['rol']
         session['nombre'] = email
         session['sesion_id'] = result['sesion_id']
-        session['token'] = result.get('token')
-        session['token_expiracion'] = result.get('token_expiracion')
+        session['token_id'] = result['token_id']
         session['login_time'] = datetime.utcnow().isoformat()
         return redirect(next_url if _next_es_seguro(next_url) else url_for('dashboard'))
     else:
-        return render_template('auth/login.html', error=result.get('message', 'Error desconocido.'), next=next_url)
+        return render_template('auth/login.html', error=result['message'], next=next_url, email=email)
 
 
 # ── ADMINISTRACIÓN DE USUARIOS (Solo ADMIN) ─────────────────────────────────
@@ -634,30 +683,8 @@ def api_iniciar_login_dispositivo():
     }), 201
 
 
-def sesion_vigente_required(f):
-    """
-    La confirmación del código genera un token a nombre del usuario de la
-    sesión, así que ese usuario tiene que existir de verdad. Tras un
-    redeploy con la base recreada, la cookie seguía firmada pero apuntaba a
-    un usuario_id que ya no existe y la confirmación terminaba en error 500.
-    Ahora se cierra esa sesión y se vuelve al login, conservando el código.
-    """
-    from functools import wraps
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not _usuario_de_sesion_vigente():
-            session.clear()
-            flash('Tu sesión ya no es válida. Inicia sesión de nuevo para confirmar el código.', 'warning')
-            codigo = request.values.get('codigo', '').strip().upper()
-            destino = url_for('confirmar_dispositivo', codigo=codigo) if codigo else url_for('confirmar_dispositivo')
-            return redirect(url_for('login', next=destino))
-        return f(*args, **kwargs)
-    return decorated
-
-
 @app.route('/auth/dispositivo', methods=['GET'])
 @login_required
-@sesion_vigente_required
 def confirmar_dispositivo():
     """HU-5.7 CA2 — Página del dashboard para confirmar un código de login por dispositivo."""
     return render_template('auth/confirmar_dispositivo.html', codigo=request.args.get('codigo', ''))
@@ -665,7 +692,6 @@ def confirmar_dispositivo():
 
 @app.route('/auth/dispositivo', methods=['POST'])
 @login_required
-@sesion_vigente_required
 def confirmar_dispositivo_post():
     """HU-5.7 CA2 — Procesa la confirmación del código, ya autenticado en el dashboard."""
     codigo = request.form.get('codigo', '').strip().upper()
@@ -1517,19 +1543,23 @@ def merkle_verificar_ancla():
 
 @app.route('/logout')
 def logout():
-    """Cierra la sesión y registra el evento en auditoría."""
-    if 'usuario_id' in session:
+    """Revoca el token de la sesión web antes de borrar la cookie."""
+    usuario_id = session.get('usuario_id')
+    token_id = session.get('token_id')
+    if usuario_id and token_id:
         try:
-            conn = get_db()
-            auth_logout(
-                conn, 
-                session['usuario_id'], 
-                session['sesion_id'], 
-                session.get('login_time')
-            )
-            conn.close()
-        except:
-            pass
+            with closing(get_db()) as conn:
+                token = get_token_by_id(conn, token_id)
+                if (
+                    token and token['usuario_id'] == usuario_id
+                    and token['creado_por'] == 'LOGIN' and token['estado'] == 'ACTIVO'
+                ):
+                    sesion_id = session.get('sesion_id', 'N/A')
+                    revocar_token(conn, token_id, usuario_id, sesion_id, 'Cierre de sesión web')
+                    auth_logout(conn, usuario_id, sesion_id, session.get('login_time'))
+        except sqlite3.Error:
+            app.logger.exception('No se pudo revocar el token de la sesión web.')
+            abort(503, 'No pudimos cerrar tu sesión. Inténtalo de nuevo.')
 
     session.clear()
     flash('Sesión cerrada correctamente.', 'info')
