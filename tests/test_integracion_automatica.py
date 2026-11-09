@@ -20,6 +20,7 @@ pytest audit_tracer ya está importado.
 """
 
 import json
+import re
 import os
 import sqlite3
 import subprocess
@@ -517,4 +518,6 @@ class TestEntornos:
         carga_n = next(e for e in eventos_n if e["tipo_accion"] == "CARGA")
         assert carga_s["contexto_ejecucion"].startswith("Script: flujo_referencia.py | Env: Script (.py)")
         assert "[celda " in carga_n["contexto_ejecucion"]
-        assert "Env: Jupyter" in carga_n["contexto_ejecucion"]
+        # Fuera de Colab el kernel es Jupyter; corriendo la suite dentro de Colab,
+        # el kernel que lanza nbclient hereda su entorno y se detecta como Colab.
+        assert re.search(r"Env: (Jupyter|Google Colab) \|", carga_n["contexto_ejecucion"])

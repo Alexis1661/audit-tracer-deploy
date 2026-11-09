@@ -248,7 +248,7 @@
                                 #{{ evento.event_id }}
                             </a>
                         </td>
-                        <td class="table-date">{{ evento.timestamp.split('.')[0].replace('T', ' ') }}</td>
+                        <td class="table-date">{{ evento.timestamp | hora_col }}</td>
                         <td class="table-user"><strong>{{ evento.usuario_id[:8] if evento.usuario_id else 'DESCONOCIDO' }}...</strong></td>
                         <td class="table-action">{{ evento.tipo_accion }}</td>
                         <td>

@@ -37,6 +37,7 @@ from .utils.error_log import guard, log_internal_error, in_audit_scope, audit_sc
 from .failed_access import log_failed_access, ACCESS_FAILURE_EXCEPTIONS   # HU-2.4
 from .transform_capture import AuditedTransformDataFrame                 # HU-2.2
 from .utils.horario import es_horario_laboral, HORA_INICIO_LABORAL, HORA_FIN_LABORAL  # HU-4.4
+from .utils.zona_horaria import a_hora_colombia, ETIQUETA_ZONA
 
 
 # ──────────────────────────────────────────────────────────────
@@ -113,8 +114,8 @@ def _determine_alert(usuario_id: str, ahora: datetime) -> tuple[str, Optional[st
     if not es_horario_laboral(ahora):
         return "CRITICO", (
             f"Acceso fuera de horario laboral "
-            f"({HORA_INICIO_LABORAL:02d}:00-{HORA_FIN_LABORAL:02d}:00 UTC): "
-            f"{ahora.strftime('%H:%M')}"
+            f"({HORA_INICIO_LABORAL:02d}:00-{HORA_FIN_LABORAL:02d}:00 {ETIQUETA_ZONA}): "
+            f"{a_hora_colombia(ahora).strftime('%H:%M')}"
         )
     return "NORMAL", None
 

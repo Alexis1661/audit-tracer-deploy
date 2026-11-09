@@ -3,7 +3,7 @@ import os
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple
+from typing import Callable, List, Dict, Optional, Tuple
 from ..utils.hashing import hash_event
 from ..normative_mapping import referencia_normativa
 
@@ -392,6 +392,7 @@ def export_critical_events_to_csv(
     fecha_fin: str = None,
     tipo_accion: str = None,
     dataset_nombre: str = None,
+    formatear_timestamp: Optional[Callable] = None,
 ) -> int:
     """
     CA5 — Exporta a CSV los eventos críticos (nivel_alerta = CRITICO) que
@@ -400,6 +401,9 @@ def export_critical_events_to_csv(
     Args:
         dest: ruta de archivo (str/os.PathLike) o un objeto file-like ya
               abierto en modo texto (p. ej. io.StringIO para descargas HTTP).
+        formatear_timestamp: si se indica, transforma el timestamp (UTC) antes
+              de escribirlo, p. ej. a hora de Colombia en las descargas del
+              dashboard. Por defecto se exporta el valor almacenado.
 
     Returns:
         int: Número de eventos exportados.
@@ -417,7 +421,10 @@ def export_critical_events_to_csv(
         writer = csv.DictWriter(f, fieldnames=CRITICAL_EVENTS_CSV_COLUMNS)
         writer.writeheader()
         for evento in eventos:
-            writer.writerow({col: evento.get(col) for col in CRITICAL_EVENTS_CSV_COLUMNS})
+            fila = {col: evento.get(col) for col in CRITICAL_EVENTS_CSV_COLUMNS}
+            if formatear_timestamp and fila.get("timestamp"):
+                fila["timestamp"] = formatear_timestamp(fila["timestamp"])
+            writer.writerow(fila)
 
     if isinstance(dest, (str, os.PathLike)):
         with open(dest, "w", newline="", encoding="utf-8") as f:
@@ -534,6 +541,7 @@ def export_report_to_csv(
     fecha_fin: str = None,
     tipo_accion: str = None,
     dataset_nombre: str = None,
+    formatear_timestamp: Optional[Callable] = None,
 ) -> int:
     """
     CA3 — Exporta a CSV el reporte de generate_report(), con la cabecera
@@ -543,6 +551,9 @@ def export_report_to_csv(
     Args:
         dest: ruta de archivo (str/os.PathLike) o un objeto file-like ya
               abierto en modo texto (p. ej. io.StringIO para descargas HTTP).
+        formatear_timestamp: si se indica, transforma el timestamp (UTC) antes
+              de escribirlo, p. ej. a hora de Colombia en las descargas del
+              dashboard. Por defecto se exporta el valor almacenado.
 
     Returns:
         int: Número de eventos exportados.
@@ -560,6 +571,8 @@ def export_report_to_csv(
         writer = csv.DictWriter(f, fieldnames=REPORT_CSV_COLUMNS)
         writer.writeheader()
         for evento in eventos:
+            if formatear_timestamp and evento.get("timestamp"):
+                evento = {**evento, "timestamp": formatear_timestamp(evento["timestamp"])}
             writer.writerow(evento)
 
     if isinstance(dest, (str, os.PathLike)):

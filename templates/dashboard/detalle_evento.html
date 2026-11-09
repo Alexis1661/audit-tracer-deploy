@@ -439,7 +439,7 @@
                 </div>
                 <div class="detail-item">
                     <span class="detail-label">Fecha y Hora (Timestamp UTC)</span>
-                    <span class="detail-value">{{ evento.timestamp.replace('T', ' ') if evento.timestamp else '—' }}</span>
+                    <span class="detail-value">{{ evento.timestamp | hora_col if evento.timestamp else '—' }}</span>
                 </div>
                 <div class="detail-item">
                     <span class="detail-label">ID Sesión</span>

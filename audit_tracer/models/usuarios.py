@@ -31,6 +31,9 @@ def create_user(conn: sqlite3.Connection, email: str, password: str, rol: str) -
         conn.commit()
         return user_id
     except sqlite3.IntegrityError as e:
+        # El INSERT fallido deja abierta la transacción implícita: sin este
+        # rollback, la conexión retiene el bloqueo de escritura de la base.
+        conn.rollback()
         if "UNIQUE constraint failed: usuarios.email" in str(e):
             raise ValueError(f"El email {email} ya se encuentra registrado.")
         raise e

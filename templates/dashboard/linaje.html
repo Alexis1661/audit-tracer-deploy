@@ -214,7 +214,7 @@
                         {% for paso in cadena.pasos %}
                         <tr>
                             <td style="font-weight: 700;">{{ paso.paso }}</td>
-                            <td>{{ paso.timestamp.split('.')[0].replace('T', ' ') }}</td>
+                            <td>{{ paso.timestamp | hora_col }}</td>
                             <td>{{ paso.tipo_accion }}</td>
                             <td>{{ paso.descripcion }}{% if paso.ruta_destino %} → {{ paso.ruta_destino }}{% endif %}</td>
                             <td>
