@@ -201,7 +201,9 @@ def get_all_tokens_with_user_info(
     return [dict(row) for row in rows]
 
 
-def update_token_status(conn: sqlite3.Connection, token_id: str, nuevo_estado: str) -> bool:
+def update_token_status(
+    conn: sqlite3.Connection, token_id: str, nuevo_estado: str, *, estado_anterior: Optional[str] = None
+) -> bool:
     """
     Actualiza el estado de un token ('ACTIVO', 'REVOCADO', 'EXPIRADO').
 
@@ -209,16 +211,19 @@ def update_token_status(conn: sqlite3.Connection, token_id: str, nuevo_estado: s
         conn (sqlite3.Connection): Conexión a la BD.
         token_id (str): ID del token.
         nuevo_estado (str): Nuevo estado.
+        estado_anterior: Si se indica, actualiza solo desde ese estado.
 
     Returns:
         bool: True si se actualizó algún registro, False en caso contrario.
     """
     _ensure_tokens_table(conn)
     cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE tokens_acceso SET estado = ? WHERE token_id = ?",
-        (nuevo_estado.upper(), token_id)
-    )
+    query = "UPDATE tokens_acceso SET estado = ? WHERE token_id = ?"
+    params = (nuevo_estado.upper(), token_id)
+    if estado_anterior is not None:
+        query += " AND estado = ?"
+        params += (estado_anterior,)
+    cursor.execute(query, params)
     conn.commit()
     return cursor.rowcount > 0
 

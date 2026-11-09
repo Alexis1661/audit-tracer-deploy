@@ -4,7 +4,7 @@ from ..models.usuarios import get_user_by_email, increment_failed_attempts, rese
 from ..models.audit_log import insert_event, contar_intentos_fallidos_recientes
 from ..utils.hashing import verify_password
 from ..utils.session import get_hostname, detect_environment
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .tokens import generar_token
 
@@ -13,7 +13,10 @@ from .tokens import generar_token
 UMBRAL_INTENTOS_FALLIDOS = 3
 VENTANA_INTENTOS_FALLIDOS_MIN = 5
 
-def login(conn: sqlite3.Connection, email: str, password: str, sesion_id: str) -> Dict:
+def login(
+    conn: sqlite3.Connection, email: str, password: str, sesion_id: str,
+    *, token_lifetime: timedelta | None = None,
+) -> Dict:
     """
     Authenticates a user and manages session login attempts.
 
@@ -22,6 +25,7 @@ def login(conn: sqlite3.Connection, email: str, password: str, sesion_id: str) -
         email (str): User email.
         password (str): User password.
         sesion_id (str): Session ID for the login attempt.
+        token_lifetime: Optional shorter lifetime for the browser session.
 
     Returns:
         Dict: Authentication result.
@@ -64,8 +68,10 @@ def login(conn: sqlite3.Connection, email: str, password: str, sesion_id: str) -
         })
 
         # Generar token único por usuario al completar login (HU-5.5 CA1)
+        fecha_expiracion = (datetime.utcnow() + token_lifetime).isoformat() if token_lifetime is not None else None
         token_info = generar_token(
-            conn, user_id, dias_expiracion=30, creado_por='LOGIN', sesion_id=sesion_id
+            conn, user_id, fecha_expiracion_custom=fecha_expiracion,
+            creado_por='LOGIN', sesion_id=sesion_id
         )
         
         return {

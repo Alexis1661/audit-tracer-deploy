@@ -19,6 +19,7 @@ import csv
 import io
 from pathlib import Path
 
+from conftest import crear_sesion_web
 import pytest
 
 import app as app_module
@@ -268,11 +269,7 @@ def central_db(tmp_path, monkeypatch):
 def _cliente(rol="AUDITOR"):
     app_module.app.config["TESTING"] = True
     client = app_module.app.test_client()
-    with client.session_transaction() as sess:
-        sess["usuario_id"] = "auditor_ext"
-        sess["rol"] = rol
-        sess["nombre"] = "Auditor Externo"
-        sess["sesion_id"] = "s-web-7.3"
+    crear_sesion_web(client, "auditor_ext", rol, "Auditor Externo", "s-web-7.3")
     return client
 
 

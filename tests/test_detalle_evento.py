@@ -8,6 +8,7 @@ Pruebas unitarias e integración para:
             recomendaciones accionables y resumen forense copiable).
 """
 
+from conftest import crear_sesion_web
 import pytest
 from audit_tracer.db import get_connection, get_central_connection
 from audit_tracer.models.audit_log import insert_event, get_event_by_id
@@ -32,16 +33,17 @@ def db_conn():
 
 
 @pytest.fixture
-def flask_client():
+def flask_client(tmp_path, monkeypatch):
     """Cliente de pruebas HTTP para Flask."""
+    import app as app_module
+    from audit_tracer.db import get_central_connection
+
+    db_path = str(tmp_path / "central_web.db")
+    monkeypatch.setattr(app_module, "get_db", lambda: get_central_connection(db_path))
     app.config['TESTING'] = True
     app.config['WTF_CSRF_ENABLED'] = False
     with app.test_client() as client:
-        with client.session_transaction() as sess:
-            sess['usuario_id'] = 'analista_002'
-            sess['rol'] = 'ANALISTA'
-            sess['nombre'] = 'Analista Test'
-            sess['sesion_id'] = 's_test_403'
+        crear_sesion_web(client, 'analista_002', 'ANALISTA', 'Analista Test', 's_test_403')
         yield client
 
 
@@ -310,7 +312,9 @@ class TestVistaFrontendDetalleEvento:
 
     def test_endpoint_detalle_evento_existente_status_200(self, flask_client):
         """Verifica que al consultar /eventos/<event_id> responda 200 OK con el contenido enriquecido."""
-        conn = get_central_connection()
+        from app import get_db
+
+        conn = get_db()
         user_id = create_user(conn, f"doctor_{insert_event(conn, {'tipo_accion':'INICIO_SESION', 'usuario_id':'s'})}@audit.com", "Secret123*", "ANALISTA")
         event_id = insert_event(conn, {
             'usuario_id': user_id,

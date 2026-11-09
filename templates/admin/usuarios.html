@@ -1,50 +1,23 @@
-{% extends "base.html" %}
+{% extends "dashboard/panel_base.html" %}
 
 {% block title %}Administración de Usuarios — Audit Tracer{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 <style>
-    .users-table-container {
-        background: white;
-        border-radius: 20px;
-        border: 1px solid var(--clr-border);
-        overflow: hidden;
-        box-shadow: var(--shadow-sm);
-    }
-    .users-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 14px;
-    }
-    .users-table th {
-        background: #F5F5F7;
-        padding: 16px;
-        text-align: left;
-        font-weight: 700;
-        color: var(--clr-text-muted);
-        text-transform: uppercase;
-        font-size: 11px;
-        letter-spacing: 0.5px;
-        border-bottom: 1px solid var(--clr-border);
-    }
-    .users-table td {
-        padding: 16px;
-        border-bottom: 1px solid var(--clr-border);
-        color: var(--clr-text-main);
-    }
-    .users-table tr:hover { background: #FAFAFA; }
-    
+    .users-table td { vertical-align: middle; }
+
     .role-badge {
+        display: inline-block;
         padding: 4px 10px;
         border-radius: 6px;
         font-size: 11px;
         font-weight: 700;
         text-transform: uppercase;
-        background: #F5F5F7;
+        background: var(--clr-main-bg);
         color: var(--clr-text-muted);
     }
-    .role-badge--admin { background: rgba(0, 122, 255, 0.1); color: var(--clr-accent-blue); }
+    .role-badge--admin { background: var(--clr-accent-soft); color: var(--clr-accent-blue); }
     
     .status-indicator {
         display: inline-flex;
@@ -124,8 +97,10 @@
         </div>
     </aside>
 
+    {% include "dashboard/_audit_toolbar.html" %}
+
     {# ── MAIN CONTENT ── #}
-    <main class="main-content">
+    <main id="panel-content" tabindex="-1" class="main-content">
         <header class="header">
             <div class="header__title">
                 <h1>Control de Usuarios</h1>
@@ -138,8 +113,8 @@
         </header>
 
         {# ── USERS TABLE ── #}
-        <div class="users-table-container">
-            <table class="users-table">
+        <div class="audit-table-container" role="region" aria-label="Usuarios registrados" tabindex="0">
+            <table class="audit-table users-table">
                 <thead>
                     <tr>
                         <th>Identidad</th>

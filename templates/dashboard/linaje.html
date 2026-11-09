@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "dashboard/panel_base.html" %}
 
 {% block title %}Linaje de Datos — Audit Tracer{% endblock %}
 
@@ -6,18 +6,19 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 <style>
     .lineage-card {
-        background: white;
-        border-radius: 20px;
+        background: var(--clr-card-bg);
+        border-radius: var(--panel-radius);
         border: 1px solid var(--clr-border);
         box-shadow: var(--shadow-sm);
-        padding: 24px;
+        padding: clamp(16px, 2.4vw, 24px);
         margin-bottom: 24px;
+        overflow-wrap: anywhere;
     }
     #lineage-graph {
         width: 100%;
         height: 320px;
         border-radius: 14px;
-        background: #FBFBFD;
+        background: var(--clr-main-bg);
         border: 1px dashed var(--clr-border);
     }
     .lineage-legend {
@@ -31,7 +32,7 @@
     }
     .lineage-legend span { display: inline-flex; align-items: center; gap: 6px; }
     .lineage-legend i {
-        width: 12px; height: 12px; border-radius: 3px; display: inline-block;
+        width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none;
     }
     .lineage-warning {
         background: #FFF9E6;
@@ -42,21 +43,16 @@
         font-size: 13px;
         margin-bottom: 12px;
     }
-    .timeline-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .timeline-table { width: 100%; min-width: 34rem; border-collapse: collapse; font-size: 13px; }
     .timeline-table th {
         text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
-        color: var(--clr-text-muted); padding: 8px 10px; border-bottom: 1px solid var(--clr-border);
+        color: var(--clr-text-muted); background: var(--clr-main-bg);
+        padding: 8px 10px; border-bottom: 1px solid var(--clr-border);
     }
     .timeline-table td { padding: 10px; border-bottom: 1px solid var(--clr-border); vertical-align: top; }
+    .timeline-table tr:last-child td { border-bottom: 0; }
     .chain-title { font-size: 14px; font-weight: 700; margin: 20px 0 8px; }
     .chain-title small { font-weight: 500; color: var(--clr-text-muted); }
-    .badge {
-        padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700;
-        text-transform: uppercase; display: inline-block;
-    }
-    .badge-normal { background: #F5F5F7; color: var(--clr-text-muted); }
-    .badge-advertencia { background: #FFF9E6; color: #D97706; }
-    .badge-critico { background: #FEF2F2; color: #DC2626; }
 </style>
 {% endblock %}
 
@@ -133,8 +129,10 @@
         </div>
     </aside>
 
+    {% include "dashboard/_audit_toolbar.html" %}
+
     {# ── MAIN CONTENT ── #}
-    <main class="main-content">
+    <main id="panel-content" tabindex="-1" class="main-content">
         <header class="header" style="margin-bottom: 24px;">
             <div class="header__title">
                 <h1>Linaje de Datos</h1>
@@ -144,7 +142,7 @@
 
         {# ── SELECTOR (CA2) ── #}
         <form method="GET" action="{{ url_for('linaje') }}" class="lineage-card" style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end; padding: 20px;">
-            <div style="flex: 1; min-width: 220px;">
+            <div style="flex: 1 1 220px; min-width: 0;">
                 <label class="form-label" for="dataset">Dataset</label>
                 <select name="dataset" id="dataset" class="form-select">
                     <option value="">Selecciona un dataset…</option>
@@ -203,24 +201,26 @@
                 Sesión {{ cadena.sesion_id }}
                 <small>· {{ cadena.dataset_nombre }} · usuario {{ cadena.usuario_id[:8] }}{{ '…' if cadena.usuario_id|length > 8 else '' }}</small>
             </div>
-            <table class="timeline-table">
-                <thead>
-                    <tr><th>Paso</th><th>Fecha y hora</th><th>Acción</th><th>Descripción</th><th>Evento</th></tr>
-                </thead>
-                <tbody>
-                    {% for paso in cadena.pasos %}
-                    <tr>
-                        <td style="font-weight: 700;">{{ paso.paso }}</td>
-                        <td>{{ paso.timestamp.split('.')[0].replace('T', ' ') }}</td>
-                        <td>{{ paso.tipo_accion }}</td>
-                        <td>{{ paso.descripcion }}{% if paso.ruta_destino %} → {{ paso.ruta_destino }}{% endif %}</td>
-                        <td>
-                            <a href="{{ url_for('detalle_evento', event_id=paso.event_id) }}" style="font-family: monospace; font-weight: 700; color: var(--clr-accent-blue); text-decoration: none;">#{{ paso.event_id }}</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <div class="audit-table-container" role="region" aria-label="Cronología de la sesión {{ cadena.sesion_id }}" tabindex="0">
+                <table class="timeline-table">
+                    <thead>
+                        <tr><th>Paso</th><th>Fecha y hora</th><th>Acción</th><th>Descripción</th><th>Evento</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for paso in cadena.pasos %}
+                        <tr>
+                            <td style="font-weight: 700;">{{ paso.paso }}</td>
+                            <td>{{ paso.timestamp.split('.')[0].replace('T', ' ') }}</td>
+                            <td>{{ paso.tipo_accion }}</td>
+                            <td>{{ paso.descripcion }}{% if paso.ruta_destino %} → {{ paso.ruta_destino }}{% endif %}</td>
+                            <td>
+                                <a href="{{ url_for('detalle_evento', event_id=paso.event_id) }}" style="font-family: monospace; font-weight: 700; color: var(--clr-accent-blue); text-decoration: none;">#{{ paso.event_id }}</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
             {% endfor %}
         </div>
         {% endif %}

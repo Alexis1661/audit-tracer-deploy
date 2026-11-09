@@ -102,7 +102,7 @@ def generar_token(
         "tipo_accion": "GENERACION_TOKEN",
         "contexto_ejecucion": (
             f"Token generado para usuario: {user.get('email', usuario_id)} | "
-            f"Expiración: {fecha_expiracion_iso} ({dias_expiracion} días) | "
+            f"Expiración: {fecha_expiracion_iso} | "
             f"Origen: {creado_por}"
         ),
         "nivel_alerta": "NORMAL",
@@ -132,39 +132,52 @@ def validar_token(conn: sqlite3.Connection, token_str: str) -> Tuple[bool, str, 
     if not token_record:
         return False, "Token inexistente o inválido", None
 
-    estado_actual = token_record.get("estado", "").upper()
+    vigente, mensaje = _validar_vigencia(conn, token_record)
+    if not vigente:
+        return False, mensaje, token_record
 
-    # Si está revocado manualmente
-    if estado_actual == "REVOCADO":
-        return False, "Token revocado", token_record
-
-    # Comprobar expiración por fecha
-    try:
-        fecha_exp_str = token_record["fecha_expiracion"]
-        # Permitir parseo de ISO strings estándar
-        fecha_exp = datetime.fromisoformat(fecha_exp_str.replace("Z", "+00:00"))
-        # Si la fecha_exp es naive o UTC
-        if fecha_exp.tzinfo is not None:
-            ahora = datetime.now(fecha_exp.tzinfo)
-        else:
-            ahora = datetime.utcnow()
-
-        if ahora > fecha_exp:
-            # Marcar automáticamente como EXPIRADO si estaba activo
-            if estado_actual != "EXPIRADO":
-                update_token_status(conn, token_record["token_id"], "EXPIRADO")
-                token_record["estado"] = "EXPIRADO"
-            return False, "Token expirado", token_record
-    except Exception:
-        # Si hay error parseando fecha, asumir inválido
-        return False, "Error al verificar fecha de expiración del token", token_record
-
-    # Verificar si el usuario dueño de la cuenta sigue activo
     user = get_user_by_id(conn, token_record["usuario_id"])
     if not user or user.get("activo") == 0:
         return False, "Usuario asociado al token inactivo o bloqueado", token_record
+    return True, mensaje, token_record
 
-    return True, "Token activo y vigente", token_record
+
+def validar_token_sesion(conn: sqlite3.Connection, token_id: str, usuario_id: str, rol: str) -> bool:
+    """Verifica el token vinculado a una cookie firmada y los permisos actuales."""
+    if not isinstance(token_id, str) or not token_id:
+        return False
+    token = get_token_by_id(conn, token_id)
+    if not token or token["usuario_id"] != usuario_id or token["creado_por"] != "LOGIN":
+        return False
+    if not _validar_vigencia(conn, token)[0]:
+        return False
+    user = get_user_by_id(conn, usuario_id)
+    return bool(user and user["activo"] == 1 and user["rol"] == rol)
+
+
+def _validar_vigencia(conn: sqlite3.Connection, token_record: Dict) -> Tuple[bool, str]:
+    estado_actual = token_record.get("estado", "").upper()
+    if estado_actual == "REVOCADO":
+        return False, "Token revocado"
+    if estado_actual == "EXPIRADO":
+        return False, "Token expirado"
+    if estado_actual != "ACTIVO":
+        return False, "Estado de token inválido"
+    try:
+        fecha_exp = datetime.fromisoformat(token_record["fecha_expiracion"].replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return False, "Error al verificar fecha de expiración del token"
+    ahora = datetime.now(fecha_exp.tzinfo) if fecha_exp.tzinfo is not None else datetime.utcnow()
+    if ahora >= fecha_exp:
+        if update_token_status(conn, token_record["token_id"], "EXPIRADO", estado_anterior="ACTIVO"):
+            token_record["estado"] = "EXPIRADO"
+        else:
+            current = get_token_by_id(conn, token_record["token_id"])
+            if current and current["estado"] == "REVOCADO":
+                token_record["estado"] = "REVOCADO"
+                return False, "Token revocado"
+        return False, "Token expirado"
+    return True, "Token activo y vigente"
 
 
 def revocar_token(
@@ -248,8 +261,8 @@ def listar_tokens(
 
             if ahora_cmp > exp_dt and item["estado"] == "ACTIVO":
                 # Si en BD seguía como ACTIVO pero la fecha venció, actualizar
-                update_token_status(conn, item["token_id"], "EXPIRADO")
-                item["estado"] = "EXPIRADO"
+                if update_token_status(conn, item["token_id"], "EXPIRADO", estado_anterior="ACTIVO"):
+                    item["estado"] = "EXPIRADO"
 
             diferencia = exp_dt - ahora_cmp
             item["dias_restantes"] = max(0, diferencia.days)

@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "dashboard/panel_base.html" %}
 
 {% block title %}Sincronización de Eventos — Audit Tracer{% endblock %}
 
@@ -6,12 +6,13 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 <style>
     .sync-panel {
-        background: white;
-        border-radius: 20px;
+        background: var(--clr-card-bg);
+        border-radius: var(--panel-radius);
         border: 1px solid var(--clr-border);
         box-shadow: var(--shadow-sm);
-        padding: 24px;
+        padding: clamp(16px, 2.4vw, 24px);
         margin-bottom: 24px;
+        overflow-wrap: anywhere;
     }
     .sync-panel__title {
         font-size: 15px;
@@ -33,34 +34,6 @@
         font-family: 'JetBrains Mono', monospace, Consolas, Courier;
         margin-top: 12px;
         word-break: break-word;
-    }
-    .rechazos-table-container {
-        background: white;
-        border-radius: 20px;
-        border: 1px solid var(--clr-border);
-        overflow: hidden;
-        box-shadow: var(--shadow-sm);
-    }
-    .rechazos-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-    }
-    .rechazos-table th {
-        background: #F5F5F7;
-        padding: 16px;
-        text-align: left;
-        font-weight: 700;
-        color: var(--clr-text-muted);
-        text-transform: uppercase;
-        font-size: 11px;
-        letter-spacing: 0.5px;
-        border-bottom: 1px solid var(--clr-border);
-    }
-    .rechazos-table td {
-        padding: 14px 16px;
-        border-bottom: 1px solid var(--clr-border);
-        vertical-align: middle;
     }
     .empty-state-card {
         padding: 48px 24px;
@@ -139,8 +112,10 @@
         </div>
     </aside>
 
+    {% include "dashboard/_audit_toolbar.html" %}
+
     {# ── MAIN CONTENT ── #}
-    <main class="main-content">
+    <main id="panel-content" tabindex="-1" class="main-content">
         <header class="header">
             <div class="header__title">
                 <h1>Sincronización de Eventos</h1>
@@ -199,13 +174,13 @@
         </div>
 
         {# ── RECHAZOS DE AUTENTICACIÓN VISTOS POR EL SERVIDOR CENTRAL (CA4) ── #}
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
-            <h2 style="font-size: 18px; font-weight: 800;">Rechazos de autenticación recientes</h2>
+        <div class="section-heading">
+            <h2>Rechazos de autenticación recientes</h2>
             <span style="font-size: 13px; color: var(--clr-text-muted);">{{ total_rechazos }} en total</span>
         </div>
-        <div class="rechazos-table-container">
+        <div class="audit-table-container" {% if rechazos_recientes %}role="region" aria-label="Rechazos de autenticación recientes" tabindex="0"{% endif %}>
             {% if rechazos_recientes %}
-            <table class="rechazos-table">
+            <table class="audit-table">
                 <thead>
                     <tr>
                         <th>Fecha</th>

@@ -1,0 +1,44 @@
+{% extends "dashboard/audit_workspace.html" %}
+{% block title %}Notificaciones{% endblock %}
+{% block workspace %}
+<header class="header">
+    <div class="header__title">
+        <h1>Notificaciones</h1>
+        <p>Configura cómo quieres recibir avisos sobre eventos críticos.</p>
+    </div>
+</header>
+<section class="audit-panel audit-stack">
+    <h2>Canales de aviso</h2>
+    <form method="post" class="audit-stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="accion" value="preferencias">
+        <label><input type="checkbox" name="en_panel" value="1" {% if preferences.en_panel %}checked{% endif %}> Mostrar avisos dentro del panel</label>
+        <label><input type="checkbox" name="por_correo" value="1" {% if preferences.por_correo %}checked{% endif %} {% if not smtp_configured %}disabled{% endif %}> Enviar nuevas alertas críticas a mi correo</label>
+        {% if not smtp_configured %}<p class="audit-muted">El correo estará disponible cuando se configure el servicio de envío.</p>{% endif %}
+        <div class="audit-actions"><button class="btn btn-primary">Guardar preferencias</button></div>
+    </form>
+</section>
+{% if preferences.en_panel %}
+<section class="audit-panel audit-stack">
+    <div class="audit-actions">
+        <h2>Bandeja de avisos críticos</h2>
+        <span class="badge badge-critico">{{ unread }} sin leer</span>
+        {% if unread and notifications %}
+        <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="accion" value="leidas">
+            <input type="hidden" name="hasta" value="{{ notifications[0].event_id }}">
+            <button class="btn btn-outline">Marcar hasta aquí como leídas</button>
+        </form>
+        {% endif %}
+    </div>
+    {% for item in notifications %}
+    <article class="audit-actions">
+        <a href="{{ url_for('audit.alert_review', event_id=item.event_id) }}">#{{ item.event_id }} · {{ item.tipo_accion | replace('_', ' ') }}</a>
+        <span class="audit-muted">{{ item.timestamp[:19] | replace('T', ' ') }} UTC</span>
+        {% if item.event_id > preferences.leido_hasta %}<span class="badge badge-critico">Sin leer</span>{% endif %}
+    </article>
+    {% else %}<p class="audit-muted">Aún no hay eventos críticos.</p>{% endfor %}
+</section>
+{% endif %}
+{% endblock %}

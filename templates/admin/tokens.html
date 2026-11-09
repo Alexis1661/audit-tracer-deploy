@@ -1,22 +1,17 @@
-{% extends "base.html" %}
+{% extends "dashboard/panel_base.html" %}
 
 {% block title %}Gestión de Tokens de Acceso — Audit Tracer{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 <style>
-    .tokens-header-actions {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-    }
     .tokens-filter-bar {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
-        background: white;
-        padding: 16px 20px;
-        border-radius: 16px;
+        background: var(--clr-card-bg);
+        padding: clamp(14px, 1.7vw, 20px);
+        border-radius: var(--panel-radius);
         border: 1px solid var(--clr-border);
         margin-bottom: 24px;
         box-shadow: var(--shadow-sm);
@@ -24,8 +19,11 @@
     }
     .tokens-filter-group {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 8px;
+        min-width: 0;
+        max-width: 100%;
     }
     .tokens-filter-group label {
         font-size: 12px;
@@ -35,6 +33,8 @@
         letter-spacing: 0.5px;
     }
     .tokens-filter-group select {
+        min-width: 0;
+        max-width: 100%;
         padding: 8px 12px;
         border-radius: 10px;
         border: 1px solid var(--clr-border);
@@ -47,38 +47,8 @@
     .tokens-filter-group select:focus {
         border-color: var(--clr-accent-blue);
     }
-    .tokens-table-container {
-        background: white;
-        border-radius: 20px;
-        border: 1px solid var(--clr-border);
-        overflow: hidden;
-        box-shadow: var(--shadow-sm);
-    }
-    .tokens-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-    }
-    .tokens-table th {
-        background: #F5F5F7;
-        padding: 16px;
-        text-align: left;
-        font-weight: 700;
-        color: var(--clr-text-muted);
-        text-transform: uppercase;
-        font-size: 11px;
-        letter-spacing: 0.5px;
-        border-bottom: 1px solid var(--clr-border);
-    }
-    .tokens-table td {
-        padding: 16px;
-        border-bottom: 1px solid var(--clr-border);
-        color: var(--clr-text-main);
-        vertical-align: middle;
-    }
-    .tokens-table tr:hover {
-        background: #FAFAFA;
-    }
+    .tokens-table { min-width: 48rem; }
+    .tokens-table td { vertical-align: middle; }
     .token-string-box {
         display: inline-flex;
         align-items: center;
@@ -175,16 +145,20 @@
         z-index: 1000;
         align-items: center;
         justify-content: center;
+        padding: 16px;
     }
     .modal-overlay.active {
         display: flex;
     }
+    body:has(#modalGenerarToken.active) { overflow: hidden; }
     .modal-card {
-        background: white;
-        border-radius: 20px;
+        background: var(--clr-card-bg);
+        border-radius: var(--panel-radius);
         width: 100%;
         max-width: 480px;
-        padding: 28px;
+        max-height: 100%;
+        overflow-y: auto;
+        padding: clamp(16px, 3vw, 28px);
         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         position: relative;
     }
@@ -302,14 +276,16 @@
         </div>
     </aside>
 
+    {% include "dashboard/_audit_toolbar.html" %}
+
     {# ── MAIN CONTENT ── #}
-    <main class="main-content">
+    <main id="panel-content" tabindex="-1" class="main-content">
         <header class="header">
             <div class="header__title">
                 <h1>Tokens Personales de Acceso</h1>
                 <p>HU-5.5 — Generación, revisión y revocación de tokens personales para sincronización y consumo de API.</p>
             </div>
-            <div class="tokens-header-actions">
+            <div class="header__actions">
                 <button type="button" class="btn btn-primary" onclick="abrirModalGenerar()">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     Generar Nuevo Token
@@ -322,7 +298,7 @@
           {% if messages %}
             <div style="margin-bottom: 20px;">
               {% for category, message in messages %}
-                <div style="padding: 12px 18px; border-radius: 12px; margin-bottom: 8px; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;
+                <div style="padding: 12px 18px; border-radius: 12px; margin-bottom: 8px; font-size: 13px; font-weight: 600; overflow-wrap: anywhere;
                   {% if category == 'success' %} background: #DCFCE7; color: #166534; border: 1px solid #BBF7D0;
                   {% elif category == 'error' %} background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA;
                   {% else %} background: #E0F2FE; color: #075985; border: 1px solid #BAE6FD; {% endif %}">
@@ -397,9 +373,9 @@
         </form>
 
         {# ── TABLA DE TOKENS (CA3, CA4) ── #}
-        <div class="tokens-table-container">
+        <div class="audit-table-container" {% if tokens %}role="region" aria-label="Tokens de acceso" tabindex="0"{% endif %}>
             {% if tokens %}
-            <table class="tokens-table">
+            <table class="audit-table tokens-table">
                 <thead>
                     <tr>
                         <th>Usuario Asignado</th>
@@ -512,7 +488,7 @@
                 </select>
             </div>
 
-            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; margin-top: 24px;">
                 <button type="button" class="btn btn-outline" onclick="cerrarModalGenerar()">Cancelar</button>
                 <button type="submit" class="btn btn-primary">Generar Token</button>
             </div>

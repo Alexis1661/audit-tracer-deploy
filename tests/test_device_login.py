@@ -17,6 +17,7 @@ import json
 import time
 import uuid
 
+from conftest import crear_sesion_web
 import pytest
 import requests
 
@@ -222,11 +223,7 @@ def usuario_logueado(api_client):
     user_id = create_user(conn, "analista@test.com", "Password123!", "ANALISTA")
     conn.close()
 
-    with client.session_transaction() as sess:
-        sess["usuario_id"] = user_id
-        sess["rol"] = "ANALISTA"
-        sess["nombre"] = "Analista Test"
-        sess["sesion_id"] = "s_web_test"
+    crear_sesion_web(client, user_id, "ANALISTA", "Analista Test", "s_web_test")
 
     return client, db_path, user_id
 

@@ -10,6 +10,7 @@ y guías de mitigación accionables.
 """
 
 import json
+import re
 import sqlite3
 from typing import Dict, Any, Optional, List
 from audit_tracer.models.usuarios import get_user_by_id, get_user_by_email
@@ -135,6 +136,59 @@ def resolve_user_info(conn: sqlite3.Connection, usuario_id: Optional[str]) -> Di
     }
 
 
+_OPERACIONES_TRANSFORMACION = {
+    "FILTRADO": "Filtrado",
+    "IMPUTACION": "Imputación",
+    "ELIMINACION_FILAS": "Eliminación de filas",
+    "ELIMINACION_COLS": "Eliminación de columnas",
+    "RENOMBRE": "Renombre",
+    "APLICACION": "Aplicación de función",
+    "MERGE": "Combinación de datasets",
+    "NORMALIZACION": "Normalización",
+}
+_COMPARACION_V1 = re.compile(
+    r"(?:^| \| )Comparacion:v1:([0-9]{1,19}),([0-9]{1,19}):"
+    r"([0-9]{1,19}),([0-9]{1,19}):([0-9]{1,19}),([0-9]{1,19})"
+    r"(?::([0-9]{1,19}),([0-9]{1,19}))?\Z"
+)
+
+
+def _tipo_transformacion(evento: Dict[str, Any]) -> str:
+    """Recupera solo el tipo conocido sin copiar argumentos de clientes antiguos."""
+    prefijo = (evento.get("motivo_fallo") or "").partition("]")[0]
+    return prefijo[1:] if prefijo.startswith("[") else ""
+
+
+def _comparacion_transformacion(contexto: str) -> Optional[Dict[str, Any]]:
+    """Lee exclusivamente las métricas agregadas del sufijo versionado."""
+    captura = _COMPARACION_V1.search(contexto)
+    if not captura:
+        return None
+    filas_antes, cols_antes, filas_despues, cols_despues, agregadas, retiradas = map(int, captura.groups()[:6])
+    if (
+        agregadas > cols_despues
+        or retiradas > cols_antes
+        or cols_despues - cols_antes != agregadas - retiradas
+    ):
+        return None
+    metricas = [
+        {"nombre": "Filas", "antes": filas_antes, "despues": filas_despues, "cambio": filas_despues - filas_antes},
+        {"nombre": "Columnas", "antes": cols_antes, "despues": cols_despues, "cambio": cols_despues - cols_antes},
+    ]
+    if captura[7] is not None:
+        nulos_antes, nulos_despues = int(captura[7]), int(captura[8])
+        if nulos_despues <= nulos_antes <= filas_antes * cols_antes and nulos_despues <= filas_despues * cols_despues:
+            metricas.append({
+                "nombre": "Celdas vacías", "antes": nulos_antes,
+                "despues": nulos_despues, "cambio": nulos_despues - nulos_antes,
+            })
+    return {
+        "metricas": metricas,
+        "columnas_agregadas": agregadas,
+        "columnas_retiradas": retiradas,
+    }
+
+
 def generate_event_explanation(evento: Dict[str, Any], user_info: Dict[str, Any]) -> Dict[str, Any]:
     """
     HU-7.4 CA2 — Genera una narrativa explicativa en lenguaje claro sobre qué representa el evento.
@@ -147,6 +201,12 @@ def generate_event_explanation(evento: Dict[str, Any], user_info: Dict[str, Any]
     sobrescritura = evento.get("sobrescritura")
     motivo_fallo = evento.get("motivo_fallo")
     contexto = evento.get("contexto_ejecucion") or ""
+    es_transformacion = tipo == "TRANSFORMACION"
+    operacion = _tipo_transformacion(evento) if es_transformacion else ""
+    comparacion = _comparacion_transformacion(contexto) if es_transformacion else None
+    # Algunos clientes antiguos registraban etiquetas de filas o valores de unión.
+    metadata_historica = es_transformacion and comparacion is None
+    columnas_visibles = None if metadata_historica else evento.get("columnas_afectadas")
 
     # Parsear contexto de ejecución (Jupyter, Script, Host)
     entorno_desc = "Entorno no especificado"
@@ -158,7 +218,7 @@ def generate_event_explanation(evento: Dict[str, Any], user_info: Dict[str, Any]
         entorno_desc = "Interfaz Web del Dashboard"
 
     # Formatear columnas
-    cols_raw = evento.get("columnas_afectadas")
+    cols_raw = columnas_visibles
     cols_text = ""
     if cols_raw:
         try:
@@ -173,46 +233,46 @@ def generate_event_explanation(evento: Dict[str, Any], user_info: Dict[str, Any]
         titulo = "Carga inicial de datos clínicos"
         descripcion = (
             f"{nombre_usuario} realizó la carga y lectura inicial del archivo clínico "
-            f"<strong>{dataset}</strong> en el espacio de trabajo{cols_text}."
+            f"{dataset} en el espacio de trabajo{cols_text}."
         )
         icono = "upload"
     elif tipo == "CONSULTA":
         titulo = "Consulta y exploración de datos"
         descripcion = (
             f"{nombre_usuario} ejecutó una operación de lectura, filtrado o inspección "
-            f"sobre el dataset <strong>{dataset}</strong>{cols_text}."
+            f"sobre el dataset {dataset}{cols_text}."
         )
         icono = "search"
     elif tipo == "TRANSFORMACION":
         titulo = "Transformación y procesamiento de datos"
         descripcion = (
             f"{nombre_usuario} aplicó modificaciones, limpieza o transformaciones estructurales "
-            f"en los registros del dataset <strong>{dataset}</strong>{cols_text}."
+            f"en los registros del dataset {dataset}{cols_text}."
         )
         icono = "shuffle"
     elif tipo == "EXPORTACION":
         titulo = "Exportación de datos a archivo externo"
         sobrescrito_txt = " con sobrescritura del archivo existente" if sobrescritura else ""
-        filas_txt = f" conteniendo <strong>{filas} registros</strong>" if filas is not None else ""
-        ruta_txt = f" hacia la ruta <code>{ruta}</code>" if ruta else ""
+        filas_txt = f" con {filas} registros" if filas is not None else ""
+        ruta_txt = f" hacia la ruta {ruta}" if ruta else ""
         descripcion = (
-            f"{nombre_usuario} exportó información derivada de <strong>{dataset}</strong>"
+            f"{nombre_usuario} exportó información derivada de {dataset}"
             f"{filas_txt}{ruta_txt}{sobrescrito_txt}."
         )
         icono = "download"
     elif tipo == "ACCESO_FALLIDO":
         titulo = "Intento fallido de acceso a datos clínicos"
-        fallo_txt = f" <em>({motivo_fallo})</em>" if motivo_fallo else ""
+        fallo_txt = f" ({motivo_fallo})" if motivo_fallo else ""
         descripcion = (
-            f"{nombre_usuario} intentó acceder al recurso clínico <strong>{dataset}</strong>, "
+            f"{nombre_usuario} intentó acceder al recurso clínico {dataset}, "
             f"pero la operación no se pudo completar debido a un error o denegación{fallo_txt}."
         )
         icono = "alert-triangle"
     elif tipo == "ACCESO_DENEGADO":
         titulo = "Acceso denegado por política de seguridad (RBAC)"
-        fallo_txt = f" <em>({motivo_fallo})</em>" if motivo_fallo else ""
+        fallo_txt = f" ({motivo_fallo})" if motivo_fallo else ""
         descripcion = (
-            f"El sistema bloqueó el intento de acceso porque el rol <strong>{user_info.get('rol', 'N/A')}</strong> "
+            f"El sistema bloqueó el intento de acceso porque el rol {user_info.get('rol', 'N/A')} "
             f"no cuenta con los privilegios necesarios para esta acción{fallo_txt}."
         )
         icono = "shield-off"
@@ -260,6 +320,11 @@ def generate_event_explanation(evento: Dict[str, Any], user_info: Dict[str, Any]
         "descripcion": descripcion,
         "entorno_desc": entorno_desc,
         "icono": icono,
+        "es_transformacion": es_transformacion,
+        "operacion_transformacion": _OPERACIONES_TRANSFORMACION.get(operacion),
+        "es_combinacion": operacion == "MERGE",
+        "columnas_visibles": columnas_visibles,
+        "comparacion": comparacion,
     }
 
 
@@ -310,7 +375,7 @@ def generate_alert_diagnosis(evento: Dict[str, Any]) -> Dict[str, Any]:
                 "Acceso atípico fuera de la ventana operativa institucional (08:00 - 18:00 UTC). "
                 "Podría indicar credenciales comprometidas o actividad investigativa no programada."
             )
-        elif "intentos" in motivo.lower() or tipo == "ACCESO_FALLIDO":
+        elif "intentos" in motivo.lower():
             impacto = (
                 "Ráfaga consecutiva de fallos de acceso en corto tiempo. Podría constituir un escaneo "
                 "de directorios o intento de fuerza bruta sobre archivos restringidos."
@@ -342,10 +407,7 @@ def generate_alert_diagnosis(evento: Dict[str, Any]) -> Dict[str, Any]:
     else:
         categoria_alerta = "Operación Normal"
         clase_css = "alert-normal"
-        impacto = (
-            "La acción se ejecutó dentro de los parámetros de seguridad establecidos, "
-            "horarios laborales habituales y límites de volumen autorizados."
-        )
+        impacto = "El evento quedó registrado con nivel normal."
 
     return {
         "nivel": nivel,
@@ -356,6 +418,7 @@ def generate_alert_diagnosis(evento: Dict[str, Any]) -> Dict[str, Any]:
         "categoria_alerta": categoria_alerta,
         "clase_css": clase_css,
         "motivo": motivo or "Sin anomalías registradas",
+        "senales": [senal.strip() for senal in motivo.split(" | ") if senal.strip()],
         "impacto": impacto,
     }
 
@@ -481,7 +544,10 @@ def generate_copyable_summary(
     nivel = diagnostico.get("nivel", "NORMAL")
     usuario = f"{user_info.get('nombre', 'N/A')} ({user_info.get('email', 'N/A')} | {user_info.get('rol', 'N/A')})"
     dataset = evento.get("dataset_nombre") or "N/A"
-    motivo = evento.get("motivo_alerta") or evento.get("motivo_fallo") or "N/A"
+    motivo_fallo = evento.get("motivo_fallo")
+    if tipo == "TRANSFORMACION":
+        motivo_fallo = explicacion.get("operacion_transformacion")
+    motivo = evento.get("motivo_alerta") or motivo_fallo or "N/A"
     contexto = evento.get("contexto_ejecucion") or "N/A"
     hash_val = evento.get("hash_integridad") or "N/A"
 

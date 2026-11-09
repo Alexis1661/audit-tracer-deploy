@@ -12,6 +12,7 @@ Criterios de Aceptación:
 
 import os
 import sqlite3
+from conftest import clonar_bd_web, crear_sesion_web
 import pytest
 from datetime import datetime, timedelta
 
@@ -362,7 +363,7 @@ def test_persistencia_y_consulta_eventos_anomalos_ca5(db_conn):
 # PRUEBAS DE VISTA FLASK Y FILTRADO POR SOLO ANOMALÍAS (CA5)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_endpoint_eventos_filtro_solo_anomalias(monkeypatch, db_conn):
+def test_endpoint_eventos_filtro_solo_anomalias(monkeypatch, db_conn, tmp_path):
     """
     CA5: Verifica que la ruta /eventos con ?solo_anomalias=1 o ?nivel_alerta=ANOMALIA
     filtre únicamente los eventos clasificados con nivel_alerta='ANOMALIA'.
@@ -384,15 +385,12 @@ def test_endpoint_eventos_filtro_solo_anomalias(monkeypatch, db_conn):
         'nivel_alerta': 'ANOMALIA', 'motivo_alerta': 'Horario inusual'
     })
 
-    monkeypatch.setattr('app.get_db', lambda: db_conn)
+    clonar_bd_web(db_conn, tmp_path, monkeypatch)
 
     app.config['TESTING'] = True
     client = app.test_client()
 
-    with client.session_transaction() as sess:
-        sess['usuario_id'] = 'admin_tester'
-        sess['rol'] = 'ADMIN'
-        sess['nombre'] = 'Admin Tester'
+    crear_sesion_web(client, 'admin_tester', 'ADMIN', 'Admin Tester')
 
     # 1. Petición con solo_anomalias=1
     response = client.get('/eventos?solo_anomalias=1')
@@ -486,7 +484,7 @@ def test_simulacion_completa_tres_reglas_datos_de_prueba(db_conn):
         assert anomalia['motivo_alerta'] is not None
 
 
-def test_dashboard_metrica_anomalias(monkeypatch, db_conn):
+def test_dashboard_metrica_anomalias(monkeypatch, db_conn, tmp_path):
     """
     CA5: Verifica que el dashboard principal calcule y renderice correctamente
     la tarjeta de métricas con el total de anomalías detectadas.
@@ -502,15 +500,12 @@ def test_dashboard_metrica_anomalias(monkeypatch, db_conn):
         'tipo_accion': 'CONSULTA', 'nivel_alerta': 'ANOMALIA', 'motivo_alerta': 'Horario inusual'
     })
 
-    monkeypatch.setattr('app.get_db', lambda: db_conn)
+    clonar_bd_web(db_conn, tmp_path, monkeypatch)
 
     app.config['TESTING'] = True
     client = app.test_client()
 
-    with client.session_transaction() as sess:
-        sess['usuario_id'] = 'auditor_jefe'
-        sess['rol'] = 'ADMIN'
-        sess['nombre'] = 'Auditor Jefe'
+    crear_sesion_web(client, 'auditor_jefe', 'ADMIN', 'Auditor Jefe')
 
     response = client.get('/dashboard')
     assert response.status_code == 200

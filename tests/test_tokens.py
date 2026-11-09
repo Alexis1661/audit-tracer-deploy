@@ -7,6 +7,8 @@ Generación, validación, expiración y revocación de tokens personales de acce
 import json
 import os
 import sqlite3
+from contextlib import closing
+from conftest import crear_sesion_web
 import pytest
 from datetime import datetime, timedelta
 
@@ -394,10 +396,7 @@ def test_endpoint_admin_tokens_requiere_rol_admin(client):
     user_id = create_user(conn, "analista_route@hosp.com", "Password123!", "ANALISTA")
     conn.close()
 
-    with client.session_transaction() as sess:
-        sess["usuario_id"] = user_id
-        sess["rol"] = "ANALISTA"
-        sess["nombre"] = "analista_route@hosp.com"
+    crear_sesion_web(client, user_id, "ANALISTA", "analista_route@hosp.com")
 
     resp = client.get("/admin/tokens")
     assert resp.status_code == 302
@@ -411,10 +410,7 @@ def test_endpoint_admin_tokens_acceso_permitido_admin(client):
     generar_token(conn, admin_id)
     conn.close()
 
-    with client.session_transaction() as sess:
-        sess["usuario_id"] = admin_id
-        sess["rol"] = "ADMIN"
-        sess["nombre"] = "admin_route@hosp.com"
+    crear_sesion_web(client, admin_id, "ADMIN", "admin_route@hosp.com")
 
     resp = client.get("/admin/tokens")
     assert resp.status_code == 200
@@ -429,11 +425,7 @@ def test_endpoint_admin_nuevo_token_post(client):
     user_id = create_user(conn, "user_new_tk@hosp.com", "UserPass123!", "ANALISTA")
     conn.close()
 
-    with client.session_transaction() as sess:
-        sess["usuario_id"] = admin_id
-        sess["rol"] = "ADMIN"
-        sess["nombre"] = "admin_new_tk@hosp.com"
-        sess["sesion_id"] = "SES-ADM-01"
+    crear_sesion_web(client, admin_id, "ADMIN", "admin_new_tk@hosp.com", "SES-ADM-01")
 
     resp = client.post("/admin/tokens/nuevo", data={
         "usuario_id": user_id,
@@ -456,11 +448,7 @@ def test_endpoint_admin_revocar_token_post(client):
     token_info = generar_token(conn, user_id)
     conn.close()
 
-    with client.session_transaction() as sess:
-        sess["usuario_id"] = admin_id
-        sess["rol"] = "ADMIN"
-        sess["nombre"] = "admin_rev_tk@hosp.com"
-        sess["sesion_id"] = "SES-ADM-02"
+    crear_sesion_web(client, admin_id, "ADMIN", "admin_rev_tk@hosp.com", "SES-ADM-02")
 
     resp = client.post(f"/admin/tokens/revocar/{token_info['token_id']}", follow_redirects=True)
     assert resp.status_code == 200
@@ -514,10 +502,7 @@ def test_api_revocar_token_endpoint(client):
     token_info = generar_token(conn, user_id)
     conn.close()
 
-    with client.session_transaction() as sess:
-        sess["usuario_id"] = admin_id
-        sess["rol"] = "ADMIN"
-        sess["nombre"] = "api_admin@hosp.com"
+    crear_sesion_web(client, admin_id, "ADMIN", "api_admin@hosp.com")
 
     resp = client.post("/api/tokens/revocar", json={"token_id": token_info["token_id"]})
     assert resp.status_code == 200
@@ -528,4 +513,71 @@ def test_api_revocar_token_endpoint(client):
     valido, _, _ = validar_token(conn, token_info["token"])
     conn.close()
     assert valido is False
+
+
+@pytest.fixture
+def sesion_web_real(client):
+    email = "sesion_web@hosp.com"
+    password = "Password123!"
+    with closing(get_connection(client.test_db_path)) as conn:
+        usuario_id = create_user(conn, email, password, "ADMIN")
+    response = client.post("/login", data={"email": email, "password": password})
+    assert response.status_code == 302
+    with client.session_transaction() as sess:
+        assert "token" not in sess
+        return usuario_id, sess["token_id"]
+
+
+@pytest.mark.parametrize("cambio", ("vencimiento", "revocacion", "bloqueo", "rol"))
+def test_sesion_web_rechaza_cookie_cuando_cambia_el_estado_servidor(client, sesion_web_real, cambio):
+    usuario_id, token_id = sesion_web_real
+    response = client.get("/admin/tokens")
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    conn = get_connection(client.test_db_path)
+    try:
+        token = get_token_by_id(conn, token_id)
+        vigencia = datetime.fromisoformat(token["fecha_expiracion"]) - datetime.fromisoformat(token["fecha_creacion"])
+        assert timedelta(minutes=59) < vigencia <= timedelta(hours=1)
+        if cambio == "vencimiento":
+            conn.execute("UPDATE tokens_acceso SET fecha_expiracion = ? WHERE token_id = ?", ("2000-01-01T00:00:00", token_id))
+        elif cambio == "revocacion":
+            revocar_token(conn, token_id)
+        elif cambio == "bloqueo":
+            block_user(conn, usuario_id)
+        else:
+            conn.execute("UPDATE usuarios SET rol = 'ANALISTA' WHERE usuario_id = ?", (usuario_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client.get("/admin/tokens", follow_redirects=True)
+    assert response.request.path == "/login"
+    assert "Tu sesión venció" in response.get_data(as_text=True)
+    assert response.headers["Cache-Control"] == "no-store"
+    with client.session_transaction() as sess:
+        assert "usuario_id" not in sess
+
+
+def test_cerrar_sesion_invalida_una_copia_de_la_cookie(client, sesion_web_real):
+    _, token_id = sesion_web_real
+    cookie_name = app.config["SESSION_COOKIE_NAME"]
+    cookie = client.get_cookie(cookie_name)
+    assert client.get("/logout").status_code == 302
+
+    conn = get_connection(client.test_db_path)
+    try:
+        assert get_token_by_id(conn, token_id)["estado"] == "REVOCADO"
+    finally:
+        conn.close()
+    client.set_cookie(cookie_name, cookie.value)
+    assert client.get("/dashboard").headers["Location"].startswith("/login")
+
+
+def test_error_login_muestra_aviso_y_conserva_solo_el_correo(client):
+    response = client.post("/login", data={"email": "inexistente@hosp.com", "password": "NoMostrarClave123!"})
+    html = response.get_data(as_text=True)
+    assert "Correo o contraseña incorrectos" in html
+    assert 'role="alert"' in html and 'value="inexistente@hosp.com"' in html
+    assert "NoMostrarClave123!" not in html
 

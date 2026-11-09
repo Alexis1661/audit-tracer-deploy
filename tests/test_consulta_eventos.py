@@ -10,6 +10,7 @@ CA3: La lista se presenta en orden cronológico descendente (más recientes prim
 CA4: El sistema permite visualizar múltiples eventos en una sola consulta.
 """
 
+from conftest import crear_sesion_web
 import pytest
 from datetime import datetime
 from audit_tracer.db import get_connection
@@ -26,16 +27,17 @@ def db_conn():
 
 
 @pytest.fixture
-def flask_client():
+def flask_client(tmp_path, monkeypatch):
     """Cliente de pruebas de Flask."""
+    import app as app_module
+    from audit_tracer.db import get_central_connection
+
+    db_path = str(tmp_path / "central_web.db")
+    monkeypatch.setattr(app_module, "get_db", lambda: get_central_connection(db_path))
     app.config['TESTING'] = True
     app.config['WTF_CSRF_ENABLED'] = False
     with app.test_client() as client:
-        with client.session_transaction() as sess:
-            sess['usuario_id'] = 'analista_001'
-            sess['rol'] = 'ANALISTA'
-            sess['nombre'] = 'Analista Test'
-            sess['sesion_id'] = 'sesion_test_401'
+        crear_sesion_web(client, 'analista_001', 'ANALISTA', 'Analista Test', 'sesion_test_401')
         yield client
 
 

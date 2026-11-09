@@ -34,6 +34,7 @@ Normas: HIPAA §164.312(b) · Ley 1581/2012 · ISO/IEC 27001
 """
 
 import json
+from collections import Counter
 from datetime import datetime
 from typing import Optional
 
@@ -102,11 +103,48 @@ def _determine_alert(usuario_id: str) -> tuple[str, Optional[str]]:
     return "NORMAL", None
 
 
+_ETIQUETA_FALTANTE = object()
+
+
+def _clave_etiqueta(etiqueta):
+    if isinstance(etiqueta, tuple):
+        return tuple(map(_clave_etiqueta, etiqueta))
+    if pd.api.types.is_scalar(etiqueta) and pd.isna(etiqueta):
+        return (_ETIQUETA_FALTANTE, type(etiqueta))
+    return etiqueta
+
+
+def _comparar_estructura(antes, despues) -> Optional[str]:
+    """Captura dimensiones y cambios de esquema sin leer celdas ni índices de fila."""
+    if antes is None or not isinstance(despues, pd.DataFrame):
+        return None
+    (filas_antes, columnas_antes), etiquetas_antes = antes
+    filas_despues, columnas_despues = despues.shape
+    esquema_antes = Counter(map(_clave_etiqueta, etiquetas_antes))
+    esquema_despues = Counter(map(_clave_etiqueta, despues.columns))
+    agregadas = sum((esquema_despues - esquema_antes).values())
+    retiradas = sum((esquema_antes - esquema_despues).values())
+    # El sufijo versionado viaja en el contexto firmado y sincronizado.
+    return (
+        f"Comparacion:v1:{filas_antes},{columnas_antes}:"
+        f"{filas_despues},{columnas_despues}:{agregadas},{retiradas}"
+    )
+
+
+def _contar_nulos_para_comparacion(df) -> Optional[int]:
+    # Acota el trabajo adicional por evento. Solo conserva un total agregado.
+    if df.size > 100_000:
+        return None
+    with audit_scope():
+        return int(df.isna().to_numpy().sum())
+
+
 def _log_transform(
     tipo_transformacion: str,
     dataset_nombre: str,
     columnas_afectadas: Optional[list],
     descripcion: str,
+    comparacion: Optional[str] = None,
 ) -> None:
     """
     Persiste un registro de transformación en audit_log.
@@ -130,6 +168,9 @@ def _log_transform(
         nivel_alerta, motivo_alerta = _determine_alert(usuario_id)
 
         cols_json = json.dumps(columnas_afectadas, default=str) if columnas_afectadas is not None else None
+        contexto = _build_contexto()
+        if comparacion:
+            contexto = f"{contexto} | {comparacion}"
 
         event = {
             "usuario_id":          usuario_id,                       # CA5
@@ -138,7 +179,7 @@ def _log_transform(
             "tipo_accion":         "TRANSFORMACION",                  # PDGTRAZDSA-61
             "dataset_nombre":      dataset_nombre,
             "columnas_afectadas":  cols_json,                        # CA3
-            "contexto_ejecucion":  _build_contexto(),                # CA1 origen_ejecucion
+            "contexto_ejecucion":  contexto,                         # CA1 origen_ejecucion
             "nivel_alerta":        nivel_alerta,
             "motivo_alerta":       motivo_alerta,
         }
@@ -190,11 +231,9 @@ def _describe_fillna(df, args, kwargs):
     value = _arg(args, kwargs, 0, "value")
     if isinstance(value, dict):
         cols = list(value.keys())
-        val_repr = f"dict({list(value.keys())})"
     else:
         cols = list(df.columns)   # fillna sin dict afecta todas
-        val_repr = str(value)
-    return TIPO_IMPUTACION, cols, f"fillna(value={val_repr})"
+    return TIPO_IMPUTACION, cols, "fillna()"
 
 
 def _describe_dropna(df, args, kwargs):
@@ -202,8 +241,10 @@ def _describe_dropna(df, args, kwargs):
     how = kwargs.get("how", "any")
     subset = kwargs.get("subset")
     # CA3: solo registrar columnas del subset si se especifica
+    if axis in (1, "columns"):
+        return TIPO_ELIMINACION_COLS, list(df.columns), "dropna(axis='columns')"
     cols = _as_list(subset) if subset is not None else list(df.columns)
-    return TIPO_ELIMINACION_FILAS, cols, f"dropna(axis={axis}, how='{how}', subset={subset})"
+    return TIPO_ELIMINACION_FILAS, cols, f"dropna(axis={axis}, how='{how}')"
 
 
 def _describe_drop(df, args, kwargs):
@@ -214,7 +255,7 @@ def _describe_drop(df, args, kwargs):
     if columns is not None or axis in (1, "columns"):
         cols = _as_list(columns) if columns is not None else _as_list(labels)
         return TIPO_ELIMINACION_COLS, cols, f"drop(columns={cols})"
-    return TIPO_ELIMINACION_FILAS, list(df.columns), f"drop(labels={labels}, axis={axis})"
+    return TIPO_ELIMINACION_FILAS, list(df.columns), "drop(axis='index')"
 
 
 def _describe_rename(df, args, kwargs):
@@ -229,7 +270,7 @@ def _describe_rename(df, args, kwargs):
         cols_orig, cols_new = list(df.columns), []
         desc = "rename(mapper=<fn>, axis='columns')"
     else:
-        cols_orig, cols_new = list(df.index[:5]), []
+        cols_orig, cols_new = [], []
         desc = "rename(index=...)"
     return TIPO_RENOMBRE, cols_orig + [f"→{c}" for c in cols_new], desc
 
@@ -240,7 +281,7 @@ _NORMALIZ_KEYWORDS = {"normalize", "norm", "scale", "minmax", "zscore", "standar
 def _describe_apply(df, args, kwargs):
     func = _arg(args, kwargs, 0, "func")
     axis = _arg(args, kwargs, 1, "axis", 0)
-    func_name = getattr(func, "__name__", str(func))
+    func_name = getattr(func, "__name__", type(func).__name__)
     tipo = (
         TIPO_NORMALIZACION
         if any(kw in func_name.lower() for kw in _NORMALIZ_KEYWORDS)
@@ -250,12 +291,15 @@ def _describe_apply(df, args, kwargs):
 
 
 def _merge_keys(left, on, left_on) -> list:
-    # CA3: columnas clave del join
-    if on is not None:
-        return _as_list(on)
-    if left_on is not None:
-        return _as_list(left_on)
-    return list(left.columns) if hasattr(left, "columns") else []
+    # Un array puede contener valores de celdas. Solo se registran etiquetas de columna.
+    if not hasattr(left, "columns"):
+        return []
+    keys = on if on is not None else left_on
+    if keys is None:
+        return list(left.columns)
+    if pd.api.types.is_hashable(keys) and keys in left.columns:
+        return [keys]
+    return [key for key in _as_list(keys) if pd.api.types.is_hashable(key) and key in left.columns]
 
 
 def _describe_merge(df, args, kwargs):
@@ -301,12 +345,22 @@ class AuditedTransformDataFrame(pd.DataFrame):
             return original(self, *args, **kwargs)
         info = guard(describe, self, args, kwargs, _contexto=f"Descripción de {operacion}()")
         nombre = _nombre(self)
+        # El índice de columnas de pandas es inmutable. Conservar la referencia
+        # permite comparar incluso si la operación reemplaza el esquema in place.
+        antes = (self.shape, self.columns) if info is not None else None
+        nulos_antes = guard(_contar_nulos_para_comparacion, self) if info and info[0] == TIPO_IMPUTACION else None
         with audit_scope():
             result = original(self, *args, **kwargs)
         if info is not None:
             tipo, cols, desc = info
+            despues = self if result is None else result
+            comparacion = guard(_comparar_estructura, antes, despues)
+            if comparacion and nulos_antes is not None:
+                nulos_despues = guard(_contar_nulos_para_comparacion, despues)
+                if nulos_despues is not None and nulos_despues <= nulos_antes:
+                    comparacion += f":{nulos_antes},{nulos_despues}"
             guard(_log_transform, tipo_transformacion=tipo, dataset_nombre=nombre,
-                  columnas_afectadas=cols, descripcion=desc,
+                  columnas_afectadas=cols, descripcion=desc, comparacion=comparacion,
                   _contexto=f"Registro de TRANSFORMACION {operacion}()")
         return result
 
@@ -373,13 +427,15 @@ def _audited_pd_merge(left, right, *args, **kwargs):
         return left_name, right_name, cols, desc
 
     info = guard(_describe, _contexto="Descripción de pd.merge()")
+    antes = (left.shape, left.columns) if isinstance(left, pd.DataFrame) else None
     with audit_scope():
         result = original(left, right, *args, **kwargs)
 
     if info is not None:
         left_name, right_name, cols, desc = info
+        comparacion = guard(_comparar_estructura, antes, result)
         guard(_log_transform, tipo_transformacion=TIPO_MERGE, dataset_nombre=left_name,
-              columnas_afectadas=cols, descripcion=desc,
+              columnas_afectadas=cols, descripcion=desc, comparacion=comparacion,
               _contexto="Registro de TRANSFORMACION pd.merge()")
         if isinstance(result, pd.DataFrame):
             guard(object.__setattr__, result, "_dataset_nombre",
