@@ -1,0 +1,368 @@
+{% extends "dashboard/panel_base.html" %}
+
+{% block title %}Alertas en Tiempo Real — Audit Tracer{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+    .al-panel {
+        background: white;
+        border-radius: 20px;
+        border: 1px solid var(--clr-border);
+        box-shadow: var(--shadow-sm);
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    .al-panel__title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .al-panel__subtitle { font-size: 12px; color: var(--clr-text-muted); margin-bottom: 20px; }
+    .al-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .al-table th {
+        background: #F5F5F7; padding: 12px 14px; text-align: left; font-weight: 700;
+        color: var(--clr-text-muted); text-transform: uppercase; font-size: 11px;
+        letter-spacing: 0.5px; border-bottom: 1px solid var(--clr-border);
+    }
+    .al-table td { padding: 12px 14px; border-bottom: 1px solid var(--clr-border); vertical-align: top; }
+    .al-table-wrap { overflow-x: auto; border: 1px solid var(--clr-border); border-radius: 14px; }
+    .sev { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .sev-MEDIA { background: #FEF9C3; color: #A16207; }
+    .sev-ALTA { background: #FFEDD5; color: #C2410C; }
+    .sev-CRITICA { background: #FEE2E2; color: #B91C1C; }
+    .est { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #F1F5F9; color: #475569; }
+    .est-ENVIADA { background: #DCFCE7; color: #166534; }
+    .est-FALLIDA { background: #FEE2E2; color: #991B1B; }
+    .est-SIN_SERVICIO_CORREO, .est-SIN_DESTINATARIOS { background: #FEF3C7; color: #92400E; }
+    .mono { font-family: 'JetBrains Mono', monospace, Consolas, Courier; font-size: 12px; }
+    .muted { color: var(--clr-text-muted); font-size: 12px; }
+    .al-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; align-items: end; }
+    .al-field label { display: block; font-size: 11px; font-weight: 700; color: var(--clr-text-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+    .al-field select, .al-field input[type=email] {
+        width: 100%; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--clr-border);
+        background: #F9FAFB; font-size: 13px; color: var(--clr-text-main); box-sizing: border-box;
+    }
+    .al-checks { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; }
+    .al-checks label { display: inline-flex; gap: 6px; align-items: center; text-transform: none; font-weight: 500; color: var(--clr-text-main); letter-spacing: 0; font-size: 12px; margin: 0; }
+    .al-inline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .al-inline select { padding: 5px 8px; border-radius: 8px; border: 1px solid var(--clr-border); font-size: 12px; }
+    .btn-xs { padding: 5px 10px; font-size: 12px; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    details summary { cursor: pointer; font-size: 12px; color: var(--clr-accent-blue, #0EA5E9); }
+    .empty-state-card { padding: 32px 16px; text-align: center; color: var(--clr-text-muted); font-size: 13px; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="dashboard-layout">
+
+    {# ── SIDEBAR ── #}
+    <aside class="sidebar">
+        <a href="{{ url_for('landing') }}" class="sidebar__brand">
+            <div class="sidebar__brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            </div>
+            Audit Tracer
+        </a>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Principal</div>
+            <a href="{{ url_for('dashboard') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                Dashboard
+            </a>
+        </div>
+
+        <div class="nav-section">
+            <div class="nav-section__title">Auditoría</div>
+            <a href="{{ url_for('eventos') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                Eventos
+            </a>
+            <a href="{{ url_for('reportes') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                Reportes
+            </a>
+            <a href="{{ url_for('linaje') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="12" r="3"></circle><path d="M9 6h3a3 3 0 0 1 3 3v0M9 18h3a3 3 0 0 0 3-3v0"></path></svg>
+                Linaje
+            </a>
+        </div>
+
+        {% if session.get('rol') == 'ADMIN' %}
+        <div class="nav-section">
+            <div class="nav-section__title">Administración</div>
+            <a href="{{ url_for('lista_usuarios') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                Usuarios
+            </a>
+            <a href="{{ url_for('lista_tokens') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                Tokens
+            </a>
+            <a href="{{ url_for('admin_sincronizacion') }}" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                Sincronización
+            </a>
+            <a href="{{ url_for('admin_alertas') }}" class="nav-item active">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                Alertas
+            </a>
+        </div>
+        {% endif %}
+
+        <div class="sidebar__footer">
+            <div class="user-profile">
+                <div class="user-avatar">{{ session.get('nombre', 'U')[0] | upper }}</div>
+                <div style="flex: 1;">
+                    <div style="font-size: 13px; font-weight: 700;">{{ session.get('nombre', 'Usuario') }}</div>
+                    <div style="font-size: 11px; color: var(--clr-text-muted);">{{ session.get('rol', 'Personal') }}</div>
+                </div>
+            </div>
+            <a href="{{ url_for('logout') }}" class="logout-link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                Cerrar sesión
+            </a>
+        </div>
+    </aside>
+
+    {% include "dashboard/_audit_toolbar.html" %}
+
+    {# ── MAIN CONTENT ── #}
+    <main id="panel-content" tabindex="-1" class="main-content">
+        <header class="header">
+            <div class="header__title">
+                <h1>Alertas en Tiempo Real</h1>
+                <p>HU-7.2 — Notificación automática por correo cuando ocurre un evento crítico de auditoría.</p>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div style="margin-bottom: 20px;">
+              {% for category, message in messages %}
+                <div style="padding: 12px 18px; border-radius: 12px; margin-bottom: 8px; font-size: 13px; font-weight: 600;
+                  {% if category == 'success' %} background: #DCFCE7; color: #166534; border: 1px solid #BBF7D0;
+                  {% elif category == 'error' %} background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA;
+                  {% else %} background: #E0F2FE; color: #075985; border: 1px solid #BAE6FD; {% endif %}">
+                  {{ message }}
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        {# ── ESTADO DEL SERVICIO ── #}
+        <div class="stats-grid" style="margin-bottom: 24px;">
+            <div class="stat-card">
+                <div class="stat-card__value" style="font-size: 15px;">
+                    <span class="status-dot" style="background: {{ '#22C55E' if despachador_activo else '#EF4444' }};"></span>
+                    {{ 'Activo' if despachador_activo else 'Inactivo' }}
+                </div>
+                <div class="stat-card__label">Despachador de alertas</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card__value" style="font-size: 14px;">
+                    <span class="status-dot" style="background: {{ '#22C55E' if servicio_descripcion else '#F59E0B' }};"></span>
+                    {{ servicio_descripcion or 'Sin configurar' }}
+                </div>
+                <div class="stat-card__label">Servicio de correo{% if remitente %} · remitente {{ remitente }}{% endif %}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card__value">{{ resumen.get('ENVIADA', 0) }}</div>
+                <div class="stat-card__label">Notificaciones enviadas (24 h)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card__value">{{ resumen.get('FALLIDA', 0) + resumen.get('SIN_SERVICIO_CORREO', 0) + resumen.get('SIN_DESTINATARIOS', 0) }}</div>
+                <div class="stat-card__label">No entregadas (24 h)</div>
+            </div>
+        </div>
+
+        {% if not servicio_descripcion %}
+        <div class="al-panel" style="border-color: #FDE68A; background: #FFFBEB;">
+            <div class="al-panel__title">Servicio de correo sin configurar</div>
+            <div class="muted">
+                Los eventos críticos se siguen detectando y quedan en el historial como <code>SIN_SERVICIO_CORREO</code>.
+                Defina <code>AUDIT_SMTP_HOST</code>, <code>AUDIT_SMTP_PORT</code>, <code>AUDIT_SMTP_USER</code>,
+                <code>AUDIT_SMTP_PASSWORD</code> y <code>AUDIT_SMTP_FROM</code> en el entorno del servidor
+                (o <code>AUDIT_ALERTAS_OUTBOX</code> para guardar los correos como <code>.eml</code> en desarrollo) y reinicie.
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── CATÁLOGO (CA1) ── #}
+        <div class="al-panel">
+            <div class="al-panel__title">Catálogo de eventos críticos</div>
+            <div class="al-panel__subtitle">Qué dispara una notificación y con qué severidad. Un evento que coincide con varios tipos genera un solo correo con la severidad más alta.</div>
+            <div class="al-table-wrap">
+                <table class="al-table">
+                    <thead><tr><th>Tipo</th><th>Severidad</th><th>Regla</th><th>Origen</th></tr></thead>
+                    <tbody>
+                    {% for t in catalogo %}
+                        <tr>
+                            <td><strong>{{ t.nombre }}</strong><div class="mono muted">{{ t.codigo }}</div></td>
+                            <td><span class="sev sev-{{ t.severidad }}">{{ t.severidad }}</span></td>
+                            <td>{{ t.descripcion }}{% if t.agrupable %}<div class="muted">Una notificación por usuario cada {{ t.ventana_agrupacion_min }} min.</div>{% endif %}</td>
+                            <td class="muted">{{ t.origen }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {# ── DESTINATARIOS (Sub-tarea 4) ── #}
+        <div class="al-panel">
+            <div class="al-panel__title">Destinatarios</div>
+            <div class="al-panel__subtitle">A quién se notifica y desde qué severidad. Un rol se expande a los correos de los usuarios activos con ese rol.</div>
+
+            <div class="al-table-wrap" style="margin-bottom: 20px;">
+                {% if destinatarios %}
+                <table class="al-table">
+                    <thead><tr><th>Destinatario</th><th>Severidad mínima y tipos</th><th>Estado</th><th style="text-align:right;">Acciones</th></tr></thead>
+                    <tbody>
+                    {% for d in destinatarios %}
+                        <tr style="{{ '' if d.activo else 'opacity: .55;' }}">
+                            <td>
+                                <strong>{{ d.valor }}</strong>
+                                <div class="muted">{{ 'Rol' if d.tipo_destino == 'ROL' else 'Correo' }}</div>
+                                {% if d.tipo_destino == 'ROL' %}
+                                <div class="muted">{{ d.correos | join(', ') if d.correos else 'Sin usuarios activos con este rol' }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <form method="POST" action="{{ url_for('admin_alertas_actualizar_destinatario', destinatario_id=d.destinatario_id) }}">
+                                    <input type="hidden" name="accion" value="actualizar">
+                                    <div class="al-inline">
+                                        <select name="severidad_minima" aria-label="Severidad mínima">
+                                            {% for s in severidades %}<option value="{{ s }}" {% if s == d.severidad_minima %}selected{% endif %}>{{ s }} o superior</option>{% endfor %}
+                                        </select>
+                                        <button type="submit" class="btn btn-outline btn-xs">Guardar</button>
+                                    </div>
+                                    <details style="margin-top: 6px;">
+                                        <summary>Tipos: {{ d.tipos_evento | join(', ') if d.tipos_evento else 'todos' }}</summary>
+                                        <div class="al-checks" style="margin-top: 8px;">
+                                            {% for t in catalogo %}
+                                            <label><input type="checkbox" name="tipos_evento" value="{{ t.codigo }}" {% if t.codigo in d.tipos_evento %}checked{% endif %}> {{ t.nombre }}</label>
+                                            {% endfor %}
+                                        </div>
+                                        <div class="muted" style="margin-top: 4px;">Sin marcar ninguno = todos los tipos.</div>
+                                    </details>
+                                </form>
+                            </td>
+                            <td><span class="est {{ 'est-ENVIADA' if d.activo else '' }}">{{ 'Activo' if d.activo else 'Inactivo' }}</span></td>
+                            <td style="text-align: right; white-space: nowrap;">
+                                <form method="POST" action="{{ url_for('admin_alertas_actualizar_destinatario', destinatario_id=d.destinatario_id) }}" style="display:inline;">
+                                    <input type="hidden" name="accion" value="alternar">
+                                    <button type="submit" class="btn btn-outline btn-xs">{{ 'Desactivar' if d.activo else 'Activar' }}</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('admin_alertas_actualizar_destinatario', destinatario_id=d.destinatario_id) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar este destinatario?');">
+                                    <input type="hidden" name="accion" value="eliminar">
+                                    <button type="submit" class="btn btn-outline btn-xs" style="color:#B91C1C;">Eliminar</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state-card">No hay destinatarios: ningún evento crítico se notificará hasta agregar uno.</div>
+                {% endif %}
+            </div>
+
+            <form method="POST" action="{{ url_for('admin_alertas_crear_destinatario') }}">
+                <div class="al-form-grid">
+                    <div class="al-field">
+                        <label for="tipo_destino">Notificar a</label>
+                        <select name="tipo_destino" id="tipo_destino" onchange="alternarTipo(this.value)">
+                            <option value="ROL">Un rol</option>
+                            <option value="EMAIL">Un correo</option>
+                        </select>
+                    </div>
+                    <div class="al-field" id="campo-rol">
+                        <label for="valor_rol">Rol</label>
+                        <select name="valor_rol" id="valor_rol">
+                            {% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="al-field" id="campo-email" style="display:none;">
+                        <label for="valor_email">Correo</label>
+                        <input type="email" name="valor_email" id="valor_email" placeholder="cumplimiento@hospital.org">
+                    </div>
+                    <div class="al-field">
+                        <label for="severidad_minima">Severidad mínima</label>
+                        <select name="severidad_minima" id="severidad_minima">
+                            {% for s in severidades %}<option value="{{ s }}">{{ s }} o superior</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="al-field">
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">Agregar destinatario</button>
+                    </div>
+                </div>
+                <div class="al-field" style="margin-top: 14px;">
+                    <label>Tipos de evento (opcional; sin marcar = todos)</label>
+                    <div class="al-checks">
+                        {% for t in catalogo %}
+                        <label><input type="checkbox" name="tipos_evento" value="{{ t.codigo }}"> {{ t.nombre }}</label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        {# ── PRUEBA DE ENVÍO ── #}
+        <div class="al-panel">
+            <div class="al-panel__title">Probar el servicio de correo</div>
+            <div class="al-panel__subtitle">Envía un correo de prueba. Enlace usado en las notificaciones: <span class="mono">{{ url_base or '—' }}/eventos/&lt;id&gt;</span></div>
+            <form method="POST" action="{{ url_for('admin_alertas_prueba') }}" class="al-inline">
+                <input type="email" name="destino" required placeholder="correo@dominio.com" aria-label="Correo de prueba"
+                       style="padding: 9px 12px; border-radius: 10px; border: 1px solid var(--clr-border); min-width: 260px;">
+                <button type="submit" class="btn btn-outline">Enviar prueba</button>
+            </form>
+        </div>
+
+        {# ── HISTORIAL ── #}
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+            <h2 style="font-size: 18px; font-weight: 800;">Notificaciones recientes</h2>
+            <span class="muted">Últimas 50</span>
+        </div>
+        <div class="al-panel" style="padding: 0;">
+            {% if notificaciones %}
+            <div style="overflow-x: auto;">
+            <table class="al-table">
+                <thead><tr><th>Fecha</th><th>Evento</th><th>Tipo crítico</th><th>Severidad</th><th>Destinatarios</th><th>Estado</th></tr></thead>
+                <tbody>
+                {% for n in notificaciones %}
+                    <tr>
+                        <td class="muted" style="white-space: nowrap;">{{ n.creado_en[:19].replace('T', ' ') }}</td>
+                        <td>
+                            <a href="{{ url_for('detalle_evento', event_id=n.event_id) }}"><strong>#{{ n.event_id }}</strong></a>
+                            <div class="muted">{{ n.tipo_accion }} · {{ n.usuario_id }}</div>
+                        </td>
+                        <td>{% for c in n.tipos_criticos.split(',') %}<div>{{ catalogo_nombres.get(c, c) }}</div>{% endfor %}</td>
+                        <td><span class="sev sev-{{ n.severidad }}">{{ n.severidad }}</span></td>
+                        <td class="muted" style="max-width: 220px; word-break: break-word;">{{ (n.destinatarios or '—').replace(',', ', ') }}</td>
+                        <td>
+                            <span class="est est-{{ n.estado }}">{{ n.estado.replace('_', ' ') }}</span>
+                            {% if n.intentos and n.intentos > 1 %}<div class="muted">{{ n.intentos }} intentos</div>{% endif %}
+                            {% if n.error %}<div class="muted" style="max-width: 240px;">{{ n.error }}</div>{% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="empty-state-card">Todavía no se ha disparado ninguna notificación.</div>
+            {% endif %}
+        </div>
+
+    </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function alternarTipo(tipo) {
+    document.getElementById('campo-rol').style.display = tipo === 'ROL' ? '' : 'none';
+    document.getElementById('campo-email').style.display = tipo === 'EMAIL' ? '' : 'none';
+}
+</script>
+{% endblock %}

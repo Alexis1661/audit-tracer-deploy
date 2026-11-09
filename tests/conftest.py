@@ -16,6 +16,13 @@ os.environ["HOME"] = _HOME_TEMPORAL
 os.environ["USERPROFILE"] = _HOME_TEMPORAL
 os.environ.pop("AUDIT_TRACER_API_URL", None)
 
+# HU-7.2 — app.py arranca un despachador de alertas enganchado a la base
+# central real (audit_central.db). En la suite se apaga: las pruebas de
+# alertas crean sus propios despachadores contra bases temporales y con un
+# servicio de correo en memoria, así ningún test manda correos reales.
+os.environ["AUDIT_ALERTAS_DESACTIVADAS"] = "1"
+for _var in ("AUDIT_SMTP_HOST", "AUDIT_ALERTAS_OUTBOX", "AUDIT_DASHBOARD_URL"):
+    os.environ.pop(_var, None)
 
 def crear_sesion_web(client, usuario_id, rol, nombre=None, sesion_id="sesion-web-test"):
     """Prepara una cookie respaldada por un token de prueba sin agregar eventos."""
