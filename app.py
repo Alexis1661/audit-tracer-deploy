@@ -1813,8 +1813,55 @@ def _seed_demo_data_if_requested():
         conn.close()
 
 
+def _seed_usuarios_desde_entorno():
+    """
+    Crea al arrancar las cuentas listadas en la variable de entorno
+    SEED_USUARIOS, un JSON con la forma
+    [{"email": "...", "password": "...", "rol": "ANALISTA"}, ...].
+
+    Sirve para despliegues con disco efímero (ej. el plan gratuito de Render),
+    donde cada reinicio recrea la base vacía: las cuentas vuelven a existir con
+    las mismas contraseñas, que viven solo en el panel del proveedor y nunca en
+    el repositorio. Es idempotente: una cuenta que ya existe no se toca, así que
+    no cambia contraseñas ni duplica eventos. Nunca imprime una contraseña.
+    """
+    import json
+
+    crudo = os.environ.get('SEED_USUARIOS', '').strip()
+    if not crudo:
+        return
+    try:
+        cuentas = json.loads(crudo)
+        if not isinstance(cuentas, list):
+            raise ValueError('se esperaba una lista')
+    except ValueError as exc:
+        print(f'[AuditTracer] SEED_USUARIOS ignorada: JSON inválido ({exc}).')
+        return
+
+    creadas = existentes = rechazadas = 0
+    with closing(get_db()) as conn:
+        for cuenta in cuentas:
+            try:
+                email, password, rol = cuenta['email'], cuenta['password'], cuenta['rol']
+            except (KeyError, TypeError):
+                rechazadas += 1
+                continue
+            try:
+                register_user(conn, email, password, rol, admin_id='SISTEMA')
+                creadas += 1
+            except ValueError as exc:
+                # correo repetido o rol inválido; el mensaje no incluye la contraseña
+                if 'ya se encuentra registrado' in str(exc):
+                    existentes += 1
+                else:
+                    rechazadas += 1
+                    print(f'[AuditTracer] SEED_USUARIOS: se omitió {email}: {exc}')
+    print(f'[AuditTracer] SEED_USUARIOS: {creadas} creadas, {existentes} ya existían, {rechazadas} omitidas.')
+
+
 if __name__ == '__main__':
     _seed_demo_data_if_requested()
+    _seed_usuarios_desde_entorno()
     if os.environ.get('START_MERKLE_SCHEDULER', '1') == '1':
         try:
             from audit_tracer.merkle_scheduler import start_scheduler

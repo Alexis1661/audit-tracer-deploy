@@ -3,3 +3,8 @@ __pycache__/
 .env
 *.pyc
 .pytest_cache/
+
+validacion_usuarios/credenciales_evaluadores.csv
+
+validacion_usuarios/*.pdf
+validacion_usuarios/render_env_*.json
