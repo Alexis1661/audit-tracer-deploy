@@ -1376,7 +1376,9 @@ def eventos():
     usuario_id = request.args.get('usuario_id')
     tipo_accion = request.args.get('tipo_accion')
     nivel_alerta = request.args.get('nivel_alerta')
-    solo_anomalias = request.args.get('solo_anomalias')
+    # La paginación reenvía los filtros en la URL: un valor como 'False' o
+    # vacío no debe activar el filtro de anomalías.
+    solo_anomalias = request.args.get('solo_anomalias', '').strip().lower() in ('1', 'true', 'on')
     if solo_anomalias and not nivel_alerta:
         nivel_alerta = 'ANOMALIA'
     dataset_nombre = request.args.get('dataset_nombre')
@@ -1425,7 +1427,7 @@ def eventos():
             'usuario_id': usuario_id,
             'tipo_accion': tipo_accion,
             'nivel_alerta': nivel_alerta,
-            'solo_anomalias': solo_anomalias or (nivel_alerta == 'ANOMALIA'),
+            'solo_anomalias': '1' if (solo_anomalias or nivel_alerta == 'ANOMALIA') else '',
             'dataset_nombre': dataset_nombre,
             'fecha_inicio': fecha_inicio,
             'fecha_fin': fecha_fin,
