@@ -224,19 +224,9 @@
                     <label for="reporte_tipo_accion" class="form-label">Acción</label>
                     <select id="reporte_tipo_accion" name="reporte_tipo_accion" class="form-select">
                         <option value="">Todas</option>
-                        <option value="CARGA" {% if reporte_filtros.reporte_tipo_accion == 'CARGA' %}selected{% endif %}>Carga de Datos</option>
-                        <option value="CONSULTA" {% if reporte_filtros.reporte_tipo_accion == 'CONSULTA' %}selected{% endif %}>Consulta</option>
-                        <option value="TRANSFORMACION" {% if reporte_filtros.reporte_tipo_accion == 'TRANSFORMACION' %}selected{% endif %}>Transformación</option>
-                        <option value="EXPORTACION" {% if reporte_filtros.reporte_tipo_accion == 'EXPORTACION' %}selected{% endif %}>Exportación de Datos</option>
-                        <option value="MODELADO" {% if reporte_filtros.reporte_tipo_accion == 'MODELADO' %}selected{% endif %}>Modelado</option>
-                        <option value="MODELADO_FALLIDO" {% if reporte_filtros.reporte_tipo_accion == 'MODELADO_FALLIDO' %}selected{% endif %}>Modelado Fallido</option>
-                        <option value="ACCESO_FALLIDO" {% if reporte_filtros.reporte_tipo_accion == 'ACCESO_FALLIDO' %}selected{% endif %}>Acceso Fallido</option>
-                        <option value="ACCESO_DENEGADO" {% if reporte_filtros.reporte_tipo_accion == 'ACCESO_DENEGADO' %}selected{% endif %}>Acceso Denegado</option>
-                        <option value="INICIO_SESION" {% if reporte_filtros.reporte_tipo_accion == 'INICIO_SESION' %}selected{% endif %}>Inicio Sesión</option>
-                        <option value="CIERRE_SESION" {% if reporte_filtros.reporte_tipo_accion == 'CIERRE_SESION' %}selected{% endif %}>Cierre Sesión</option>
-                        <option value="SESION_INTERRUMPIDA" {% if reporte_filtros.reporte_tipo_accion == 'SESION_INTERRUMPIDA' %}selected{% endif %}>Sesión Interrumpida</option>
-                        <option value="CREACION_USUARIO" {% if reporte_filtros.reporte_tipo_accion == 'CREACION_USUARIO' %}selected{% endif %}>Creación Usuario</option>
-                        <option value="MODIFICACION_ROL" {% if reporte_filtros.reporte_tipo_accion == 'MODIFICACION_ROL' %}selected{% endif %}>Modificación Rol</option>
+                        {% for valor, etiqueta in opciones_tipo_accion() %}
+                        <option value="{{ valor }}" {% if reporte_filtros.reporte_tipo_accion == valor %}selected{% endif %}>{{ etiqueta }}</option>
+                        {% endfor %}
                     </select>
                 </div>
             </div>

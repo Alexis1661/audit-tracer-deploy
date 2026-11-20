@@ -25,3 +25,21 @@ def test_siguiente_pagina_conserva_los_filtros_sin_activar_anomalias(monkeypatch
         pagina2 = client.get(siguiente).get_data(as_text=True)
     assert "No se encontraron registros" not in pagina2
     assert 'id="solo_anomalias" name="solo_anomalias" value="1" checked' not in pagina2
+
+
+def test_filtro_accion_incluye_los_tipos_que_usa_la_guia(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "central.db")
+    monkeypatch.setattr(app_module, "get_db", lambda: get_central_connection(db_path))
+    conn = get_central_connection(db_path)
+    insert_event(conn, {"usuario_id": "u-1", "sesion_id": "s", "tipo_accion": "TIPO_NUEVO_DE_PRUEBA"})
+    conn.close()
+    app_module.app.config["TESTING"] = True
+    with app_module.app.test_client() as client:
+        crear_sesion_web(client, "auditor-1", "AUDITOR")
+        eventos = client.get("/eventos?tipo_accion=ATRIBUCION_SESION").get_data(as_text=True)
+        reportes = client.get("/reportes").get_data(as_text=True)
+    for tipo in ("ATRIBUCION_SESION", "FIRMA_INVALIDA", "CONFIRMACION_LOGIN_DISPOSITIVO",
+                 "REVOCACION_TOKEN", "TIPO_NUEVO_DE_PRUEBA"):
+        assert f'<option value="{tipo}"' in eventos
+        assert f'<option value="{tipo}"' in reportes
+    assert '<option value="ATRIBUCION_SESION" selected>' in eventos

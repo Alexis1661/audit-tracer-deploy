@@ -115,6 +115,48 @@ MENSAJE_SESION_INVALIDA = 'Tu sesión venció o dejó de ser válida. Vuelve a i
 # (hash, firmas y lotes de Merkle dependen de ese valor exacto); solo se
 # convierten al mostrarlos.
 app.jinja_env.filters['hora_col'] = formatear_fecha
+
+# Opciones del filtro "Acción" en Eventos y Reportes. Además del catálogo
+# fijo, se agrega cualquier tipo que ya exista en la base, para que ningún
+# evento quede imposible de filtrar desde la interfaz.
+TIPOS_ACCION = {
+    'CARGA': 'Carga de Datos',
+    'CONSULTA': 'Consulta',
+    'TRANSFORMACION': 'Transformación',
+    'EXPORTACION': 'Exportación de Datos',
+    'MODELADO': 'Modelado',
+    'MODELADO_FALLIDO': 'Modelado Fallido',
+    'ACCESO_FALLIDO': 'Acceso Fallido',
+    'ACCESO_DENEGADO': 'Acceso Denegado',
+    'INICIO_SESION': 'Inicio Sesión',
+    'CIERRE_SESION': 'Cierre Sesión',
+    'SESION_INTERRUMPIDA': 'Sesión Interrumpida',
+    'ATRIBUCION_SESION': 'Atribución de Sesión',
+    'CREACION_USUARIO': 'Creación Usuario',
+    'MODIFICACION_ROL': 'Modificación Rol',
+    'GENERACION_TOKEN': 'Generación de Token',
+    'REVOCACION_TOKEN': 'Revocación de Token',
+    'CONFIRMACION_LOGIN_DISPOSITIVO': 'Confirmación Login por Código',
+    'SINCRONIZACION_RECHAZADA': 'Sincronización Rechazada',
+    'FIRMA_INVALIDA': 'Firma Inválida',
+    'AUDITORIA_DESACTIVADA': 'Auditoría Desactivada',
+    'CONFIGURACION_ALERTAS': 'Configuración de Alertas',
+}
+
+
+def opciones_tipo_accion():
+    """[(valor, etiqueta)] del catálogo más los tipos presentes en la base."""
+    opciones = dict(TIPOS_ACCION)
+    try:
+        with closing(get_db()) as conn:
+            for (tipo,) in conn.execute("SELECT DISTINCT tipo_accion FROM audit_log WHERE tipo_accion IS NOT NULL"):
+                opciones.setdefault(tipo, tipo.replace('_', ' ').capitalize())
+    except Exception:
+        pass
+    return list(opciones.items())
+
+
+app.jinja_env.globals['opciones_tipo_accion'] = opciones_tipo_accion
 app.jinja_env.filters['hora_col_min'] = lambda v: formatear_fecha(v, segundos=False)
 app.jinja_env.filters['lote_col'] = lote_a_hora_colombia
 app.jinja_env.globals['ZONA_HORARIA'] = ETIQUETA_ZONA
