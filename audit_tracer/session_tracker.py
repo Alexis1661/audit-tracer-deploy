@@ -44,6 +44,10 @@ class SessionTracker:
         """
         if threading.current_thread() is not threading.main_thread():
             return
+        # Servidor WSGI (Gunicorn): SIGTERM/SIGINT son suyas para el apagado ordenado;
+        # interceptarlas hacia que `systemctl restart` tardara 30 s y terminara en KeyboardInterrupt.
+        if 'gunicorn' in sys.modules:
+            return
         try:
             if 'ipykernel' not in sys.modules:
                 signal.signal(signal.SIGINT, self._handle_signal)

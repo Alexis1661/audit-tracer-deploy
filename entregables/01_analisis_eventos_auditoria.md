@@ -46,19 +46,19 @@ Se activan con `import audit_tracer` (HU-5.1): el paquete reemplaza funciones de
 
 | `tipo_accion` | Disparador técnico (método interceptado) | Atributos específicos | Nivel que asigna la librería | Código |
 |---|---|---|---|---|
-| `CARGA` | `pd.read_csv()`, `pd.read_excel()` (también `pd.io.parsers.readers.read_csv`). Con `sheet_name=None`, un evento por hoja. | `dataset_nombre` (nombre del archivo), `columnas_afectadas` (todas las columnas leídas) | `NORMAL`; `CRITICO` si el usuario es `DESCONOCIDO` o la operación ocurre fuera del horario laboral (8:00–18:00 hora Colombia, configurable) | `data_capture.py:231`, `:101`, `:416` |
-| `CONSULTA` | `df[columna]`, `df[[columnas]]` y `df.query(expr)` sobre DataFrames cargados con los lectores anteriores | `columnas_afectadas` (columnas seleccionadas o mencionadas en la expresión) | Igual que `CARGA` | `data_capture.py:274`, `:301` |
-| `TRANSFORMACION` | `fillna` → `[IMPUTACION]`; `dropna` → `[ELIMINACION_FILAS]` o `[ELIMINACION_COLS]`; `drop` → `[ELIMINACION_COLS]`/`[ELIMINACION_FILAS]`; `rename` → `[RENOMBRE]`; `apply` → `[APLICACION]` o `[NORMALIZACION]` si la función se llama *normalize/scale/minmax/zscore/standard*; `df.merge()` y `pd.merge()` → `[MERGE]` | `columnas_afectadas`; en `contexto_ejecucion` el sufijo `Comparacion:v1:filas,cols antes:después:agregadas,retiradas` | `NORMAL`; `CRITICO` solo si el usuario es `DESCONOCIDO` | `transform_capture.py:368-404`, `:415`, `:278` |
+| `CARGA` | `pd.read_csv()`, `pd.read_excel()` (también `pd.io.parsers.readers.read_csv`) y, desde el 21/11/2026, `pd.read_sql()`, `pd.read_sql_query()` y `pd.read_sql_table()` (el dataset se llama `sql:<tabla>`; el texto SQL no se guarda). Con `sheet_name=None`, un evento por hoja. | `dataset_nombre` (nombre del archivo), `columnas_afectadas` (todas las columnas leídas) | `NORMAL`; `CRITICO` si el usuario es `DESCONOCIDO` o la operación ocurre fuera del horario laboral (8:00–18:00 hora Colombia, configurable) | `data_capture.py:231`, `:101`, `:416` |
+| `CONSULTA` | `df[columna]`, `df[[columnas]]`, `df.query(expr)` y, desde el 21/11/2026, `df.loc[...]` y `df.iloc[...]` (lecturas por celda repetidas se registran una vez por segundo) sobre DataFrames cargados con los lectores anteriores | `columnas_afectadas` (columnas seleccionadas o mencionadas en la expresión) | Igual que `CARGA` | `data_capture.py:274`, `:301` |
+| `TRANSFORMACION` | `df[mascara_booleana]` y `df.loc[mascara]` → `[FILTRADO]` (desde el 21/11/2026); `fillna` → `[IMPUTACION]`; `dropna` → `[ELIMINACION_FILAS]` o `[ELIMINACION_COLS]`; `drop` → `[ELIMINACION_COLS]`/`[ELIMINACION_FILAS]`; `rename` → `[RENOMBRE]`; `apply` → `[APLICACION]` o `[NORMALIZACION]` si la función se llama *normalize/scale/minmax/zscore/standard*; `df.merge()` y `pd.merge()` → `[MERGE]` | `columnas_afectadas`; en `contexto_ejecucion` el sufijo `Comparacion:v1:filas,cols antes:después:agregadas,retiradas` | `NORMAL`; `CRITICO` solo si el usuario es `DESCONOCIDO` | `transform_capture.py:368-404`, `:415`, `:278` |
 | `EXPORTACION` | `df.to_csv()`, `to_excel()`, `to_json()`, `to_parquet()`; además `audited_open()` para escrituras fuera de pandas (debe llamarse explícitamente) | `ruta_destino`, `filas_exportadas`, `sobrescritura` (0/1), formato en `contexto_ejecucion` | `NORMAL`; `CRITICO` si `filas_exportadas > 1000` (`UMBRAL_EXPORTACION_MASIVA`) o usuario `DESCONOCIDO` | `export_capture.py:42`, `:84`, `:249`, `:285` |
 | `ACCESO_FALLIDO` (datos) | `FileNotFoundError`, `PermissionError`, `IsADirectoryError`, `OSError` al leer con los lectores auditados, o con el decorador `@intercept_access_failures` | `motivo_fallo` (tipo de error), `dataset_nombre` | `NORMAL`; `CRITICO` desde el 4.º fallo del mismo usuario en 5 minutos | `failed_access.py:40`, `:59`, `:101` |
 | `AUDITORIA_DESACTIVADA` | Llamar a `deactivate()` de cualquier interceptor | Interceptor desactivado en `contexto_ejecucion` | `CRITICO` | `data_capture.py:447` |
 
-**Lo que la librería NO intercepta** (verificado en el código; no hay parche para estas funciones):
+**Lo que la librería NO intercepta** (verificado en el código y en `tests/test_captura_consultas.py`):
 
-- Lecturas con `pd.read_sql`, `pd.read_parquet`, `pd.read_json`, `pd.read_table` y cualquier lector distinto de `read_csv`/`read_excel`.
-- Consultas con `head`, `tail`, `loc`, `iloc`, `at`, `filter`, `groupby`, `describe`, `sample`, ni la selección con máscara booleana `df[df.col > x]` (`data_capture.py:282-299` solo registra claves de tipo texto o lista de textos). El catálogo de `transform_capture.py:13` lista `FILTRADO` para `df[mask]` y `df.query()`, pero ese subtipo **no se genera en ningún punto del código**: `df.query()` produce `CONSULTA`.
+- Lecturas con `pd.read_parquet`, `pd.read_json`, `pd.read_table` y cualquier lector distinto de `read_csv`, `read_excel` y `read_sql*`.
+- Consultas con `head`, `tail`, `at`, `filter`, `groupby`, `describe` y `sample`.
 - Escrituras con `open()` o con librerías distintas de pandas, salvo que se use `audited_open()`.
-- **Modelado** (`MODELADO`, `MODELADO_FALLIDO`): el linaje los reconoce (`lineage.py:46`), pero ningún interceptor los genera. La HU-03 del documento («Registrar eventos de modelado») no tiene implementación de captura.
+- **Modelado** (`MODELADO`, `MODELADO_FALLIDO`): el linaje los reconoce (`lineage.py`), pero ningún interceptor los genera. Se evaluó interceptar `fit` y `predict` de scikit-learn y se descartó: cada estimador define su propio `fit`, scikit-learn no es dependencia del proyecto y `cross_val_score`/`GridSearchCV` los llaman cientos de veces (una avalancha de eventos); exigiría un gancho de importación sobre todo `sklearn`. La HU-03 del documento («Registrar eventos de modelado») queda **no implementada**.
 
 ## 3.2 Eventos de sesión del entorno de análisis
 
@@ -88,6 +88,7 @@ Se activan con `import audit_tracer` (HU-5.1): el paquete reemplaza funciones de
 | `INTENTO_MODIFICACION` / `INTENTO_ELIMINACION` | `UPDATE` o `DELETE` sobre `audit_log` (disparadores de inmutabilidad) | `CRITICO` | Tabla `audit_intentos_bloqueados` (no en `audit_log`: la transacción se aborta con `RAISE(FAIL)`) — `db.py:27-75` |
 | `FIRMA_INVALIDA` | Evento sincronizado con firma que no verifica, o sin firma de un usuario con llave registrada | `CRITICO` | `audit_log` del servidor — `app.py:1062-1121` |
 | `SINCRONIZACION_RECHAZADA` | Token inválido, vencido o revocado en `/api/eventos/sincronizar` | `ADVERTENCIA` | `audit_log` del servidor — `app.py:1036-1045` |
+| `ANOMALIA_DETECTADA` | El servidor detecta una o más reglas de anomalía sobre un evento **firmado** (se agrega desde el 21/11/2026; el evento original no se modifica) | `ANOMALIA` | `audit_log` del servidor — `app.py`, `_registrar_anomalia_de_evento_firmado` |
 
 # 4. Niveles de criticidad y reglas que los asignan
 
@@ -98,9 +99,16 @@ Se activan con `import audit_tracer` (HU-5.1): el paquete reemplaza funciones de
 | `NORMAL` | Valor por defecto | — |
 | `ADVERTENCIA` | Acceso denegado por rol; 3–4 contraseñas erróneas; cambio de rol que involucra ADMIN; revocación de token; atribución tardía de sesión; sesión interrumpida; sincronización rechazada | Servidor y librería (tabla 3.2–3.4) |
 | `CRITICO` | Usuario no identificado (siempre); exportación de más de 1000 filas; carga o consulta fuera de 8:00–18:00 hora Colombia; más de 3 accesos fallidos en 5 min; bloqueo de cuenta; desactivación de la auditoría; firma inválida; intento de UPDATE/DELETE | **Cliente** (librería), salvo login, firma e intentos bloqueados |
-| `ANOMALIA` | Al menos una de tres reglas: **(1) volumen** — filas exportadas > 3 × promedio histórico del usuario (y ≥ 50), o ≥ 250 sin histórico, u operaciones del día ≥ 3 × su promedio diario (y ≥ 5); **(2) horario inusual** — hora UTC del evento fuera de [mín − 1, máx + 1] de las horas de sus eventos previos (con < 5 eventos, 07–19); **(3) correlación** — 2 o más usuarios distintos sobre el mismo dataset en 15 minutos | `anomaly_detector.py:188-455`, aplicado en el servidor (`app.py:1126`) |
+| `ANOMALIA` | Al menos una de tres reglas: **(1) volumen** — filas exportadas > 3 × promedio histórico del usuario (y ≥ 50), o ≥ 250 sin histórico, u operaciones del día ≥ 3 × su promedio diario (y ≥ 5); **(2) horario inusual** — hora UTC del evento fuera de [mín − 1, máx + 1] de las horas de sus eventos previos (con < 5 eventos, 07–19); **(3) correlación** — 2 o más usuarios distintos sobre el mismo dataset en 15 minutos | `anomaly_detector.py`, aplicado en el servidor a todo evento recibido (ver el detector corregido más abajo) |
 
-**Hallazgo (afecta la sección 7.3.6 del documento).** El detector de anomalías solo se ejecuta sobre eventos que llegan **sin firma** y **sin nivel CRITICO** (`app.py:1126`). La librería firma todos los eventos (`models/audit_log.py:616`) y marca `CRITICO` toda exportación de más de 1000 filas, así que en el flujo real **ningún evento capturado por la librería pasa por el detector**. En la validación con MIMIC-III (caso 2) la exportación de 76 074 filas a las 03:10 quedó `CRITICO` con el motivo «Exportación masiva», sin las reglas de anomalía. Además, como el nivel lo decide el cliente, el servidor guarda el nivel que envía la librería (riesgo abierto SRV-T3 del modelo STRIDE).
+**Detector de anomalías (corregido el 21/11/2026).** El servidor evalúa **todos** los eventos que recibe, firmados o no y clasificados o no como CRITICO por la librería (`app.py`, función `api_sincronizar_evento`). El historial de referencia es el anterior al evento y **no incluye su propia sesión** (`anomaly_detector.py`: parámetros `excluir_sesion` y `antes_de`). El resultado depende de si el evento viene firmado, porque `nivel_alerta` y `motivo_alerta` forman parte del mensaje firmado y del hash:
+
+| Evento recibido | Qué queda guardado | Nivel y motivo |
+|---|---|---|
+| **Con firma** (todo lo que genera la librería) — solo operaciones sobre datos (CARGA, CONSULTA, TRANSFORMACION, EXPORTACION) | El evento **intacto** (su firma y su hash siguen válidos) **más** un evento `ANOMALIA_DETECTADA` del servidor, de la misma sesión, que lo referencia por `event_id` y `evento_uuid`. Una por sesión y conjunto de reglas. | El evento conserva el nivel de la librería (p. ej. `CRITICO` «Exportación masiva: 76074 filas (> 1000)»). El evento `ANOMALIA_DETECTADA` tiene nivel `ANOMALIA` y motivo «Anomalía (reglas: volumen anómalo, horario inusual): <detalle de cada regla>». |
+| **Sin firma** (cuentas sin llave registrada) | El evento reclasificado en el sitio | Si era NORMAL pasa a `ANOMALIA`; si era `CRITICO` sigue `CRITICO`. En ambos casos `motivo_alerta` suma al final el detalle de cada regla. |
+
+Cuando se activan **las dos reglas** sobre una exportación masiva firmada hay, entonces, dos eventos: la exportación (`CRITICO`, motivo de la regla de la librería) y la anomalía (`ANOMALIA`, motivo con las dos reglas). Cada uno dispara su propia notificación (`EXPORTACION_MASIVA` y `ANOMALIA_DETECTADA`). Como el nivel lo decide el cliente, el servidor sigue sin recalcular el nivel de la librería (riesgo abierto SRV-T3 del modelo STRIDE). Pruebas: `tests/test_anomalias_eventos_firmados.py` (12). Antes de esta corrección, ningún evento de la librería pasaba por el detector (`app.py:1126` lo limitaba a eventos sin firma y no CRITICO) y el horario habitual incluía la propia sesión sospechosa.
 
 **Severidad de notificación (HU-7.2)** — es una escala distinta de `nivel_alerta`, usada solo para decidir a quién se envía correo (`alerts/catalogo.py`):
 
@@ -136,7 +144,7 @@ Copia exacta de `MAPEO_NORMATIVO` (`normative_mapping.py:36`). Es la columna `re
 | FIRMA_INVALIDA | §164.312(c)(2); §164.312(e)(2)(i); §164.312(d) | Art. 17 lit. d; Art. 18 lit. b | CT-22 | [PENDIENTE: no mapeado] |
 | SINCRONIZACION_RECHAZADA | §164.312(d); §164.312(e)(1) | Art. 4 lit. h; Art. 17 lit. d | CT-25 | [PENDIENTE: no mapeado] |
 
-Sin referencia (la celda dice «Sin referencia normativa asociada»): `CONFIGURACION_ALERTAS`, `MODELADO`, `MODELADO_FALLIDO` y cualquier tipo no listado.
+Sin referencia (la celda dice «Sin referencia normativa asociada»): `ANOMALIA_DETECTADA`, `CONFIGURACION_ALERTAS`, `MODELADO`, `MODELADO_FALLIDO` y cualquier tipo no listado.
 
 **ISO/IEC 27701.** Ningún archivo del repositorio (código ni `docs/`) menciona ISO/IEC 27701. Los módulos de captura citan ISO/IEC 27001 en sus cabeceras y la guía de lineamientos cita ISO/IEC 27001:2022. La columna queda como pendiente: completarla exige una decisión del equipo sobre qué controles de 27701 (p. ej. registros de tratamiento de PII) corresponden a cada evento.
 
@@ -172,11 +180,11 @@ La columna **Origen** distingue los requerimientos que vienen de una historia de
 | RF-11 | Hash SHA-256 por evento y verificación de integridad | HU-3.2 | Implementado |
 | RF-12 | Firma Ed25519 por evento y verificación en el servidor | HU-6.1 | Implementado |
 | RF-13 | Árbol de Merkle por lote horario, prueba de inclusión y ancla firmada | HU-6.2 | Implementado; el ancla es un archivo JSON en el servidor |
-| RF-14 | Detectar volumen anómalo, horario inusual y correlación entre usuarios | HU-6.3 | Implementado en el detector; **no se aplica a los eventos firmados** (sección 4) |
+| RF-14 | Detectar volumen anómalo, horario inusual y correlación entre usuarios | HU-6.3 | Implementado; desde el 21/11/2026 se aplica también a los eventos firmados y CRITICO (sección 4) |
 | RF-15 | Notificar por correo los eventos críticos sin bloquear el registro | HU-7.2 | Implementado (hilo aparte, reintentos) |
 | RF-16 | Consultar y filtrar eventos por usuario, fecha, acción, dataset y nivel | HU-4.1, HU-4.2 | Implementado |
-| RF-17 | Reporte exportable con referencia normativa por evento | HU-4.5, HU-7.3 | Implementado en CSV y, desde el 21/11/2026, en PDF |
-| RF-18 | Grafo de linaje por dataset o por evento | HU-7.1 | Implementado por (sesión, nombre de dataset); no enlaza el resultado de un `merge` con sus orígenes |
+| RF-17 | Reporte exportable con referencia normativa, sesión, origen y hash por evento | HU-4.5, HU-7.3 | Implementado en CSV y PDF (11 columnas desde el 21/11/2026) |
+| RF-18 | Grafo de linaje por dataset o por evento | HU-7.1 | Implementado; una unión (`merge`) conecta sus entradas con el resultado en un solo grafo (21/11/2026) |
 | RF-19 | Explicación en lenguaje natural de cada evento | HU-7.4 | Implementado (`event_explainer.py`) |
 | RF-20 | Registrar los accesos denegados por rol | Derivado (HU-6.5, hallazgo de seguridad) | Implementado (`ACCESO_DENEGADO`) |
 | RF-21 | Ligar a un usuario los eventos que se registraron antes de su login | Derivado de la inmutabilidad (HU-5.1) | Implementado (`ATRIBUCION_SESION`) |

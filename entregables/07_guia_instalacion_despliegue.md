@@ -16,7 +16,7 @@ Parte de `docs/guia_instalacion.md` (commit `b13459e`, 03/11/2026, HU-5.3) y `do
 | Ejemplo mínimo (sección 7) | Se ejecutó el script de la guía original en un HOME aislado | **No coincidía**: la guía mostraba 4 eventos NORMAL y una consulta a `audit_trail.db` en la carpeta actual. La salida real es de 8 eventos, todos CRITICO por usuario no identificado, y la base está en `~/.audit_tracer/` (el comando del Paso 4 original falla con `no such table: audit_log`). Corregido abajo con la salida real. |
 | Render (sección 5.1) | Es el despliegue que se usó en la validación externa del 20/11/2026 (`render.yaml`, plan gratuito) | Funciona; disco efímero (ver advertencias). |
 | Railway (sección 5.1) | No se verificó: el periodo de prueba de la cuenta terminó antes de la migración a Render. | [PENDIENTE: verificación en Railway] |
-| Linux con Nginx y systemd (sección 4) | No se ejecutó en esta revisión (el equipo de verificación es Windows) | [PENDIENTE: prueba en un servidor Linux]. Se corrigieron dos problemas visibles en el código (siembra y job de Merkle bajo Gunicorn). |
+| Linux con Nginx y systemd (sección 4) | **Probado el 21/11/2026** en WSL2 con Ubuntu 24.04 (Python 3.12.3, Nginx 1.24, Gunicorn 27, systemd real) siguiendo esta sección con un certificado autofirmado en lugar de Let's Encrypt: HTTP→HTTPS 301; login, dashboard y PDF por HTTPS; sesión válida entre los 2 workers (10/10 peticiones 200); la API responde 426 sin HTTPS y 401 sin token; `kill -9` del proceso maestro y systemd lo reinicia; el CLI de Merkle corre como `www-data`. | Funciona. La prueba destapó un fallo real: la librería interceptaba SIGTERM/SIGINT también dentro de Gunicorn y `systemctl restart` tardaba 30 s con `KeyboardInterrupt`; corregido (`session_tracker.py`): reinicio en 0,6 s. |
 
 # 1. Arquitectura
 
@@ -38,7 +38,7 @@ Python ≥ 3.10 (verificado con 3.12.6). SQLite viene con Python.
 | openpyxl | 3.1 | Leer y exportar Excel | `requirements.txt`; extra `excel` |
 | pyarrow | 14.0 | Exportar Parquet | `requirements.txt`; extra `parquet` |
 | pytest, nbclient, nbformat, ipykernel, pypdf | — | Pruebas | `requirements.txt`; extra `dev` |
-| APScheduler | — | Publicación horaria automática de raíces Merkle | **No está declarada.** Sin ella `start_scheduler()` no arranca y las anclas solo se publican a mano (sección 6.3). |
+| APScheduler | 3.10 (< 4) | Publicación horaria automática de raíces Merkle (solo lotes completos) | `requirements.txt`; extra `servidor` (agregada el 21/11/2026). Solo corre con `python app.py`; bajo Gunicorn se programa con cron (sección 6.3). |
 | gunicorn | — | Servidor WSGI en Linux | No está declarada; se instala aparte (sección 4) |
 
 # 3. Instalación local
@@ -79,7 +79,7 @@ Cambiar la contraseña de `admin@audit.com` antes de cualquier uso real: está p
 
 # 4. Servidor Linux con Nginx y systemd
 
-> No probado en esta revisión. Los ajustes respecto a la guía original se derivan del código.
+> Probado el 21/11/2026 en Ubuntu 24.04 (WSL2) con systemd. Con Nginx ≥ 1.25.1 `http2` pasa a ser la directiva `http2 on;` y `listen 443 ssl http2;` queda obsoleto (Ubuntu 24.04 trae 1.24, donde la forma de abajo es la válida).
 
 ```bash
 sudo mkdir -p /opt/audit-tracer && sudo chown $USER /opt/audit-tracer

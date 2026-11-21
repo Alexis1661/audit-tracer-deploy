@@ -81,8 +81,8 @@ Aplica a los entornos de análisis (Jupyter, Google Colab, scripts de Python), a
 
 1. **No sobrescribir el dataset fuente.** La exportación registra `sobrescritura = 1` y el listado de eventos lo marca.
 2. **Exportación masiva.** Toda exportación de más de 1 000 filas queda `CRITICO` y genera una notificación de severidad ALTA (`EXPORTACION_MASIVA`). Debe justificarse en la bitácora del proyecto.
-3. **Linaje.** El grafo se arma por sesión y nombre de dataset. Un `merge` inicia una cadena nueva con el nombre `merge(A,B)`: para auditar una cohorte unida hay que revisar los dos grafos.
-4. **Lo que no se registra.** Lecturas con `read_sql`, `read_parquet` o `read_json`, consultas con `loc`/`iloc`/`head`/`groupby`, filtros con máscara booleana y escrituras con `open()` no generan eventos. Para datos clínicos usar `pd.read_csv`/`pd.read_excel` y las exportaciones de pandas, o `audited_open()` para escribir fuera de pandas.
+3. **Linaje.** El grafo se arma por sesión y nombre de dataset. Un `merge` nombra el resultado `merge(A,B)` y, desde el 21/11/2026, el grafo conecta las dos entradas con el resultado: la cohorte unida se ve en un solo grafo (siempre que las entradas se hayan cargado en la misma sesión).
+4. **Lo que se registra y lo que no.** Se registran `read_csv`, `read_excel`, `read_sql*` (solo se guarda la tabla, nunca el texto SQL), `df[col]`, `df.loc`, `df.iloc`, `query`, las máscaras booleanas (subtipo `FILTRADO`), las transformaciones y las exportaciones de pandas. No generan eventos `read_parquet`, `read_json`, `head`, `groupby`, `describe`, `sample` ni las escrituras con `open()` (usar `audited_open()`). Tampoco se registra el entrenamiento de modelos (la HU-03 no está implementada).
 
 # 4. Credenciales, tokens y acceso
 
@@ -136,7 +136,7 @@ Cadena de integridad, en orden:
 
 **Merkle.** La raíz de cada lote se firma y se guarda en el disco del servidor. Para que sirva como evidencia ante terceros, la institución debe copiar periódicamente esos archivos a un medio que el administrador del servidor no controle (repositorio externo, almacenamiento WORM o un sello de tiempo RFC 3161): hoy ese paso es manual.
 
-**Anomalías.** El detector (volumen > 3 × el promedio del usuario, horario fuera de su rango habitual, 2 o más usuarios sobre el mismo dataset en 15 min) solo marca eventos que llegan sin firma y sin nivel CRITICO. Los eventos de la librería van firmados, así que la vigilancia diaria debe incluir el filtro **Solo Críticos** además de **Solo anomalías**.
+**Anomalías.** El servidor evalúa todo evento recibido (volumen > 3 × el promedio del usuario, horario fuera de su rango habitual, 2 o más usuarios sobre el mismo dataset en 15 min), con un historial anterior al evento que excluye su propia sesión. Como los eventos de la librería van firmados y no se pueden reclasificar sin invalidar la firma, el servidor deja el evento intacto y agrega un evento `ANOMALIA_DETECTADA` (nivel ANOMALIA) cuyo motivo nombra las reglas activadas; aparece en **Solo anomalías** y genera su propia notificación. La vigilancia diaria revisa **Solo Críticos** y **Solo anomalías**.
 
 # 6. Protocolo ante incidentes
 
@@ -200,8 +200,8 @@ Lo que ocurre hoy (validado con MIMIC-III el 21/11/2026, Anexo 13, caso 2): a la
 
 1. La librería registra la `CARGA` como CRITICO por estar fuera del horario laboral (8:00–18:00 hora Colombia) y la `EXPORTACION` como CRITICO, «Exportación masiva: 76074 filas (> 1000)».
 2. El servidor envía de inmediato un correo de severidad ALTA (`EXPORTACION_MASIVA`) a los destinatarios configurados, en un hilo aparte.
-3. El evento **no** queda como ANOMALIA ni con los motivos de horario y volumen, porque está firmado y es CRITICO.
-4. Respuesta del oficial: Eventos › Solo Críticos › abrir el evento › leer el explicador › Verificar Integridad Merkle › Linaje del dataset › revocar el token (administrador) › pedir el informe al investigador › exportar el reporte del período.
+3. El detector compara con el historial del usuario anterior a esa sesión y activa **volumen anómalo** y **horario inusual**. Como los eventos están firmados, el servidor no los modifica: agrega un evento `ANOMALIA_DETECTADA` (nivel ANOMALIA) con el motivo «Anomalía (reglas: volumen anómalo, horario inusual): …», que genera su propio correo (severidad MEDIA).
+4. Respuesta del oficial: Eventos › Solo anomalías y Solo Críticos › abrir la exportación › leer el explicador › Verificar Integridad Merkle › Linaje del dataset › revocar el token (administrador) › pedir el informe al investigador › exportar el reporte del período.
 
 ## Escenario 3 — Reporte para una auditoría de la Superintendencia de Industria y Comercio
 
@@ -214,8 +214,9 @@ Lo que ocurre hoy (validado con MIMIC-III el 21/11/2026, Anexo 13, caso 2): a la
 | TRANSFORMACION | HIPAA §164.312(b); §164.312(c)(1) \| Ley 1581 Art. 4 lit. d; Art. 17 lit. m \| Matriz CT-13 |
 | EXPORTACION | HIPAA §164.312(b); §164.308(a)(1)(ii)(D); §164.528 (apoyo) \| Ley 1581 Art. 4 lit. f; Art. 17 lit. m \| Matriz CT-14 |
 
-3. Descarga **Exportar Reporte (CSV)** o **Exportar Reporte (PDF)**; ambos tienen las mismas filas y columnas. Si los filtros no dan resultados, el archivo es válido y lo indica.
-4. Para la huella de cada evento crítico agrega **Exportar Críticos (CSV)**, que incluye `hash_integridad`, y documenta la verificación con «Verificar integridad» y las anclas Merkle del período.
+3. Descarga **Exportar Reporte (CSV)** o **Exportar Reporte (PDF)**; ambos tienen las mismas filas y las mismas 11 columnas, entre ellas la sesión, el origen (contexto de ejecución) y el hash SHA-256 de cada evento. Si los filtros no dan resultados, el archivo es válido y lo indica.
+4. Documenta la verificación con «Verificar integridad» y las anclas Merkle del período; **Exportar Críticos (CSV)** reúne solo los eventos críticos.
+5. El filtro de usuario acepta el ID o el correo de la cuenta.
 
 # 9. Alineación con ISO/IEC 27701:2019
 

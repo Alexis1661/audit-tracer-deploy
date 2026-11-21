@@ -73,7 +73,7 @@ Fuente: `docs/modelo_amenazas_stride.md` y `docs/modelo_amenazas_stride.csv` (co
 |---|---|---|---|---|
 {t_altos}
 
-**Estado de las pruebas del modelo (`tests/test_modelo_amenazas.py`, {FECHA}):** 165 pruebas: 153 aprobadas, 8 xfail (riesgos abiertos que siguen abiertos) y 4 fallidas. Las 4 fallas vienen del ayudante `_sesion()` de la prueba, que no crea el token de sesión que el dashboard exige desde el commit `3d7dc2b` (08/11/2026): la petición termina en `/login`. Por eso tres de los once riesgos abiertos (DSH-T1, DSH-I3 y el de fórmulas en CSV) y una mitigación verificada (escape de datos en listados) **no se están comprobando hoy**; no significa que se hayan mitigado. La «Ejecución registrada» de la sección 2 (03/11/2026: 154 superadas, 11 xfail) es anterior a ese cambio.
+**Estado de las pruebas del modelo (`tests/test_modelo_amenazas.py`, {FECHA}):** 163 pruebas: 154 aprobadas y 9 xfail (riesgos abiertos que siguen abiertos), 0 fallidas. El 21/11/2026 se corrigió el ayudante `_sesion()` de la prueba, que no creaba el token de sesión que el dashboard exige desde el commit `3d7dc2b` (08/11/2026). Con la sesión válida se comprobó que DSH-I1 (XSS en el detalle de evento) y DSH-I3 (token en la cookie) **ya estaban mitigados** desde ese commit: pasaron a IMPLEMENTADA y DSH-E3 a PARCIAL (queda CSRF, DSH-T1). Riesgos con riesgo residual alto: 7 (antes 9).
 
 **Nota sobre el hallazgo funcional de la sección 7** («`POST /admin/usuarios/nuevo` responde HTTP 500»): ya no aplica: desde el commit `cfbdddd` (09/11/2026) la función termina con `redirect(url_for('lista_usuarios'))` (`app.py:465-466`).
 

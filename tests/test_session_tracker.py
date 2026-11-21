@@ -231,3 +231,14 @@ class TestSessionTrackerLoginPorCodigo:
 
         assert resultado["success"] is True
         assert llamado == []
+
+
+def test_no_intercepta_senales_dentro_de_gunicorn(monkeypatch):
+    """Bajo Gunicorn, SIGTERM/SIGINT son del servidor (apagado ordenado)."""
+    import signal
+    import sys
+    from audit_tracer.session_tracker import SessionTracker
+    monkeypatch.setitem(sys.modules, "gunicorn", type(sys)("gunicorn"))
+    antes = (signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGINT))
+    SessionTracker.__new__(SessionTracker)._install_signal_handlers()
+    assert (signal.getsignal(signal.SIGTERM), signal.getsignal(signal.SIGINT)) == antes
