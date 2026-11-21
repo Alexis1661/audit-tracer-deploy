@@ -1406,6 +1406,49 @@ def exportar_reporte():
     )
 
 
+@app.route('/reportes/exportar/pdf')
+@login_required
+@modulo_required('consulta_reportes')  # HU-1.4 — mismo módulo que el CSV
+def exportar_reporte_pdf():
+    """
+    Resultado esperado 3 — Exporta en PDF el mismo reporte de auditoría que
+    /reportes/exportar: mismos filtros, mismas filas (generate_report) y
+    mismas columnas, incluida referencia_normativa (HU-7.3). Agrega título,
+    fecha de generación, quién lo generó y los filtros aplicados.
+    """
+    from audit_tracer.reporte_pdf import construir_reporte_pdf
+
+    filtros = {clave: request.args.get(clave) for clave in (
+        'reporte_usuario_id', 'reporte_tipo_accion', 'reporte_dataset_nombre',
+        'reporte_fecha_inicio', 'reporte_fecha_fin')}
+    fecha_inicio_query, fecha_fin_query = _limites_dia_colombia(
+        filtros['reporte_fecha_inicio'], filtros['reporte_fecha_fin'])
+
+    conn = get_db()
+    eventos = generate_report(
+        conn,
+        usuario_id=filtros['reporte_usuario_id'],
+        fecha_inicio=fecha_inicio_query,
+        fecha_fin=fecha_fin_query,
+        tipo_accion=filtros['reporte_tipo_accion'],
+        dataset_nombre=filtros['reporte_dataset_nombre'],
+    )
+    conn.close()
+
+    pdf = construir_reporte_pdf(
+        eventos,
+        filtros,
+        generado_por=f"{session.get('nombre', 'Usuario')} ({session.get('rol', 'N/A')})",
+        generado_en=formatear_fecha(datetime.utcnow().isoformat()),
+        formatear_timestamp=formatear_fecha,
+    )
+    return Response(
+        pdf,
+        mimetype='application/pdf',
+        headers={'Content-Disposition': 'attachment; filename=reporte_auditoria.pdf'}
+    )
+
+
 @app.route('/eventos')
 @login_required
 @modulo_required('consulta_reportes')  # HU-1.4

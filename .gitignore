@@ -8,3 +8,6 @@ validacion_usuarios/credenciales_evaluadores.csv
 
 validacion_usuarios/*.pdf
 validacion_usuarios/render_env_*.json
+
+# Validación MIMIC-III Demo: los CSV se descargan de PhysioNet (validacion/descargar_mimic.py)
+validacion/datos/
