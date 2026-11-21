@@ -1,0 +1,33 @@
+{
+  "periodo_completo": {
+    "reporte_fecha_inicio": "2026-11-16",
+    "reporte_fecha_fin": "2026-11-21"
+  },
+  "solo_ayer": {
+    "reporte_fecha_inicio": "2026-11-20",
+    "reporte_fecha_fin": "2026-11-20"
+  },
+  "usuario_en_periodo": {
+    "reporte_usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+    "reporte_fecha_inicio": "2026-11-16",
+    "reporte_fecha_fin": "2026-11-21"
+  },
+  "accesos_carga_usuario_periodo": {
+    "reporte_usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+    "reporte_tipo_accion": "CARGA",
+    "reporte_fecha_inicio": "2026-11-16",
+    "reporte_fecha_fin": "2026-11-21"
+  },
+  "exportaciones_usuario_periodo": {
+    "reporte_usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+    "reporte_tipo_accion": "EXPORTACION",
+    "reporte_fecha_inicio": "2026-11-16",
+    "reporte_fecha_fin": "2026-11-21"
+  },
+  "sin_resultados": {
+    "reporte_usuario_id": "010e0c8d-d2cd-407d-993e-56b30cb624a2",
+    "reporte_tipo_accion": "EXPORTACION",
+    "reporte_fecha_inicio": "2026-11-16",
+    "reporte_fecha_fin": "2026-11-21"
+  }
+}

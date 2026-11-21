@@ -1,0 +1,121 @@
+[AuditTracer] La auditoría está activa, pero no hay un usuario identificado: los eventos se registran como DESCONOCIDO (nivel CRITICO). Ejecuta audit_tracer.login(api_url=...) para identificarte.
+[AuditTracer] SEED_USUARIOS: 3 creadas, 0 ya existían, 0 omitidas.
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:51496
+ * Running on http://192.168.0.101:51496
+Press CTRL+C to quit
+127.0.0.1 - - [21/Nov/2026 13:23:29] "GET /login HTTP/1.1" 200 -
+C:\Users\alexd\AppData\Local\Temp\validacion_mimic_uupohp3n\servidor\app.py:414: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  session['login_time'] = datetime.utcnow().isoformat()
+127.0.0.1 - - [21/Nov/2026 13:23:30] "POST /login HTTP/1.1" 302 -
+C:\Users\alexd\AppData\Local\Temp\validacion_mimic_uupohp3n\servidor\app.py:681: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  'timestamp': datetime.utcnow().isoformat(),
+127.0.0.1 - - [21/Nov/2026 13:23:30] "POST /admin/alertas/destinatarios HTTP/1.1" 302 -
+127.0.0.1 - - [21/Nov/2026 13:23:30] "GET /admin/alertas HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:34] "POST /api/auth/dispositivo/iniciar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:35] "POST /login HTTP/1.1" 302 -
+127.0.0.1 - - [21/Nov/2026 13:23:35] "GET /auth/dispositivo?codigo=CTE5-HDNZ HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:35] "POST /auth/dispositivo HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:40] "GET /api/auth/dispositivo/estado?device_code=59s8HMP8C0q9vBGiIjiNvExuCLpG1PIj2ERztcQzCRk HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:40] "POST /api/usuarios/llave-publica HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:44] "POST /api/tokens/validar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:44] "POST /api/usuarios/llave-publica HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:44] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:44] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:44] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:45] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:46] "POST /login HTTP/1.1" 302 -
+127.0.0.1 - - [21/Nov/2026 13:23:46] "GET /api/linaje?dataset=LABEVENTS.csv HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:46] "GET /api/linaje?dataset=ADMISSIONS.csv HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:46] "GET /api/linaje?dataset=merge(ADMISSIONS.csv,PATIENTS.csv) HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:46] "GET /reportes/exportar?reporte_usuario_id=2ef29d4b-40d6-49a0-a9d2-84a0b4253f78&reporte_fecha_inicio=2026-11-21&reporte_fecha_fin=2026-11-21 HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:51] "POST /api/tokens/validar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:51] "POST /api/usuarios/llave-publica HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:51] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:51] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:52] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:52] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:52] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:52] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:52] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:55] "POST /api/tokens/validar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:55] "POST /api/usuarios/llave-publica HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:55] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:55] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:55] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:55] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:55] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:55] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:55] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:59] "POST /api/tokens/validar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:59] "POST /api/usuarios/llave-publica HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:59] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:59] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:59] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:59] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:59] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:23:59] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:23:59] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:02] "POST /api/tokens/validar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:03] "POST /api/usuarios/llave-publica HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:03] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:03] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:03] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:03] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:03] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:03] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:03] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:06] "POST /api/tokens/validar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:06] "POST /api/usuarios/llave-publica HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:06] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:07] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:07] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:07] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:07] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:07] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:07] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:10] "POST /api/tokens/validar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:10] "POST /api/usuarios/llave-publica HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:10] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:10] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:11] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:11] "POST /api/eventos/sincronizar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:11] "POST /api/eventos/sincronizar HTTP/1.1" 201 -
+127.0.0.1 - - [21/Nov/2026 13:24:18] "POST /login HTTP/1.1" 302 -
+127.0.0.1 - - [21/Nov/2026 13:24:18] "GET /reportes/exportar?reporte_fecha_inicio=2026-11-16&reporte_fecha_fin=2026-11-21 HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:18] "GET /reportes/exportar?reporte_fecha_inicio=2026-11-20&reporte_fecha_fin=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:18] "GET /reportes/exportar?reporte_usuario_id=2ef29d4b-40d6-49a0-a9d2-84a0b4253f78&reporte_fecha_inicio=2026-11-16&reporte_fecha_fin=2026-11-21 HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:18] "GET /reportes/exportar?reporte_usuario_id=2ef29d4b-40d6-49a0-a9d2-84a0b4253f78&reporte_tipo_accion=CARGA&reporte_fecha_inicio=2026-11-16&reporte_fecha_fin=2026-11-21 HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:18] "GET /reportes/exportar?reporte_usuario_id=2ef29d4b-40d6-49a0-a9d2-84a0b4253f78&reporte_tipo_accion=EXPORTACION&reporte_fecha_inicio=2026-11-16&reporte_fecha_fin=2026-11-21 HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:18] "GET /reportes/exportar?reporte_usuario_id=010e0c8d-d2cd-407d-993e-56b30cb624a2&reporte_tipo_accion=EXPORTACION&reporte_fecha_inicio=2026-11-16&reporte_fecha_fin=2026-11-21 HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:19] "POST /verificar-integridad HTTP/1.1" 302 -
+127.0.0.1 - - [21/Nov/2026 13:24:19] "GET /eventos HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:19] "POST /merkle/publicar HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:19] "GET /merkle/verificar/53 HTTP/1.1" 200 -
+127.0.0.1 - - [21/Nov/2026 13:24:19] "POST /merkle/verificar-ancla HTTP/1.1" 200 -

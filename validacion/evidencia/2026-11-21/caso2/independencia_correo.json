@@ -1,0 +1,9 @@
+{
+  "insercion_segundos": 0.008561700000427663,
+  "evento_persistido": true,
+  "event_id": 1,
+  "estado_notificacion": "FALLIDA",
+  "intentos": 3,
+  "error": "Fallo simulado del servidor de correo",
+  "intentos_servicio": 3
+}

@@ -1,0 +1,15 @@
+{
+  "notificacion_id": 2,
+  "event_id": 53,
+  "evento_uuid": "574f2f07-cc5a-409c-8bc8-eb89c17e4aff",
+  "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+  "tipo_accion": "EXPORTACION",
+  "tipos_criticos": "EXPORTACION_MASIVA",
+  "severidad": "ALTA",
+  "destinatarios": "admin@mimic.validacion,auditor@mimic.validacion,oficial.cumplimiento@mimic.validacion",
+  "estado": "ENVIADA",
+  "intentos": 1,
+  "error": null,
+  "creado_en": "2026-11-21T18:24:11.293765",
+  "enviado_en": "2026-11-21T18:24:11.311651"
+}

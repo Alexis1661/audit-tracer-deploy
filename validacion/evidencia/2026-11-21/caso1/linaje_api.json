@@ -1,0 +1,432 @@
+{
+  "LABEVENTS.csv": {
+    "advertencias": [],
+    "alcance": "dataset",
+    "cadenas": [
+      {
+        "dataset_nombre": "LABEVENTS.csv",
+        "enlazada": true,
+        "pasos": [
+          {
+            "descripcion": "LABEVENTS.csv — Carga del dataset",
+            "event_id": 24,
+            "paso": 1,
+            "ruta_destino": null,
+            "timestamp": "2026-11-21T15:00:00.641000",
+            "tipo_accion": "CARGA"
+          },
+          {
+            "descripcion": "Transformación — [ELIMINACION_FILAS] dropna(axis=0, how='any')",
+            "event_id": 26,
+            "paso": 2,
+            "ruta_destino": null,
+            "timestamp": "2026-11-21T15:00:00.657000",
+            "tipo_accion": "TRANSFORMACION"
+          },
+          {
+            "descripcion": "Exportación — 2174 filas",
+            "event_id": 27,
+            "paso": 3,
+            "ruta_destino": "C:\\Users\\alexd\\AppData\\Local\\Temp\\validacion_mimic_uupohp3n\\salidas_caso1\\anexo_creatinina.csv",
+            "timestamp": "2026-11-21T15:00:00.688000",
+            "tipo_accion": "EXPORTACION"
+          }
+        ],
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      }
+    ],
+    "dataset_nombre": "LABEVENTS.csv",
+    "edges": [
+      {
+        "id": "ev-24->ev-26",
+        "source": "ev-24",
+        "target": "ev-26",
+        "tipo": "secuencia"
+      },
+      {
+        "id": "ev-26->ev-27",
+        "source": "ev-26",
+        "target": "ev-27",
+        "tipo": "secuencia"
+      },
+      {
+        "id": "ev-27->archivo-1",
+        "source": "ev-27",
+        "target": "archivo-1",
+        "tipo": "exportado_a"
+      }
+    ],
+    "event_id": null,
+    "nodes": [
+      {
+        "dataset_nombre": "LABEVENTS.csv",
+        "detalle_url": "/eventos/24",
+        "event_id": 24,
+        "id": "ev-24",
+        "label": "LABEVENTS.csv",
+        "nivel_alerta": "NORMAL",
+        "paso": 1,
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "seleccionado": false,
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "sublabel": "Carga del dataset",
+        "timestamp": "2026-11-21T15:00:00.641000",
+        "tipo": "dataset",
+        "tipo_accion": "CARGA",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      },
+      {
+        "dataset_nombre": "LABEVENTS.csv",
+        "detalle_url": "/eventos/26",
+        "event_id": 26,
+        "id": "ev-26",
+        "label": "Transformación",
+        "nivel_alerta": "NORMAL",
+        "paso": 2,
+        "position": {
+          "x": 220,
+          "y": 0
+        },
+        "seleccionado": false,
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "sublabel": "[ELIMINACION_FILAS] dropna(axis=0, how='any')",
+        "timestamp": "2026-11-21T15:00:00.657000",
+        "tipo": "transformacion",
+        "tipo_accion": "TRANSFORMACION",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      },
+      {
+        "dataset_nombre": "LABEVENTS.csv",
+        "detalle_url": "/eventos/27",
+        "event_id": 27,
+        "id": "ev-27",
+        "label": "Exportación",
+        "nivel_alerta": "CRITICO",
+        "paso": 3,
+        "position": {
+          "x": 440,
+          "y": 0
+        },
+        "seleccionado": false,
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "sublabel": "2174 filas",
+        "timestamp": "2026-11-21T15:00:00.688000",
+        "tipo": "exportacion",
+        "tipo_accion": "EXPORTACION",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      },
+      {
+        "detalle_url": "/eventos/27",
+        "event_id": 27,
+        "id": "archivo-1",
+        "label": "anexo_creatinina.csv",
+        "nivel_alerta": "CRITICO",
+        "paso": 4,
+        "position": {
+          "x": 660,
+          "y": 0
+        },
+        "ruta_destino": "C:\\Users\\alexd\\AppData\\Local\\Temp\\validacion_mimic_uupohp3n\\salidas_caso1\\anexo_creatinina.csv",
+        "seleccionado": false,
+        "sublabel": "C:\\Users\\alexd\\AppData\\Local\\Temp\\validacion_mimic_uupohp3n\\salidas_caso1\\anexo_creatinina.csv",
+        "timestamp": "2026-11-21T15:00:00.688000",
+        "tipo": "archivo",
+        "tipo_accion": "EXPORTACION"
+      }
+    ]
+  },
+  "ADMISSIONS.csv": {
+    "advertencias": [],
+    "alcance": "dataset",
+    "cadenas": [
+      {
+        "dataset_nombre": "ADMISSIONS.csv",
+        "enlazada": true,
+        "pasos": [
+          {
+            "descripcion": "ADMISSIONS.csv — Carga del dataset",
+            "event_id": 16,
+            "paso": 1,
+            "ruta_destino": null,
+            "timestamp": "2026-11-21T15:00:00.297000",
+            "tipo_accion": "CARGA"
+          },
+          {
+            "descripcion": "Transformación — [IMPUTACION] fillna()",
+            "event_id": 18,
+            "paso": 2,
+            "ruta_destino": null,
+            "timestamp": "2026-11-21T15:00:00.329000",
+            "tipo_accion": "TRANSFORMACION"
+          },
+          {
+            "descripcion": "Transformación — [MERGE] merge(ADMISSIONS.csv ⟕ PATIENTS.csv, how='left', on=['subject_id'])",
+            "event_id": 19,
+            "paso": 3,
+            "ruta_destino": null,
+            "timestamp": "2026-11-21T15:00:00.344000",
+            "tipo_accion": "TRANSFORMACION"
+          }
+        ],
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      }
+    ],
+    "dataset_nombre": "ADMISSIONS.csv",
+    "edges": [
+      {
+        "id": "ev-16->ev-18",
+        "source": "ev-16",
+        "target": "ev-18",
+        "tipo": "secuencia"
+      },
+      {
+        "id": "ev-18->ev-19",
+        "source": "ev-18",
+        "target": "ev-19",
+        "tipo": "secuencia"
+      }
+    ],
+    "event_id": null,
+    "nodes": [
+      {
+        "dataset_nombre": "ADMISSIONS.csv",
+        "detalle_url": "/eventos/16",
+        "event_id": 16,
+        "id": "ev-16",
+        "label": "ADMISSIONS.csv",
+        "nivel_alerta": "NORMAL",
+        "paso": 1,
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "seleccionado": false,
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "sublabel": "Carga del dataset",
+        "timestamp": "2026-11-21T15:00:00.297000",
+        "tipo": "dataset",
+        "tipo_accion": "CARGA",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      },
+      {
+        "dataset_nombre": "ADMISSIONS.csv",
+        "detalle_url": "/eventos/18",
+        "event_id": 18,
+        "id": "ev-18",
+        "label": "Transformación",
+        "nivel_alerta": "NORMAL",
+        "paso": 2,
+        "position": {
+          "x": 220,
+          "y": 0
+        },
+        "seleccionado": false,
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "sublabel": "[IMPUTACION] fillna()",
+        "timestamp": "2026-11-21T15:00:00.329000",
+        "tipo": "transformacion",
+        "tipo_accion": "TRANSFORMACION",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      },
+      {
+        "dataset_nombre": "ADMISSIONS.csv",
+        "detalle_url": "/eventos/19",
+        "event_id": 19,
+        "id": "ev-19",
+        "label": "Transformación",
+        "nivel_alerta": "NORMAL",
+        "paso": 3,
+        "position": {
+          "x": 440,
+          "y": 0
+        },
+        "seleccionado": false,
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "sublabel": "[MERGE] merge(ADMISSIONS.csv ⟕ PATIENTS.csv, how='left', on=['subject_id'])",
+        "timestamp": "2026-11-21T15:00:00.344000",
+        "tipo": "transformacion",
+        "tipo_accion": "TRANSFORMACION",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      }
+    ]
+  },
+  "merge(ADMISSIONS.csv,PATIENTS.csv)": {
+    "advertencias": [],
+    "alcance": "dataset",
+    "cadenas": [
+      {
+        "dataset_nombre": "merge(ADMISSIONS.csv,PATIENTS.csv)",
+        "enlazada": true,
+        "pasos": [
+          {
+            "descripcion": "Transformación — [ELIMINACION_COLS] drop(columns=['row_id', 'dod_ssn'])",
+            "event_id": 20,
+            "paso": 1,
+            "ruta_destino": null,
+            "timestamp": "2026-11-21T15:00:00.344000",
+            "tipo_accion": "TRANSFORMACION"
+          },
+          {
+            "descripcion": "Transformación — [ELIMINACION_FILAS] dropna(axis=0, how='any')",
+            "event_id": 21,
+            "paso": 2,
+            "ruta_destino": null,
+            "timestamp": "2026-11-21T15:00:00.360000",
+            "tipo_accion": "TRANSFORMACION"
+          },
+          {
+            "descripcion": "Transformación — [RENOMBRE] rename(columns={'hospital_expire_flag': 'fallecio_en_hospital', 'gender': 'sexo'})",
+            "event_id": 22,
+            "paso": 3,
+            "ruta_destino": null,
+            "timestamp": "2026-11-21T15:00:00.360000",
+            "tipo_accion": "TRANSFORMACION"
+          },
+          {
+            "descripcion": "Exportación — 129 filas",
+            "event_id": 23,
+            "paso": 4,
+            "ruta_destino": "C:\\Users\\alexd\\AppData\\Local\\Temp\\validacion_mimic_uupohp3n\\salidas_caso1\\reporte_clinico_cohorte.csv",
+            "timestamp": "2026-11-21T15:00:00.375000",
+            "tipo_accion": "EXPORTACION"
+          }
+        ],
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      }
+    ],
+    "dataset_nombre": "merge(ADMISSIONS.csv,PATIENTS.csv)",
+    "edges": [
+      {
+        "id": "ev-20->ev-21",
+        "source": "ev-20",
+        "target": "ev-21",
+        "tipo": "secuencia"
+      },
+      {
+        "id": "ev-21->ev-22",
+        "source": "ev-21",
+        "target": "ev-22",
+        "tipo": "secuencia"
+      },
+      {
+        "id": "ev-22->ev-23",
+        "source": "ev-22",
+        "target": "ev-23",
+        "tipo": "secuencia"
+      },
+      {
+        "id": "ev-23->archivo-1",
+        "source": "ev-23",
+        "target": "archivo-1",
+        "tipo": "exportado_a"
+      }
+    ],
+    "event_id": null,
+    "nodes": [
+      {
+        "dataset_nombre": "merge(ADMISSIONS.csv,PATIENTS.csv)",
+        "detalle_url": "/eventos/20",
+        "event_id": 20,
+        "id": "ev-20",
+        "label": "Transformación",
+        "nivel_alerta": "NORMAL",
+        "paso": 1,
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "seleccionado": false,
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "sublabel": "[ELIMINACION_COLS] drop(columns=['row_id', 'dod_ssn'])",
+        "timestamp": "2026-11-21T15:00:00.344000",
+        "tipo": "transformacion",
+        "tipo_accion": "TRANSFORMACION",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      },
+      {
+        "dataset_nombre": "merge(ADMISSIONS.csv,PATIENTS.csv)",
+        "detalle_url": "/eventos/21",
+        "event_id": 21,
+        "id": "ev-21",
+        "label": "Transformación",
+        "nivel_alerta": "NORMAL",
+        "paso": 2,
+        "position": {
+          "x": 220,
+          "y": 0
+        },
+        "seleccionado": false,
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "sublabel": "[ELIMINACION_FILAS] dropna(axis=0, how='any')",
+        "timestamp": "2026-11-21T15:00:00.360000",
+        "tipo": "transformacion",
+        "tipo_accion": "TRANSFORMACION",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      },
+      {
+        "dataset_nombre": "merge(ADMISSIONS.csv,PATIENTS.csv)",
+        "detalle_url": "/eventos/22",
+        "event_id": 22,
+        "id": "ev-22",
+        "label": "Transformación",
+        "nivel_alerta": "NORMAL",
+        "paso": 3,
+        "position": {
+          "x": 440,
+          "y": 0
+        },
+        "seleccionado": false,
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "sublabel": "[RENOMBRE] rename(columns={'hospital_expire_flag': 'fallecio_en_hospital', 'gender': 'sexo'})",
+        "timestamp": "2026-11-21T15:00:00.360000",
+        "tipo": "transformacion",
+        "tipo_accion": "TRANSFORMACION",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      },
+      {
+        "dataset_nombre": "merge(ADMISSIONS.csv,PATIENTS.csv)",
+        "detalle_url": "/eventos/23",
+        "event_id": 23,
+        "id": "ev-23",
+        "label": "Exportación",
+        "nivel_alerta": "NORMAL",
+        "paso": 4,
+        "position": {
+          "x": 660,
+          "y": 0
+        },
+        "seleccionado": false,
+        "sesion_id": "2ed6163e-069e-4ee2-8d7d-8c25abc4bc70",
+        "sublabel": "129 filas",
+        "timestamp": "2026-11-21T15:00:00.375000",
+        "tipo": "exportacion",
+        "tipo_accion": "EXPORTACION",
+        "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78"
+      },
+      {
+        "detalle_url": "/eventos/23",
+        "event_id": 23,
+        "id": "archivo-1",
+        "label": "reporte_clinico_cohorte.csv",
+        "nivel_alerta": "NORMAL",
+        "paso": 5,
+        "position": {
+          "x": 880,
+          "y": 0
+        },
+        "ruta_destino": "C:\\Users\\alexd\\AppData\\Local\\Temp\\validacion_mimic_uupohp3n\\salidas_caso1\\reporte_clinico_cohorte.csv",
+        "seleccionado": false,
+        "sublabel": "C:\\Users\\alexd\\AppData\\Local\\Temp\\validacion_mimic_uupohp3n\\salidas_caso1\\reporte_clinico_cohorte.csv",
+        "timestamp": "2026-11-21T15:00:00.375000",
+        "tipo": "archivo",
+        "tipo_accion": "EXPORTACION"
+      }
+    ]
+  }
+}

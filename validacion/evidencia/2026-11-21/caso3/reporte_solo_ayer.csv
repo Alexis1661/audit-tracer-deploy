@@ -1,0 +1,5 @@
+event_id,usuario_id,timestamp,tipo_accion,dataset_nombre,columnas_afectadas,nivel_alerta,referencia_normativa
+47,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-20 10:55:00,INICIO_SESION,,,NORMAL,HIPAA §164.312(b) | Ley 1581 Art. 17 lit. m | Matriz CT-17
+48,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-20 10:55:00,CARGA,LABEVENTS.csv,"[""row_id"", ""subject_id"", ""hadm_id"", ""itemid"", ""charttime"", ""value"", ""valuenum"", ""valueuom"", ""flag""]",NORMAL,HIPAA §164.312(b) | Ley 1581 Art. 17 lit. m | Matriz CT-12
+49,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-20 10:55:00,EXPORTACION,LABEVENTS.csv,,NORMAL,HIPAA §164.312(b); §164.308(a)(1)(ii)(D); §164.528 (apoyo) | Ley 1581 Art. 4 lit. f; Art. 17 lit. m | Matriz CT-14
+50,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-20 10:55:00,CIERRE_SESION,,,NORMAL,HIPAA §164.312(b) | Ley 1581 Art. 17 lit. m | Matriz CT-17

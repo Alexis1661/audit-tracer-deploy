@@ -1,0 +1,67 @@
+{
+  "dataset": "MIMIC-III Clinical Database Demo v1.4 (PhysioNet, ODbL 1.0, doi:10.13026/C2HM2Q)",
+  "carpeta_datos": "C:\\Users\\alexd\\Universidad\\OctavoSemestre\\PDG\\PDG-Code\\validacion\\datos\\mimic-iii-clinical-database-demo-1.4",
+  "sha256_datos": {
+    "PATIENTS.csv": "f65803a46bcb88127574bfd0b70d78d4123783d05bb411e70d4c9629edd7b703",
+    "ADMISSIONS.csv": "487e0b87cc81472cc2eb9ee911b3493c39e15d32e8230cec559907060c009b1c",
+    "LABEVENTS.csv": "bca32a7242e739c0cbf1690270db83c10e38a27dbfa915eeb14f5a31a1e898fa"
+  },
+  "servidor": "http://127.0.0.1:51496",
+  "cuentas": [
+    {
+      "email": "admin@mimic.validacion",
+      "rol": "ADMIN"
+    },
+    {
+      "email": "auditor@mimic.validacion",
+      "rol": "AUDITOR"
+    },
+    {
+      "email": "cientifica@mimic.validacion",
+      "rol": "CIENTIFICO_DATOS"
+    }
+  ],
+  "usuario_id_cientifica": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+  "destinatarios_alertas": [
+    {
+      "destinatario_id": 1,
+      "tipo_destino": "ROL",
+      "valor": "AUDITOR",
+      "severidad_minima": "MEDIA",
+      "tipos_evento": null,
+      "activo": 1,
+      "creado_por": "SISTEMA",
+      "creado_en": "2026-11-21T18:23:30.364172",
+      "actualizado_en": null
+    },
+    {
+      "destinatario_id": 2,
+      "tipo_destino": "ROL",
+      "valor": "ADMIN",
+      "severidad_minima": "ALTA",
+      "tipos_evento": null,
+      "activo": 1,
+      "creado_por": "SISTEMA",
+      "creado_en": "2026-11-21T18:23:30.364172",
+      "actualizado_en": null
+    },
+    {
+      "destinatario_id": 3,
+      "tipo_destino": "EMAIL",
+      "valor": "oficial.cumplimiento@mimic.validacion",
+      "severidad_minima": "MEDIA",
+      "tipos_evento": null,
+      "activo": 1,
+      "creado_por": "d6e3a74b-a010-4feb-a4f3-ec8b1a5d4523",
+      "creado_en": "2026-11-21T18:23:30.367399",
+      "actualizado_en": null
+    }
+  ],
+  "login_dispositivo": {
+    "success": true,
+    "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+    "origen": "device_flow",
+    "codigo_mostrado": "CTE5-HDNZ",
+    "confirmado_en_dashboard": true
+  }
+}

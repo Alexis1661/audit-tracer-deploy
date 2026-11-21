@@ -1,0 +1,12 @@
+{
+  "anexo_creatinina.csv": {
+    "filas": 2174,
+    "cabecera": "row_id,subject_id,hadm_id,itemid,charttime,value,valuenum,valueuom,flag",
+    "sha256": "119e9147fd650c1416a6a8ed6ca8a082ed23d8d26e7ec09230441112aca9931b"
+  },
+  "reporte_clinico_cohorte.csv": {
+    "filas": 129,
+    "cabecera": "subject_id,hadm_id,admittime,dischtime,deathtime,admission_type,insurance,language,diagnosis,fallecio_en_hospital,sexo,dob,dod,dod_hosp,expire_flag",
+    "sha256": "ebdce59764d54c70de1a00a39cab0445326d2c147beb22d06d7fe691f7843262"
+  }
+}

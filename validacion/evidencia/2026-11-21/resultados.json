@@ -1,0 +1,251 @@
+{
+  "entorno": {
+    "fecha_ejecucion": "2026-11-21T13:23:22-05:00",
+    "python": "3.12.6",
+    "pandas": "3.0.2",
+    "sistema": "Windows 11 (10.0.26200)",
+    "maquina": "AMD64",
+    "procesador": "AMD64 Family 23 Model 160 Stepping 0, AuthenticAMD",
+    "cpus_logicas": "8",
+    "commit": "e4a656bdfc928a5b94d073d5a908ac92e31c0506",
+    "rama": "entregables-documento-final",
+    "fecha_commit": "2026-11-21 13:22:59 -0500",
+    "cambios_sin_commit": false,
+    "duracion_segundos": 56.8
+  },
+  "dataset": "MIMIC-III Clinical Database Demo v1.4 (PhysioNet, ODbL 1.0, doi:10.13026/C2HM2Q)",
+  "reloj": {
+    "fecha_de_los_eventos": "2026-11-21",
+    "caso1_hora_colombia": "10:00",
+    "caso2_linea_base": "5 días anteriores, entre 09:15 y 11:55 hora Colombia",
+    "caso2_exportacion_masiva_hora_colombia": "03:10",
+    "nota": "Hora del día fijada con validacion/reloj.py en el proceso del analista; la fecha es la de ejecución."
+  },
+  "verificaciones": [
+    {
+      "id": "1.1",
+      "caso": "Caso 1 — Flujo de análisis normal",
+      "afirmacion": "La carga, la transformación y la exportación se capturan automáticamente sin modificar el código del analista.",
+      "cumple": true,
+      "detalle": "El script solo contiene `import audit_tracer` (1 import, 0 llamadas a la librería). Eventos en el servidor: CARGA=3 (ADMISSIONS.csv, LABEVENTS.csv, PATIENTS.csv), CONSULTA=2, TRANSFORMACION=6 (ELIMINACION_COLS, ELIMINACION_FILAS, IMPUTACION, MERGE, RENOMBRE), EXPORTACION=2.",
+      "evidencia": [
+        "caso1/caso1_analisis_cohorte.py",
+        "caso1/eventos_servidor_central.json"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "1.2",
+      "caso": "Caso 1 — Flujo de análisis normal",
+      "afirmacion": "Cada evento queda con la identidad correcta del usuario y el identificador de sesión.",
+      "cumple": true,
+      "detalle": "15 eventos, todos con usuario_id=2ef29d4b-40d6-49a0-a9d2-84a0b4253f78 (cientifica@…, identificada con el token cacheado del login por dispositivo, sin escribir credenciales) y sesion_id=2ed6163e-069e-4ee2-8d7d-8c25abc4bc70 (de INICIO_SESION a CIERRE_SESION). Los mismos 15 evento_uuid están en la base local y en la central; 15 con firma Ed25519.",
+      "evidencia": [
+        "caso1/eventos_servidor_central.json",
+        "caso1/eventos_base_local.json"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "1.3",
+      "caso": "Caso 1 — Flujo de análisis normal",
+      "afirmacion": "La exportación activa el nivel de alerta según el número de registros exportados.",
+      "cumple": true,
+      "detalle": "reporte_clinico_cohorte.csv: 129 filas → NORMAL; anexo_creatinina.csv: 2174 filas → CRITICO (Exportación masiva: 2174 filas (> 1000)). Umbral del código: > 1000 filas = CRITICO.",
+      "evidencia": [
+        "caso1/eventos_servidor_central.json",
+        "caso1/salidas_del_analista.json"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "1.4a",
+      "caso": "Caso 1 — Flujo de análisis normal",
+      "afirmacion": "El grafo de linaje reconstruye la cadena de una tabla sin uniones (LABEVENTS: carga → limpieza → exportación).",
+      "cumple": true,
+      "detalle": "Cadena LABEVENTS.csv en la sesión: CARGA → TRANSFORMACION → EXPORTACION → archivo anexo_creatinina.csv.",
+      "evidencia": [
+        "caso1/linaje_api.json"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "1.4b",
+      "caso": "Caso 1 — Flujo de análisis normal",
+      "afirmacion": "El grafo de linaje reconstruye la cadena completa de la cohorte (carga de ADMISSIONS → merge con PATIENTS → limpieza → exportación del reporte).",
+      "cumple": false,
+      "detalle": "El grafo se arma por (sesión, dataset_nombre) y el merge le pone otro nombre al resultado, así que la cadena se parte en dos grafos sin arista entre ellos: ADMISSIONS.csv = CARGA → TRANSFORMACION → TRANSFORMACION; merge(ADMISSIONS.csv,PATIENTS.csv) = TRANSFORMACION → TRANSFORMACION → TRANSFORMACION → EXPORTACION → archivo reporte_clinico_cohorte.csv. La carga de PATIENTS.csv queda sola.",
+      "evidencia": [
+        "caso1/linaje_api.json"
+      ],
+      "estado": "NO CUMPLE"
+    },
+    {
+      "id": "1.5",
+      "caso": "Caso 1 — Flujo de análisis normal",
+      "afirmacion": "El reporte incluye las referencias normativas correctas por tipo de evento.",
+      "cumple": true,
+      "detalle": "15 filas de la sesión en el CSV del dashboard; todas coinciden con la tabla MAPEO_NORMATIVO (derivada de la matriz HU-6.6). Por tipo: INICIO_SESION = HIPAA §164.312(b) | Ley 1581 Art. 17 lit. m | Matriz CT-17 ; CARGA = HIPAA §164.312(b) | Ley 1581 Art. 17 lit. m | Matriz CT-12 ; CONSULTA = HIPAA §164.312(b) | Ley 1581 Art. 17 lit. m | Matriz CT-12 ; TRANSFORMACION = HIPAA §164.312(b); §164.312(c)(1) | Ley 1581 Art. 4 lit. d; Art. 17 lit. m | Matriz CT-13 ; EXPORTACION = HIPAA §164.312(b); §164.308(a)(1)(ii)(D); §164.528 (apoyo) | Ley 1581 Art. 4 lit. f; Art. 17 lit. m | Matriz CT-14 ; CIERRE_SESION = HIPAA §164.312(b) | Ley 1581 Art. 17 lit. m | Matriz CT-17",
+      "evidencia": [
+        "caso1/reporte_auditoria_sesion.csv"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "2.1",
+      "caso": "Caso 2 — Comportamiento anómalo",
+      "afirmacion": "Se activan las dos reglas de anomalía (horario inusual y volumen anómalo) sobre la exportación registrada en el servidor.",
+      "cumple": false,
+      "detalle": "Evento #53 en el servidor: nivel=CRITICO, motivo=\"Exportación masiva: 76074 filas (> 1000)\". El detector no se ejecutó: app.py solo lo aplica a eventos SIN firma y que no lleguen como CRITICO, y la librería firma todos los eventos y marca CRITICO toda exportación de más de 1000 filas.",
+      "evidencia": [
+        "caso2/eventos_servidor_central.json"
+      ],
+      "estado": "NO CUMPLE"
+    },
+    {
+      "id": "2.1b",
+      "caso": "Caso 2 — Comportamiento anómalo",
+      "afirmacion": "El motor de detección, aplicado al evento con el historial que habría al recibirlo, activa las dos reglas.",
+      "cumple": false,
+      "detalle": "Volumen: Volumen anómalo: 76,074 filas supera significativamente el promedio histórico del usuario (150.0 filas). Horario: no se activa (horario habitual calculado = (7, 19) UTC, que ya incluye el INICIO_SESION y la CARGA de las 03:10 de la misma sesión).",
+      "evidencia": [
+        "caso2/evaluacion_detector_anomalias.json",
+        "caso2/linea_base.json"
+      ],
+      "estado": "NO CUMPLE"
+    },
+    {
+      "id": "2.1c",
+      "caso": "Caso 2 — Comportamiento anómalo",
+      "afirmacion": "El motor de detección, con el historial previo a la sesión, activa las dos reglas.",
+      "cumple": true,
+      "detalle": "Volumen: Volumen anómalo: 76,074 filas supera significativamente el promedio histórico del usuario (150.0 filas). Horario: Horario inusual: acceso registrado a las 08:10 fuera del horario habitual del usuario (13:00 - 19:00) (horario habitual = (13, 19) UTC).",
+      "evidencia": [
+        "caso2/evaluacion_detector_anomalias.json",
+        "caso2/linea_base.json"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "2.2",
+      "caso": "Caso 2 — Comportamiento anómalo",
+      "afirmacion": "El evento queda con su nivel de alerta.",
+      "cumple": true,
+      "detalle": "nivel_alerta=CRITICO (asignado por la librería por superar 1000 filas; no es ANOMALIA porque el detector no corrió).",
+      "evidencia": [
+        "caso2/eventos_servidor_central.json"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "2.3",
+      "caso": "Caso 2 — Comportamiento anómalo",
+      "afirmacion": "Se genera la descripción del motivo de la alerta con las reglas de anomalía.",
+      "cumple": false,
+      "detalle": "motivo_alerta en el servidor: \"Exportación masiva: 76074 filas (> 1000)\". Solo describe la exportación masiva; las descripciones de las reglas de anomalía no llegan al registro (ver 2.1).",
+      "evidencia": [
+        "caso2/eventos_servidor_central.json"
+      ],
+      "estado": "NO CUMPLE"
+    },
+    {
+      "id": "2.4a",
+      "caso": "Caso 2 — Comportamiento anómalo",
+      "afirmacion": "Se envía automáticamente la notificación por correo al oficial de cumplimiento.",
+      "cumple": true,
+      "detalle": "alertas_notificaciones: estado=ENVIADA, tipos=EXPORTACION_MASIVA, severidad=ALTA, intentos=1, destinatarios del correo (To/Cc/Bcc)=audit-tracer@mimic.validacion, admin@mimic.validacion, auditor@mimic.validacion, oficial.cumplimiento@mimic.validacion; asunto «[Audit Tracer][ALTA] Exportación masiva — usuario 2ef29d4b-40d6-49a0-a9d2-84a0b4253f78». El correo lo dispara la regla EXPORTACION_MASIVA (> 1000 filas), no una anomalía. Entrega por la carpeta outbox (AUDIT_ALERTAS_OUTBOX), el modo sin SMTP del sistema; no se probó contra un servidor SMTP real.",
+      "evidencia": [
+        "caso2/correo_oficial_cumplimiento.eml",
+        "caso2/notificacion.json"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "2.4b",
+      "caso": "Caso 2 — Comportamiento anómalo",
+      "afirmacion": "El envío del correo es independiente del registro del evento (el evento se guarda aunque el correo falle o tarde).",
+      "cumple": true,
+      "detalle": "Con un servicio de correo que tarda 2 s y falla siempre, insert_event devolvió en 0.009 s, el evento quedó en audit_log y la notificación terminó en FALLIDA tras 3 intentos, en otro hilo.",
+      "evidencia": [
+        "caso2/independencia_correo.json"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "3.1",
+      "caso": "Caso 3 — Evidencia para auditoría regulatoria",
+      "afirmacion": "Funcionan los filtros por fecha, usuario y tipo de operación (solos y combinados).",
+      "cumple": true,
+      "detalle": "Período 2026-11-16–2026-11-21: 56 eventos; solo 2026-11-20: 4 (todos con fecha 2026-11-20); usuario: 45; usuario+CARGA: 9; usuario+EXPORTACION: 8. Cada conjunto es idéntico al que devuelve una consulta SQL directa a la base central con los mismos criterios.",
+      "evidencia": [
+        "caso3/reporte_periodo_completo.csv",
+        "caso3/reporte_solo_ayer.csv",
+        "caso3/reporte_usuario_en_periodo.csv",
+        "caso3/reporte_accesos_carga_usuario_periodo.csv",
+        "caso3/reporte_exportaciones_usuario_periodo.csv",
+        "caso3/reporte_sin_resultados.csv"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "3.2a",
+      "caso": "Caso 3 — Evidencia para auditoría regulatoria",
+      "afirmacion": "El reporte incluye quién, qué, cuándo, sobre qué dataset y la base normativa (HIPAA §164.312(b) y Ley 1581).",
+      "cumple": true,
+      "detalle": "Columnas del CSV: event_id, usuario_id, timestamp, tipo_accion, dataset_nombre, columnas_afectadas, nivel_alerta, referencia_normativa.",
+      "evidencia": [
+        "caso3/reporte_periodo_completo.csv"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "3.2b",
+      "caso": "Caso 3 — Evidencia para auditoría regulatoria",
+      "afirmacion": "El reporte incluye también la sesión, el origen de la solicitud y la huella de cada evento.",
+      "cumple": false,
+      "detalle": "El CSV no trae: sesion_id (sesión); contexto_ejecucion (origen de la solicitud (script, entorno, host)); hash_integridad (huella para verificar el registro); ruta_destino (destino de la exportación); filas_exportadas (volumen exportado). Esos datos existen en audit_log y se ven en el detalle de cada evento del dashboard, pero no salen en el reporte exportado.",
+      "evidencia": [
+        "caso3/reporte_periodo_completo.csv"
+      ],
+      "estado": "NO CUMPLE"
+    },
+    {
+      "id": "3.3",
+      "caso": "Caso 3 — Evidencia para auditoría regulatoria",
+      "afirmacion": "El CSV exportado es válido aunque los filtros no den resultados.",
+      "cumple": true,
+      "detalle": "Filtro sin coincidencias (auditor + EXPORTACION): respuesta con solo la cabecera (8 columnas) y 0 filas; csv.reader la lee sin errores.",
+      "evidencia": [
+        "caso3/reporte_sin_resultados.csv"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "3.4a",
+      "caso": "Caso 3 — Evidencia para auditoría regulatoria",
+      "afirmacion": "La integridad de un evento se puede verificar por su hash.",
+      "cumple": true,
+      "detalle": "Evento #53: SHA-256 recalculado sobre los 13 campos = almacenado (1dc8b6815cbffa7b…). Si se cambia filas_exportadas el hash cambia. El botón «Verificar integridad» del dashboard (POST /verificar-integridad) reporta todos los registros íntegros.",
+      "evidencia": [
+        "caso3/integridad_hash.json"
+      ],
+      "estado": "CUMPLE"
+    },
+    {
+      "id": "3.4b",
+      "caso": "Caso 3 — Evidencia para auditoría regulatoria",
+      "afirmacion": "Para lotes históricos, la integridad se verifica con la prueba de Merkle y el ancla publicada.",
+      "cumple": true,
+      "detalle": "Lote 2026-11-21T08 (hora UTC): publicado por el auditor (POST /merkle/publicar), prueba de inclusión del evento #53 con 2 pasos = válida; raíz publicada = raíz recalculada (135d0aa59496630c…), firma Ed25519 del ancla válida. El ancla es un archivo JSON en la carpeta del servidor (AUDIT_MERKLE_ANCHORS_DIR), no un servicio externo.",
+      "evidencia": [
+        "caso3/merkle.json",
+        "caso3/merkle_2026-11-21T08.json"
+      ],
+      "estado": "CUMPLE"
+    }
+  ],
+  "totales": {
+    "cumple": 14,
+    "no_cumple": 5
+  }
+}

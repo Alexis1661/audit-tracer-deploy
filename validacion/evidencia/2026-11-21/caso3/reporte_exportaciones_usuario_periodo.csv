@@ -1,0 +1,9 @@
+event_id,usuario_id,timestamp,tipo_accion,dataset_nombre,columnas_afectadas,nivel_alerta,referencia_normativa
+33,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-16 09:15:00,EXPORTACION,LABEVENTS.csv,,NORMAL,HIPAA §164.312(b); §164.308(a)(1)(ii)(D); §164.528 (apoyo) | Ley 1581 Art. 4 lit. f; Art. 17 lit. m | Matriz CT-14
+37,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-17 10:25:00,EXPORTACION,LABEVENTS.csv,,NORMAL,HIPAA §164.312(b); §164.308(a)(1)(ii)(D); §164.528 (apoyo) | Ley 1581 Art. 4 lit. f; Art. 17 lit. m | Matriz CT-14
+41,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-18 11:35:00,EXPORTACION,LABEVENTS.csv,,NORMAL,HIPAA §164.312(b); §164.308(a)(1)(ii)(D); §164.528 (apoyo) | Ley 1581 Art. 4 lit. f; Art. 17 lit. m | Matriz CT-14
+45,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-19 09:45:00,EXPORTACION,LABEVENTS.csv,,NORMAL,HIPAA §164.312(b); §164.308(a)(1)(ii)(D); §164.528 (apoyo) | Ley 1581 Art. 4 lit. f; Art. 17 lit. m | Matriz CT-14
+49,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-20 10:55:00,EXPORTACION,LABEVENTS.csv,,NORMAL,HIPAA §164.312(b); §164.308(a)(1)(ii)(D); §164.528 (apoyo) | Ley 1581 Art. 4 lit. f; Art. 17 lit. m | Matriz CT-14
+53,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-21 03:10:01,EXPORTACION,LABEVENTS.csv,,CRITICO,HIPAA §164.312(b); §164.308(a)(1)(ii)(D); §164.528 (apoyo) | Ley 1581 Art. 4 lit. f; Art. 17 lit. m | Matriz CT-14
+23,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-21 10:00:00,EXPORTACION,"merge(ADMISSIONS.csv,PATIENTS.csv)",,NORMAL,HIPAA §164.312(b); §164.308(a)(1)(ii)(D); §164.528 (apoyo) | Ley 1581 Art. 4 lit. f; Art. 17 lit. m | Matriz CT-14
+27,2ef29d4b-40d6-49a0-a9d2-84a0b4253f78,2026-11-21 10:00:00,EXPORTACION,LABEVENTS.csv,,CRITICO,HIPAA §164.312(b); §164.308(a)(1)(ii)(D); §164.528 (apoyo) | Ley 1581 Art. 4 lit. f; Art. 17 lit. m | Matriz CT-14

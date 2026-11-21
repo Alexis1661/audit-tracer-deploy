@@ -1,0 +1,80 @@
+Subject: [Audit Tracer][ALTA] =?utf-8?q?Exportaci=C3=B3n_masiva_=E2=80=94?=
+ usuario 2ef29d4b-40d6-49a0-a9d2-84a0b4253f78
+From: audit-tracer@mimic.validacion
+To: audit-tracer@mimic.validacion
+Bcc: admin@mimic.validacion, auditor@mimic.validacion,
+ oficial.cumplimiento@mimic.validacion
+Date: Sat, 21 Nov 2026 18:24:11 -0000
+Message-ID: <179528545130.18960.6334377374653883062@audit-tracer>
+X-Audit-Event-Id: 53
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="===============4230284541921779507=="
+
+--===============4230284541921779507==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Se detect=C3=B3 un evento cr=C3=ADtico de auditor=C3=ADa que requiere revisi=
+=C3=B3n.
+
+Severidad: ALTA
+
+Usuario: 2ef29d4b-40d6-49a0-a9d2-84a0b4253f78
+Tipo de acci=C3=B3n: EXPORTACION
+Dataset: LABEVENTS.csv
+Timestamp (UTC): 2026-11-21 08:10:01
+ID de evento: 53
+
+Motivo:
+  - Exportaci=C3=B3n masiva: 76,074 filas exportadas (umbral: 1,000)
+
+Ver detalle en el dashboard: http://127.0.0.1:51496/eventos/53
+
+=E2=80=94 Audit Tracer =C2=B7 notificaci=C3=B3n autom=C3=A1tica (HU-7.2). No =
+responda a este correo.
+
+--===============4230284541921779507==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<!doctype html>
+<html><body style=3D"font-family:Arial,Helvetica,sans-serif;color:#0F172A;bac=
+kground:#F8FAFC;padding:24px;">
+  <div style=3D"max-width:560px;margin:auto;background:#fff;border:1px solid =
+#E2E8F0;border-radius:12px;padding:24px;">
+    <div style=3D"display:inline-block;background:#C2410C;color:#fff;border-r=
+adius:999px;padding:4px 12px;font-size:12px;font-weight:700;">
+      Severidad ALTA
+    </div>
+    <h2 style=3D"margin:12px 0 4px;">Exportaci=C3=B3n masiva</h2>
+    <p style=3D"margin:0 0 16px;color:#475569;">Se detect=C3=B3 un evento cr=
+=C3=ADtico de auditor=C3=ADa que requiere revisi=C3=B3n.</p>
+    <table style=3D"border-collapse:collapse;width:100%;font-size:14px;"><tr>=
+<td style=3D"padding:6px 12px;color:#64748B;">Usuario</td><td style=3D"paddin=
+g:6px 12px;font-weight:600;">2ef29d4b-40d6-49a0-a9d2-84a0b4253f78</td></tr><t=
+r><td style=3D"padding:6px 12px;color:#64748B;">Tipo de acci=C3=B3n</td><td s=
+tyle=3D"padding:6px 12px;font-weight:600;">EXPORTACION</td></tr><tr><td style=
+=3D"padding:6px 12px;color:#64748B;">Dataset</td><td style=3D"padding:6px 12p=
+x;font-weight:600;">LABEVENTS.csv</td></tr><tr><td style=3D"padding:6px 12px;=
+color:#64748B;">Timestamp (UTC)</td><td style=3D"padding:6px 12px;font-weight=
+:600;">2026-11-21 08:10:01</td></tr><tr><td style=3D"padding:6px 12px;color:#=
+64748B;">ID de evento</td><td style=3D"padding:6px 12px;font-weight:600;">53<=
+/td></tr></table>
+    <p style=3D"margin:16px 0 4px;font-weight:700;">Motivo</p>
+    <ul style=3D"margin:0 0 20px;padding-left:20px;font-size:14px;"><li><stro=
+ng>Exportaci=C3=B3n masiva:</strong> 76,074 filas exportadas (umbral: 1,000)<=
+/li></ul>
+    <a href=3D"http://127.0.0.1:51496/eventos/53"
+       style=3D"display:inline-block;background:#0F172A;color:#fff;text-decor=
+ation:none;padding:10px 18px;border-radius:8px;font-weight:600;">
+      Ver detalle del evento
+    </a>
+    <p style=3D"margin-top:20px;font-size:12px;color:#94A3B8;">Audit Tracer =
+=C2=B7 notificaci=C3=B3n autom=C3=A1tica (HU-7.2). No responda a este correo.=
+</p>
+  </div>
+</body></html>
+
+--===============4230284541921779507==--

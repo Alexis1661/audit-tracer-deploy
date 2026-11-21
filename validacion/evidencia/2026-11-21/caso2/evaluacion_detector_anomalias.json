@@ -1,0 +1,71 @@
+{
+  "al_llegar_el_evento": {
+    "eventos_en_historial": 52,
+    "promedios_historicos_usuario": {
+      "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+      "dias_activos": 5,
+      "total_operaciones": 10,
+      "total_accesos": 5,
+      "total_transformaciones": 0,
+      "total_exportaciones": 5,
+      "promedio_accesos_diarios": 1.0,
+      "promedio_transformaciones_diarias": 0.0,
+      "promedio_exportaciones_diarias": 1.0,
+      "promedio_total_diario": 2.0,
+      "promedio_filas_exportadas": 150.0
+    },
+    "horario_habitual_utc": [
+      7,
+      19
+    ],
+    "regla_volumen": [
+      true,
+      "Volumen anómalo: 76,074 filas supera significativamente el promedio histórico del usuario (150.0 filas)"
+    ],
+    "regla_horario": [
+      false,
+      null
+    ],
+    "es_anomalo": true,
+    "motivos": [
+      "Volumen anómalo: 76,074 filas supera significativamente el promedio histórico del usuario (150.0 filas)"
+    ],
+    "nivel_que_asignaria": "CRITICO",
+    "motivo_que_asignaria": "Exportación masiva: 76074 filas (> 1000) | Volumen anómalo: 76,074 filas supera significativamente el promedio histórico del usuario (150.0 filas)"
+  },
+  "historial_previo_a_la_sesion": {
+    "eventos_en_historial": 50,
+    "promedios_historicos_usuario": {
+      "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+      "dias_activos": 5,
+      "total_operaciones": 10,
+      "total_accesos": 5,
+      "total_transformaciones": 0,
+      "total_exportaciones": 5,
+      "promedio_accesos_diarios": 1.0,
+      "promedio_transformaciones_diarias": 0.0,
+      "promedio_exportaciones_diarias": 1.0,
+      "promedio_total_diario": 2.0,
+      "promedio_filas_exportadas": 150.0
+    },
+    "horario_habitual_utc": [
+      13,
+      19
+    ],
+    "regla_volumen": [
+      true,
+      "Volumen anómalo: 76,074 filas supera significativamente el promedio histórico del usuario (150.0 filas)"
+    ],
+    "regla_horario": [
+      true,
+      "Horario inusual: acceso registrado a las 08:10 fuera del horario habitual del usuario (13:00 - 19:00)"
+    ],
+    "es_anomalo": true,
+    "motivos": [
+      "Volumen anómalo: 76,074 filas supera significativamente el promedio histórico del usuario (150.0 filas)",
+      "Horario inusual: acceso registrado a las 08:10 fuera del horario habitual del usuario (13:00 - 19:00)"
+    ],
+    "nivel_que_asignaria": "CRITICO",
+    "motivo_que_asignaria": "Exportación masiva: 76074 filas (> 1000) | Volumen anómalo: 76,074 filas supera significativamente el promedio histórico del usuario (150.0 filas) | Horario inusual: acceso registrado a las 08:10 fuera del horario habitual del usuario (13:00 - 19:00)"
+  }
+}

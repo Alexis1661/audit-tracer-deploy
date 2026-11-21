@@ -1,0 +1,52 @@
+{
+  "lote": "2026-11-21T08",
+  "publicacion": {
+    "anchors": [
+      {
+        "batch_hour": "2026-11-21T08",
+        "file_path": "C:\\Users\\alexd\\AppData\\Local\\Temp\\validacion_mimic_uupohp3n\\merkle_anchors\\merkle_2026-11-21T08.json",
+        "leaf_count": 4,
+        "published_at": "2026-11-21T18:24:19.127655+00:00",
+        "root": "135d0aa59496630c31c8cada700d12f4bffb6e1db2fac068ca8d913d8b3bafc9",
+        "signed": true
+      }
+    ],
+    "published": 1
+  },
+  "prueba_evento": {
+    "batch_hour": "2026-11-21T08",
+    "details": "Prueba de Merkle válida: el evento forma parte íntegra del lote.",
+    "event_id": 53,
+    "evento_uuid": "574f2f07-cc5a-409c-8bc8-eb89c17e4aff",
+    "integrity_ok": true,
+    "leaf_hash": "1dc8b6815cbffa7b5824639090ae01f9334ed79e6e35acc4b58b2948828289f8",
+    "merkle_root": "135d0aa59496630c31c8cada700d12f4bffb6e1db2fac068ca8d913d8b3bafc9",
+    "proof": [
+      {
+        "position": "right",
+        "sibling": "7c9b0c977ed44d1b87e2540a16f223feefbd89dc86d578a3985594a0d52e4c5a"
+      },
+      {
+        "position": "left",
+        "sibling": "3731207274ae2b1b68722096f37939ba2b8e0a15a2d7541f6fec0c376a6603a3"
+      }
+    ],
+    "proof_steps": 2,
+    "timestamp": "2026-11-21T08:10:01.015000"
+  },
+  "verificacion_ancla": {
+    "batch_hour": "2026-11-21T08",
+    "anchor_exists": true,
+    "published_root": "135d0aa59496630c31c8cada700d12f4bffb6e1db2fac068ca8d913d8b3bafc9",
+    "recalculated_root": "135d0aa59496630c31c8cada700d12f4bffb6e1db2fac068ca8d913d8b3bafc9",
+    "integrity_ok": true,
+    "leaf_count_match": true,
+    "published_leaf_count": 4,
+    "current_leaf_count": 4,
+    "signature_valid": true,
+    "published_at": "2026-11-21T18:24:19.127655+00:00",
+    "details": "✓ Integridad verificada para el lote 2026-11-21T08. Raíz publicada y recalculada coinciden (4 eventos)."
+  },
+  "pagina_verificar_ancla_http": 200,
+  "raiz_en_pagina": true
+}
