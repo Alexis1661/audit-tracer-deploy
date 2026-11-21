@@ -242,7 +242,10 @@ class ValidacionMIMIC:
         salida = self.base / "salidas_caso1"
         hora = self._utc(self.fecha, "10:00")
         ej = self._correr_script(script, str(salida), hora_utc=hora)
-        eventos = ej["eventos_central"]
+        # El servidor agrega eventos ANOMALIA_DETECTADA propios; no los generó el analista.
+        anomalias_caso1 = [e for e in ej["eventos_central"] if e["tipo_accion"] == "ANOMALIA_DETECTADA"]
+        eventos = [e for e in ej["eventos_central"] if e["tipo_accion"] != "ANOMALIA_DETECTADA"]
+        self._guardar("caso1/eventos_anomalia_detectada.json", anomalias_caso1)
         ev_json = self._guardar("caso1/eventos_servidor_central.json", eventos)
         ev_local = self._guardar("caso1/eventos_base_local.json", ej["eventos_local"])
         archivos = {}
@@ -398,31 +401,38 @@ class ValidacionMIMIC:
         llegada, previo = detector["al_llegar_el_evento"], detector["historial_previo_a_la_sesion"]
 
         motivo = exp["motivo_alerta"] or ""
-        reglas_en_servidor = ("Horario inusual" in motivo, "Volumen anómalo" in motivo)
+        anomalias = self.servidor.consultar(
+            "SELECT * FROM audit_log WHERE tipo_accion = 'ANOMALIA_DETECTADA' AND sesion_id = ? ORDER BY event_id",
+            (exp["sesion_id"],))
+        ev_anom = self._guardar("caso2/eventos_anomalia_detectada.json", anomalias)
+        con_las_dos = [a for a in anomalias if "Horario inusual" in a["motivo_alerta"]
+                       and "Volumen anómalo" in a["motivo_alerta"]]
+        anom = con_las_dos[0] if con_las_dos else (anomalias[0] if anomalias else {})
+        motivo_anom = anom.get("motivo_alerta") or ""
+        reglas_en_servidor = ("Horario inusual" in motivo_anom, "Volumen anómalo" in motivo_anom)
         self._v("2.1", C, "Se activan las dos reglas de anomalía (horario inusual y volumen anómalo) "
                 "sobre la exportación registrada en el servidor.", all(reglas_en_servidor),
-                f"Evento #{exp['event_id']} en el servidor: nivel={exp['nivel_alerta']}, motivo=\"{motivo}\". "
-                f"El detector no se ejecutó: app.py solo lo aplica a eventos SIN firma y que no lleguen como "
-                f"CRITICO, y la librería firma todos los eventos y marca CRITICO toda exportación de más de 1000 filas.",
-                [ev_json])
+                f"La sesión de las 03:10 tiene {len(anomalias)} evento(s) ANOMALIA_DETECTADA (una por conjunto de "
+                f"reglas y sesión). #{anom.get('event_id')}: «{motivo_anom}» — {anom.get('contexto_ejecucion')}.",
+                [ev_json, ev_anom])
         self._v("2.1b", C, "El motor de detección, aplicado al evento con el historial que habría al recibirlo, "
                 "activa las dos reglas.", llegada["regla_volumen"][0] and llegada["regla_horario"][0],
                 f"Volumen: {llegada['regla_volumen'][1] or 'no se activa'}. Horario: "
                 f"{llegada['regla_horario'][1] or 'no se activa'} (horario habitual calculado = "
-                f"{llegada['horario_habitual_utc']} UTC, que ya incluye el INICIO_SESION y la CARGA de las 03:10 "
-                f"de la misma sesión).", [ev_det, ev_base])
+                f"{llegada['horario_habitual_utc']} UTC; el historial excluye la sesión en curso).", [ev_det, ev_base])
         self._v("2.1c", C, "El motor de detección, con el historial previo a la sesión, activa las dos reglas.",
                 previo["regla_volumen"][0] and previo["regla_horario"][0],
                 f"Volumen: {previo['regla_volumen'][1] or 'no se activa'}. Horario: "
                 f"{previo['regla_horario'][1] or 'no se activa'} (horario habitual = "
                 f"{previo['horario_habitual_utc']} UTC).", [ev_det, ev_base])
-        self._v("2.2", C, "El evento queda con su nivel de alerta.", exp["nivel_alerta"] in ("CRITICO", "ANOMALIA"),
-                f"nivel_alerta={exp['nivel_alerta']} (asignado por la librería por superar 1000 filas; "
-                f"no es ANOMALIA porque el detector no corrió).", [ev_json])
+        self._v("2.2", C, "El evento queda con su nivel de alerta.",
+                exp["nivel_alerta"] == "CRITICO" and anom.get("nivel_alerta") == "ANOMALIA",
+                f"La exportación #{exp['event_id']} conserva el nivel de la librería (nivel_alerta={exp['nivel_alerta']}, "
+                f"motivo «{motivo}») porque está firmada y su nivel y motivo forman parte de la firma; el evento "
+                f"#{anom.get('event_id')} que la acompaña tiene nivel_alerta={anom.get('nivel_alerta')}.", [ev_json, ev_anom])
         self._v("2.3", C, "Se genera la descripción del motivo de la alerta con las reglas de anomalía.",
-                all(reglas_en_servidor),
-                f"motivo_alerta en el servidor: \"{motivo}\". Solo describe la exportación masiva; las "
-                f"descripciones de las reglas de anomalía no llegan al registro (ver 2.1).", [ev_json])
+                all(reglas_en_servidor) and motivo_anom.startswith("Anomalía (reglas: volumen anómalo, horario inusual)"),
+                f"motivo_alerta del evento ANOMALIA_DETECTADA: «{motivo_anom}».", [ev_anom])
 
         # 2.4 Correo al oficial de cumplimiento
         notif = esperar(lambda: self.servidor.consultar(

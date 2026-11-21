@@ -51,7 +51,9 @@ from audit_tracer.models.audit_log import (
     get_sync_queue_summary,    # HU-5.8
 )
 from audit_tracer.digital_signatures import verify_event_signature  # HU-6.1
-from audit_tracer.anomaly_detector import evaluar_evento_anomalias  # HU-6.3
+from audit_tracer.anomaly_detector import (  # HU-6.3
+    ACCIONES_AUDITABLES_VOLUMEN, TIPO_EVENTO_ANOMALIA, construir_evento_anomalia, evaluar_evento_anomalias,
+)
 from audit_tracer.merkle import (                                    # HU-6.2
     generate_proof_for_event,
     verify_merkle_proof,
@@ -139,6 +141,7 @@ TIPOS_ACCION = {
     'CONFIRMACION_LOGIN_DISPOSITIVO': 'Confirmación Login por Código',
     'SINCRONIZACION_RECHAZADA': 'Sincronización Rechazada',
     'FIRMA_INVALIDA': 'Firma Inválida',
+    'ANOMALIA_DETECTADA': 'Anomalía Detectada',
     'AUDITORIA_DESACTIVADA': 'Auditoría Desactivada',
     'CONFIGURACION_ALERTAS': 'Configuración de Alertas',
 }
@@ -997,6 +1000,17 @@ def _peticion_es_segura() -> bool:
     return host in ('localhost', '127.0.0.1')
 
 
+def _registrar_anomalia_de_evento_firmado(conn, registro, motivos) -> None:
+    """HU-6.3 — Agrega ANOMALIA_DETECTADA para un evento firmado (una por sesión y conjunto de reglas)."""
+    evento_anomalia = construir_evento_anomalia(registro, motivos, registro.get('event_id'))
+    existe = conn.execute(
+        "SELECT 1 FROM audit_log WHERE tipo_accion = ? AND sesion_id = ? AND usuario_id = ? AND motivo_fallo = ?",
+        (TIPO_EVENTO_ANOMALIA, evento_anomalia['sesion_id'], evento_anomalia['usuario_id'],
+         evento_anomalia['motivo_fallo'])).fetchone()
+    if not existe:
+        insert_event(conn, evento_anomalia)
+
+
 @app.route('/api/eventos/sincronizar', methods=['POST'])
 def api_sincronizar_evento():
     """
@@ -1122,18 +1136,37 @@ def api_sincronizar_evento():
                 ),
             }), 422
 
-    # HU-6.3: Evaluar reglas de anomalías si el evento no viene firmado ni como crítico
-    if not evento.get('firma_digital') and evento.get('nivel_alerta') != 'CRITICO':
+    # HU-6.3: el detector evalúa TODOS los eventos recibidos, firmados o no, y estén o
+    # no clasificados como CRITICO por la librería. El historial de referencia es el
+    # anterior al evento y no incluye su propia sesión.
+    #  - Sin firma: el servidor puede reclasificar el evento (nivel ANOMALIA, o conserva
+    #    CRITICO) y añade a motivo_alerta el nombre de cada regla activada.
+    #  - Con firma: nivel_alerta y motivo_alerta están firmados, así que el evento se
+    #    guarda tal como llegó (con el nivel y el motivo de la librería, p. ej. CRITICO
+    #    «Exportación masiva») y el servidor agrega un evento ANOMALIA_DETECTADA que lo
+    #    referencia. Solo se evalúan operaciones sobre datos.
+    motivos_anomalia = []
+    if not evento.get('firma_digital'):
         try:
             _, evento, _ = evaluar_evento_anomalias(conn, evento)
         except Exception:
             pass
+    elif evento.get('tipo_accion') in ACCIONES_AUDITABLES_VOLUMEN:
+        try:
+            _, _, motivos_anomalia = evaluar_evento_anomalias(conn, evento)
+        except Exception:
+            motivos_anomalia = []
 
     try:
         registro, creado = insert_event_if_new(conn, evento)
     except sqlite3.IntegrityError as exc:
         conn.close()
         return jsonify({'status': 'error', 'mensaje': f'Evento inválido: {exc}'}), 400
+    if creado and motivos_anomalia:
+        try:
+            _registrar_anomalia_de_evento_firmado(conn, registro, motivos_anomalia)
+        except Exception:
+            app.logger.exception('No se pudo registrar el evento ANOMALIA_DETECTADA.')
     conn.close()
 
     return jsonify({

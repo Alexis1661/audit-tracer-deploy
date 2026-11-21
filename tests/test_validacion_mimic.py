@@ -33,11 +33,6 @@ pytestmark = pytest.mark.skipif(
 NO_CUMPLE = {
     "1.4b": "lineage.py agrupa por (sesion_id, dataset_nombre) y el merge renombra el dataset: "
             "la cadena de la cohorte se parte en dos grafos sin arista",
-    "2.1": "app.py:1126 solo aplica el detector a eventos sin firma y no CRITICO; la librería firma "
-           "todo y marca CRITICO toda exportación > 1000 filas",
-    "2.1b": "el horario habitual se calcula con todos los eventos previos del usuario, incluidos "
-            "INICIO_SESION y CARGA de la misma sesión de las 03:10",
-    "2.3": "como el detector no corre, motivo_alerta solo dice 'Exportación masiva'",
     "3.2b": "REPORT_CSV_COLUMNS no incluye sesion_id, contexto_ejecucion, hash_integridad, "
             "ruta_destino ni filas_exportadas",
 }

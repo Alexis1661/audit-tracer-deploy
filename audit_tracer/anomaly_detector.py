@@ -51,7 +51,9 @@ def _parse_iso_timestamp(ts_str: Optional[str]) -> Optional[datetime]:
 def calcular_promedios_historicos(
     conn: sqlite3.Connection,
     usuario_id: Optional[str] = None,
-    excluir_fecha: Optional[str] = None
+    excluir_fecha: Optional[str] = None,
+    excluir_sesion: Optional[str] = None,
+    antes_de: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     CA1 / PDGTRAZDSA-153:
@@ -67,6 +69,9 @@ def calcular_promedios_historicos(
         conn: Conexión SQLite a la base de datos (central o local).
         usuario_id: ID del usuario a consultar, o None para calcular el de todos.
         excluir_fecha: Fecha 'YYYY-MM-DD' opcional para omitir del histórico base.
+        excluir_sesion: sesion_id cuyos eventos no cuentan como histórico (la sesión
+            en curso no puede formar parte de su propia línea base).
+        antes_de: solo cuentan los eventos con timestamp anterior a este valor ISO.
 
     Returns:
         Dict con los promedios y métricas históricas del usuario.
@@ -85,6 +90,14 @@ def calcular_promedios_historicos(
         where_clauses.append("substr(timestamp, 1, 10) != ?")
         params.append(excluir_fecha[:10])
 
+    if excluir_sesion:
+        where_clauses.append("sesion_id != ?")
+        params.append(excluir_sesion)
+
+    if antes_de:
+        where_clauses.append("timestamp < ?")
+        params.append(antes_de)
+
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else "WHERE 1=1"
 
     # 1. Conteo de días distintos en los que el usuario realizó operaciones
@@ -100,7 +113,9 @@ def calcular_promedios_historicos(
 
     # Si se excluyó fecha y no quedan días, volver a calcular sin excluir fecha
     if dias_raw == 0 and excluir_fecha:
-        return calcular_promedios_historicos(conn, usuario_id=usuario_id, excluir_fecha=None)
+        return calcular_promedios_historicos(
+            conn, usuario_id=usuario_id, excluir_fecha=None,
+            excluir_sesion=excluir_sesion, antes_de=antes_de)
 
     dias_activos = max(1, dias_raw)
 
@@ -213,7 +228,9 @@ def evaluar_regla_volumen(
     fecha_prefix = ts[:10] if ts else None
 
     # Obtener línea base excluyendo la fecha actual para no autoinflar el promedio
-    promedios = calcular_promedios_historicos(conn, usuario_id=usuario_id, excluir_fecha=fecha_prefix)
+    promedios = calcular_promedios_historicos(
+        conn, usuario_id=usuario_id, excluir_fecha=fecha_prefix,
+        excluir_sesion=evento.get('sesion_id'), antes_de=ts)
 
     # 1. Evaluación por volumen de filas exportadas
     filas = evento.get('filas_exportadas')
@@ -257,7 +274,9 @@ def obtener_horario_habitual(
     min_eventos: int = 5,
     hora_inicio_defecto: int = DEFAULT_HORA_INICIO_LABORAL,
     hora_fin_defecto: int = DEFAULT_HORA_FIN_LABORAL,
-    margen_tolerancia: int = 1
+    margen_tolerancia: int = 1,
+    excluir_sesion: Optional[str] = None,
+    antes_de: Optional[str] = None,
 ) -> Tuple[int, int]:
     """
     Calcula el rango de horas habituales [hora_inicio, hora_fin] del usuario
@@ -265,14 +284,17 @@ def obtener_horario_habitual(
     Si el usuario tiene menos de min_eventos históricos, retorna el horario
     laboral institucional por defecto [07:00, 19:00].
     """
+    filtros, params = ["usuario_id = ?"], [usuario_id]
+    if excluir_sesion:
+        filtros.append("sesion_id != ?")
+        params.append(excluir_sesion)
+    if antes_de:
+        filtros.append("timestamp < ?")
+        params.append(antes_de)
     cursor = conn.cursor()
     cursor.execute(
-        """
-        SELECT timestamp FROM audit_log
-        WHERE usuario_id = ?
-        ORDER BY timestamp ASC
-        """,
-        (usuario_id,)
+        f"SELECT timestamp FROM audit_log WHERE {' AND '.join(filtros)} ORDER BY timestamp ASC",
+        params
     )
     rows = cursor.fetchall()
     horas: List[int] = []
@@ -323,7 +345,9 @@ def evaluar_regla_horario(
         min_eventos=min_eventos_historicos,
         hora_inicio_defecto=hora_inicio_defecto,
         hora_fin_defecto=hora_fin_defecto,
-        margen_tolerancia=margen_tolerancia
+        margen_tolerancia=margen_tolerancia,
+        excluir_sesion=evento.get('sesion_id'),
+        antes_de=ts_str,
     )
 
     if hora_evento < hora_min or hora_evento > hora_max:
@@ -453,3 +477,53 @@ def evaluar_evento_anomalias(
             evento_resultado['motivo_alerta'] = nuevo_motivo
 
     return es_anomalo, evento_resultado, motivos
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Descripción de las reglas activadas y evento de anomalía (eventos firmados)
+# ─────────────────────────────────────────────────────────────────────────────
+
+TIPO_EVENTO_ANOMALIA = 'ANOMALIA_DETECTADA'
+
+_NOMBRES_REGLAS = (
+    ('Volumen anómalo', 'volumen anómalo'),
+    ('Horario inusual', 'horario inusual'),
+    ('Alerta de correlación', 'correlación entre usuarios'),
+)
+
+
+def nombres_reglas(motivos: List[str]) -> List[str]:
+    """Nombres legibles de las reglas que produjeron `motivos`, en orden fijo."""
+    return [nombre for prefijo, nombre in _NOMBRES_REGLAS
+            if any(m.startswith(prefijo) for m in motivos)]
+
+
+def describir_anomalia(motivos: List[str]) -> str:
+    """'Anomalía (reglas: volumen anómalo, horario inusual): <detalle de cada regla>'."""
+    return f"Anomalía (reglas: {', '.join(nombres_reglas(motivos))}): " + " | ".join(motivos)
+
+
+def construir_evento_anomalia(evento: Dict[str, Any], motivos: List[str], event_id_origen: Optional[int]) -> Dict[str, Any]:
+    """
+    Evento ANOMALIA_DETECTADA que acompaña a un evento firmado.
+
+    Un evento firmado no se puede reclasificar: nivel_alerta y motivo_alerta
+    forman parte del mensaje firmado y del hash, y el servidor no tiene la llave
+    privada del usuario. En lugar de alterarlo, se registra un evento propio del
+    servidor (sin firma) que lo referencia y lleva el nivel ANOMALIA y el motivo
+    con el nombre de cada regla activada.
+    """
+    return {
+        'usuario_id': evento.get('usuario_id'),
+        'sesion_id': evento.get('sesion_id'),
+        'timestamp': evento.get('timestamp'),
+        'tipo_accion': TIPO_EVENTO_ANOMALIA,
+        'dataset_nombre': evento.get('dataset_nombre'),
+        'contexto_ejecucion': (
+            f"Evento origen: {evento.get('tipo_accion')} #{event_id_origen} "
+            f"(evento_uuid={evento.get('evento_uuid')})"
+        ),
+        'motivo_fallo': 'reglas=' + ','.join(nombres_reglas(motivos)),
+        'nivel_alerta': 'ANOMALIA',
+        'motivo_alerta': describir_anomalia(motivos),
+    }
