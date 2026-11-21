@@ -1330,6 +1330,21 @@ def dashboard():
     )
 
 
+def _usuario_id_desde_filtro(conn, valor):
+    """
+    Los filtros de usuario aceptan el ID o el correo. Si el valor parece un correo se
+    traduce al usuario_id de esa cuenta (sin distinguir mayúsculas); si no existe,
+    se devuelve tal cual y el filtro no encuentra eventos.
+    """
+    valor = (valor or '').strip() or None
+    if valor and '@' in valor:
+        fila = conn.execute(
+            "SELECT usuario_id FROM usuarios WHERE lower(email) = lower(?)", (valor,)).fetchone()
+        if fila:
+            return fila[0]
+    return valor
+
+
 @app.route('/reportes')
 @login_required
 @modulo_required('consulta_reportes')  # HU-1.4
@@ -1369,7 +1384,7 @@ def reportes():
     conn = get_db()
     reporte_eventos = generate_report(
         conn,
-        usuario_id=reporte_usuario_id,
+        usuario_id=_usuario_id_desde_filtro(conn, reporte_usuario_id),
         fecha_inicio=reporte_fecha_inicio_query,
         fecha_fin=reporte_fecha_fin_query,
         tipo_accion=reporte_tipo_accion,
@@ -1423,7 +1438,7 @@ def exportar_reporte():
     buffer = io.StringIO()
     export_report_to_csv(
         conn, buffer,
-        usuario_id=usuario_id,
+        usuario_id=_usuario_id_desde_filtro(conn, usuario_id),
         fecha_inicio=fecha_inicio_query,
         fecha_fin=fecha_fin_query,
         tipo_accion=tipo_accion,
@@ -1460,7 +1475,7 @@ def exportar_reporte_pdf():
     conn = get_db()
     eventos = generate_report(
         conn,
-        usuario_id=filtros['reporte_usuario_id'],
+        usuario_id=_usuario_id_desde_filtro(conn, filtros['reporte_usuario_id']),
         fecha_inicio=fecha_inicio_query,
         fecha_fin=fecha_fin_query,
         tipo_accion=filtros['reporte_tipo_accion'],
@@ -1518,7 +1533,7 @@ def eventos():
     # Obtener eventos filtrados en orden cronológico descendente (HU-4.1 CA1-CA4)
     eventos_list = get_events(
         conn,
-        usuario_id=usuario_id,
+        usuario_id=_usuario_id_desde_filtro(conn, usuario_id),
         fecha_inicio=fecha_inicio_query,
         fecha_fin=fecha_fin_query,
         tipo_accion=tipo_accion,
@@ -1675,7 +1690,7 @@ def exportar_eventos_criticos():
     buffer = io.StringIO()
     export_critical_events_to_csv(
         conn, buffer,
-        usuario_id=usuario_id,
+        usuario_id=_usuario_id_desde_filtro(conn, usuario_id),
         tipo_accion=tipo_accion,
         formatear_timestamp=formatear_fecha,
     )
