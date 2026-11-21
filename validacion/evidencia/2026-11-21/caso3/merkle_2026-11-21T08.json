@@ -1,9 +1,9 @@
 {
   "schema_version": "1.0",
   "batch_hour": "2026-11-21T08",
-  "root": "135d0aa59496630c31c8cada700d12f4bffb6e1db2fac068ca8d913d8b3bafc9",
-  "leaf_count": 4,
-  "published_at": "2026-11-21T18:24:19.127655+00:00",
-  "signature": "wdxrnwOxkWJzfqWK1zesb3hlpATJ0P2NEbMOl3gNOhFpWnmqRv5NQ62LH8IifUBZwLaGX5lFAahp5GuXIciEDA",
-  "signer_public_key_pem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAQ02jAcfLOljC9IQ8Hr+HRcD6zD835OtC7WCsCFDlgRM=\n-----END PUBLIC KEY-----\n"
+  "root": "ac9a4570c3704a00c72dd28a8396ec9b056b92d16ac8992e42583c269c9aef12",
+  "leaf_count": 5,
+  "published_at": "2026-11-21T23:11:45.605215+00:00",
+  "signature": "mETno5iJDA3SU8hl4sxwcmEWPJjm4RUASx-bNSch3o-_YQrNg8SOvGWTnYxPLT0mpsSXCGg5wfWKavhRN0pxCg",
+  "signer_public_key_pem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAMm/dGGqeDO/yGbQbc2Fivj8A5Uqhp+M+o3pBfQIBIJA=\n-----END PUBLIC KEY-----\n"
 }

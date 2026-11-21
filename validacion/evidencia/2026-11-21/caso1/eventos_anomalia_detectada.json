@@ -1,0 +1,21 @@
+[
+  {
+    "event_id": 28,
+    "evento_uuid": "4d7666cc-fdcf-4616-9645-bcb3a58792b9",
+    "usuario_id": "bd5a7d4c-feaf-4df6-81e7-eed94f3635e5",
+    "sesion_id": "b9d403f4-2dc3-4b56-8ef3-171655e8a20a",
+    "timestamp": "2026-11-21T15:00:00.516000",
+    "tipo_accion": "ANOMALIA_DETECTADA",
+    "dataset_nombre": "LABEVENTS.csv",
+    "columnas_afectadas": null,
+    "ruta_destino": null,
+    "filas_exportadas": null,
+    "sobrescritura": null,
+    "contexto_ejecucion": "Evento origen: EXPORTACION #27 (evento_uuid=fce8fcbe-dbc7-4403-9ec0-b204642a9879)",
+    "motivo_fallo": "reglas=volumen anómalo",
+    "nivel_alerta": "ANOMALIA",
+    "motivo_alerta": "Anomalía (reglas: volumen anómalo): Volumen anómalo: exportación de 2,174 filas sin antecedente previo de este volumen para el usuario",
+    "hash_integridad": "18d5c725901be432a0d0c6659ae74afe3eda8b657eb7ac7c4f1c68ccb6fe5673",
+    "firma_digital": null
+  }
+]

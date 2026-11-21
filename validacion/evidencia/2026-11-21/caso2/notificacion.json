@@ -1,8 +1,8 @@
 {
-  "notificacion_id": 2,
-  "event_id": 53,
-  "evento_uuid": "574f2f07-cc5a-409c-8bc8-eb89c17e4aff",
-  "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+  "notificacion_id": 4,
+  "event_id": 55,
+  "evento_uuid": "7316f172-b961-40bf-9427-6497488f5ccc",
+  "usuario_id": "bd5a7d4c-feaf-4df6-81e7-eed94f3635e5",
   "tipo_accion": "EXPORTACION",
   "tipos_criticos": "EXPORTACION_MASIVA",
   "severidad": "ALTA",
@@ -10,6 +10,6 @@
   "estado": "ENVIADA",
   "intentos": 1,
   "error": null,
-  "creado_en": "2026-11-21T18:24:11.293765",
-  "enviado_en": "2026-11-21T18:24:11.311651"
+  "creado_en": "2026-11-21T23:11:37.919129",
+  "enviado_en": "2026-11-21T23:11:37.929443"
 }

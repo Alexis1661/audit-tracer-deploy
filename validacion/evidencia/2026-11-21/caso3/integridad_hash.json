@@ -1,9 +1,9 @@
 {
-  "event_id": 53,
-  "hash_almacenado": "1dc8b6815cbffa7b5824639090ae01f9334ed79e6e35acc4b58b2948828289f8",
-  "hash_recalculado": "1dc8b6815cbffa7b5824639090ae01f9334ed79e6e35acc4b58b2948828289f8",
+  "event_id": 55,
+  "hash_almacenado": "3130a6a0b7f1d73e59f5ab79a8809a5d4bbdda123f9efcedcf74ae7a033df285",
+  "hash_recalculado": "3130a6a0b7f1d73e59f5ab79a8809a5d4bbdda123f9efcedcf74ae7a033df285",
   "coincide": true,
-  "hash_si_se_altera_filas_exportadas": "dd7b414931da5b9069f0781c6fe9834e606212e4385501f77f611c02fc184e35",
+  "hash_si_se_altera_filas_exportadas": "83a4ed0e86a46b0120e37f46a6ffca90fa23160c9f29fe4e77d824e4a30b463c",
   "verificacion_dashboard_todos_integros": true,
   "campos_del_hash": [
     "usuario_id",

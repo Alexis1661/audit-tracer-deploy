@@ -6,7 +6,7 @@
     "ADMISSIONS.csv": "487e0b87cc81472cc2eb9ee911b3493c39e15d32e8230cec559907060c009b1c",
     "LABEVENTS.csv": "bca32a7242e739c0cbf1690270db83c10e38a27dbfa915eeb14f5a31a1e898fa"
   },
-  "servidor": "http://127.0.0.1:51496",
+  "servidor": "http://127.0.0.1:50296",
   "cuentas": [
     {
       "email": "admin@mimic.validacion",
@@ -21,7 +21,7 @@
       "rol": "CIENTIFICO_DATOS"
     }
   ],
-  "usuario_id_cientifica": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+  "usuario_id_cientifica": "bd5a7d4c-feaf-4df6-81e7-eed94f3635e5",
   "destinatarios_alertas": [
     {
       "destinatario_id": 1,
@@ -31,7 +31,7 @@
       "tipos_evento": null,
       "activo": 1,
       "creado_por": "SISTEMA",
-      "creado_en": "2026-11-21T18:23:30.364172",
+      "creado_en": "2026-11-21T23:11:02.896248",
       "actualizado_en": null
     },
     {
@@ -42,7 +42,7 @@
       "tipos_evento": null,
       "activo": 1,
       "creado_por": "SISTEMA",
-      "creado_en": "2026-11-21T18:23:30.364172",
+      "creado_en": "2026-11-21T23:11:02.896248",
       "actualizado_en": null
     },
     {
@@ -52,16 +52,16 @@
       "severidad_minima": "MEDIA",
       "tipos_evento": null,
       "activo": 1,
-      "creado_por": "d6e3a74b-a010-4feb-a4f3-ec8b1a5d4523",
-      "creado_en": "2026-11-21T18:23:30.367399",
+      "creado_por": "21103c23-4deb-47eb-b8ac-a3cb4b3bbb51",
+      "creado_en": "2026-11-21T23:11:02.902340",
       "actualizado_en": null
     }
   ],
   "login_dispositivo": {
     "success": true,
-    "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+    "usuario_id": "bd5a7d4c-feaf-4df6-81e7-eed94f3635e5",
     "origen": "device_flow",
-    "codigo_mostrado": "CTE5-HDNZ",
+    "codigo_mostrado": "BYVU-3JPM",
     "confirmado_en_dashboard": true
   }
 }

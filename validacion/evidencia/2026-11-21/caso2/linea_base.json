@@ -1,35 +1,35 @@
 [
   {
     "dia": "2026-11-16",
-    "sesion_id": "a425aff0-7bd3-4a8a-bf0b-3b415d6887b0",
-    "timestamp_utc": "2026-11-16T14:15:00.469000",
+    "sesion_id": "70b8afac-09b1-4ded-b2b8-cd18b3285373",
+    "timestamp_utc": "2026-11-16T14:15:00.375000",
     "filas_exportadas": 120,
     "nivel_alerta": "NORMAL"
   },
   {
     "dia": "2026-11-17",
-    "sesion_id": "570ec1a5-baad-42ba-a921-bc5aec06160e",
-    "timestamp_utc": "2026-11-17T15:25:00.469000",
+    "sesion_id": "f8c79fdb-c82f-488b-9ad3-e69f7de25c47",
+    "timestamp_utc": "2026-11-17T15:25:00.391000",
     "filas_exportadas": 150,
     "nivel_alerta": "NORMAL"
   },
   {
     "dia": "2026-11-18",
-    "sesion_id": "b59db1ff-43b6-46f7-b0c0-603284024c3c",
-    "timestamp_utc": "2026-11-18T16:35:00.453000",
+    "sesion_id": "e345af06-817a-46d9-9eca-8be5c9f063e3",
+    "timestamp_utc": "2026-11-18T16:35:00.375000",
     "filas_exportadas": 180,
     "nivel_alerta": "NORMAL"
   },
   {
     "dia": "2026-11-19",
-    "sesion_id": "8ac30bfd-9051-45db-95c8-51a6912051b5",
-    "timestamp_utc": "2026-11-19T14:45:00.453000",
+    "sesion_id": "1f1b5195-a289-4b78-ab52-085addb122b3",
+    "timestamp_utc": "2026-11-19T14:45:00.390000",
     "filas_exportadas": 140,
     "nivel_alerta": "NORMAL"
   },
   {
     "dia": "2026-11-20",
-    "sesion_id": "78aad257-f7cf-4810-890b-b75df1f353fb",
+    "sesion_id": "e6ee5a40-61fb-4107-9538-0deacde5ad96",
     "timestamp_utc": "2026-11-20T15:55:00.390000",
     "filas_exportadas": 160,
     "nivel_alerta": "NORMAL"

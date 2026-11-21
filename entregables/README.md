@@ -23,3 +23,5 @@ python entregables/fuentes/md_a_pdf.py
 ```
 
 Los textos marcados `[PENDIENTE: …]` son datos que no están en el repositorio.
+
+Actualización del mismo día (segunda ronda): se corrigieron los hallazgos de la primera (detector de anomalías, linaje con merge, columnas del reporte, ISO/IEC 27701 en la guía 04, APScheduler, captura de loc/iloc/FILTRADO/read_sql, filtro por correo, despliegue Linux probado). Los documentos 01, 03, 04, 05, 06 y 07 reflejan el estado del commit de la rama al 21/11/2026; el 03 trae las cifras finales (1 059 pruebas, 19/19 de MIMIC).

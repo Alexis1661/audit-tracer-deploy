@@ -1,0 +1,21 @@
+[
+  {
+    "event_id": 54,
+    "evento_uuid": "087f4a63-c06a-4c16-95c6-c05e56ee5f13",
+    "usuario_id": "bd5a7d4c-feaf-4df6-81e7-eed94f3635e5",
+    "sesion_id": "b7b05fe0-0041-49f0-8f87-4ea2049bbb15",
+    "timestamp": "2026-11-21T08:10:00.359000",
+    "tipo_accion": "ANOMALIA_DETECTADA",
+    "dataset_nombre": "LABEVENTS.csv",
+    "columnas_afectadas": null,
+    "ruta_destino": null,
+    "filas_exportadas": null,
+    "sobrescritura": null,
+    "contexto_ejecucion": "Evento origen: CARGA #53 (evento_uuid=a96d1b70-df97-4766-ba9f-5b9f6ab2db28)",
+    "motivo_fallo": "reglas=volumen anómalo,horario inusual",
+    "nivel_alerta": "ANOMALIA",
+    "motivo_alerta": "Anomalía (reglas: volumen anómalo, horario inusual): Volumen anómalo: 13 operaciones en el día supera significativamente el promedio diario histórico del usuario (2.0 ops/día) | Horario inusual: acceso registrado a las 08:10 fuera del horario habitual del usuario (13:00 - 17:00)",
+    "hash_integridad": "8595993bd39902d0a7dd876555eee10b7e6a7d6e2e7eeb11d5fd337092081269",
+    "firma_digital": null
+  }
+]
