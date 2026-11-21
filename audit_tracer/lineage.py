@@ -34,8 +34,9 @@ la consulta devuelva las filas.
 Normas: HIPAA §164.312(b) · Ley 1581/2012 · ISO/IEC 27001
 """
 
+import re
 import sqlite3
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 from .models.audit_log import get_event_by_id
 
@@ -84,12 +85,16 @@ def _fetch_eventos_linaje(
     dataset_nombre: str,
     sesion_id: Optional[str] = None,
 ) -> List[Dict]:
+    """Eventos de linaje del dataset y de los que se unen con él (merge)."""
+    conn.row_factory = sqlite3.Row
+    nombres = sorted(_datasets_conectados(conn, dataset_nombre)) if es_dataset_identificable(dataset_nombre)         else [dataset_nombre]
+    marcas = ", ".join("?" * len(nombres))
     placeholders = ", ".join("?" * len(TIPOS_LINAJE))
     query = (
-        f"SELECT * FROM audit_log WHERE dataset_nombre = ? "
+        f"SELECT * FROM audit_log WHERE dataset_nombre IN ({marcas}) "
         f"AND tipo_accion IN ({placeholders})"
     )
-    params: list = [dataset_nombre, *TIPOS_LINAJE]
+    params: list = [*nombres, *TIPOS_LINAJE]
     if sesion_id is not None:
         query += " AND sesion_id = ?"
         params.append(sesion_id)
@@ -98,6 +103,46 @@ def _fetch_eventos_linaje(
     rows = conn.execute(query, params).fetchall()
     # CA3: orden temporal explícito, independiente del orden de la consulta.
     return sorted((dict(r) for r in rows), key=_orden_temporal)
+
+
+# ── Uniones (merge) ───────────────────────────────────────────
+# df.merge() y pd.merge() registran sus eventos con el nombre del dataset de la
+# izquierda y bautizan el resultado «merge(izquierda,derecha)»: las operaciones
+# posteriores usan ese nombre. Para que la cohorte unida quede en un solo grafo,
+# el nombre del resultado se descompone en sus entradas y se conectan.
+
+def entradas_de_union(dataset_nombre: Optional[str]) -> Optional[tuple]:
+    """('izq', 'der') si el nombre es 'merge(izq,der)' (los operandos pueden ser otras uniones)."""
+    if not dataset_nombre or not dataset_nombre.startswith("merge(") or not dataset_nombre.endswith(")"):
+        return None
+    cuerpo, nivel = dataset_nombre[len("merge("):-1], 0
+    for i, c in enumerate(cuerpo):
+        if c == "(":
+            nivel += 1
+        elif c == ")":
+            nivel -= 1
+        elif c == "," and nivel == 0:
+            return cuerpo[:i], cuerpo[i + 1:]
+    return None
+
+
+def _datasets_conectados(conn: sqlite3.Connection, dataset_nombre: str) -> Set[str]:
+    """El dataset y todos los que se relacionan con él por uniones (entradas y resultados)."""
+    placeholders = ", ".join("?" * len(TIPOS_LINAJE))
+    nombres = [r[0] for r in conn.execute(
+        f"SELECT DISTINCT dataset_nombre FROM audit_log WHERE tipo_accion IN ({placeholders}) "
+        f"AND dataset_nombre LIKE 'merge(%'", TIPOS_LINAJE).fetchall()]
+    uniones = {n: entradas_de_union(n) for n in nombres}
+    uniones = {n: e for n, e in uniones.items() if e}
+    conectados, pendientes = {dataset_nombre}, [dataset_nombre]
+    while pendientes:
+        actual = pendientes.pop()
+        vecinos = set(uniones.get(actual, ()))                                  # entradas
+        vecinos |= {n for n, e in uniones.items() if actual in e}               # resultados
+        for v in vecinos - conectados:
+            conectados.add(v)
+            pendientes.append(v)
+    return conectados
 
 
 def list_lineage_datasets(conn: sqlite3.Connection) -> List[Dict]:
@@ -182,15 +227,27 @@ def _construir(eventos: List[Dict], seleccionado_id: Optional[int] = None) -> Di
     claves = sorted(grupos, key=lambda k: _orden_temporal(sorted(grupos[k], key=_orden_temporal)[0]))
 
     archivos: Dict[str, Dict] = {}
+    nodos_cadena: Dict[tuple, List[Dict]] = {}
+    pasos_cadena: Dict[tuple, List[Dict]] = {}
+    desplazamiento: Dict[tuple, int] = {}   # pasos que ocupan las entradas de una unión
     for fila, clave in enumerate(claves):
         pasos = sorted(grupos[clave], key=_orden_temporal)
         sesion_id, dataset_nombre = clave
         enlazable = es_dataset_identificable(dataset_nombre)
+        entradas = entradas_de_union(dataset_nombre)
+        desp = 0
+        if entradas:
+            desp = max((desplazamiento.get((sesion_id, e), 0) + len(grupos.get((sesion_id, e), ()))
+                        for e in entradas), default=0)
+        desplazamiento[clave] = desp
 
         previo = None
         for paso, ev in enumerate(pasos, start=1):
             nodo = _nodo_evento(ev, paso, fila, seleccionado_id)
+            nodo["position"]["x"] += desp * _ANCHO_PASO
             nodes.append(nodo)
+            nodos_cadena.setdefault(clave, []).append(nodo)
+            pasos_cadena.setdefault(clave, []).append(ev)
 
             if previo is not None and enlazable:
                 edges.append({
@@ -212,7 +269,7 @@ def _construir(eventos: List[Dict], seleccionado_id: Optional[int] = None) -> Di
                         "ruta_destino": ruta,
                         "paso": paso + 1,
                         "seleccionado": False,
-                        "position": {"x": paso * _ANCHO_PASO, "y": fila * _ALTO_FILA},
+                        "position": {"x": (paso + desp) * _ANCHO_PASO, "y": fila * _ALTO_FILA},
                     }
                     archivos[ruta] = archivo
                     nodes.append(archivo)
@@ -238,6 +295,7 @@ def _construir(eventos: List[Dict], seleccionado_id: Optional[int] = None) -> Di
             "dataset_nombre": dataset_nombre,
             "usuario_id": pasos[0]["usuario_id"],
             "enlazada": enlazable,
+            "entradas": list(entradas) if entradas else None,
             "pasos": [
                 {
                     "paso": i,
@@ -250,6 +308,35 @@ def _construir(eventos: List[Dict], seleccionado_id: Optional[int] = None) -> Di
                 for i, ev in enumerate(pasos, start=1)
             ],
         })
+
+    # Aristas de unión: las entradas de un merge → primer paso del resultado.
+    for (sesion_id, nombre), nodos in nodos_cadena.items():
+        entradas = entradas_de_union(nombre)
+        if not entradas:
+            continue
+        izq, der = entradas
+        destino = nodos[0]
+        for lado, entrada in (("izquierda", izq), ("derecha", der)):
+            clave_entrada = (sesion_id, entrada)
+            if clave_entrada not in nodos_cadena:
+                continue
+            candidatos = nodos_cadena[clave_entrada]
+            origen = candidatos[-1]
+            if lado == "izquierda":
+                # el evento MERGE de la izquierda que menciona a la derecha
+                for nodo, ev in zip(candidatos, pasos_cadena[clave_entrada]):
+                    descripcion = ev.get("motivo_fallo") or ""
+                    if descripcion.startswith("[MERGE]") and der in descripcion:
+                        origen = nodo
+            arista = {
+                "id": f"{origen['id']}=>{destino['id']}",
+                "source": origen["id"],
+                "target": destino["id"],
+                "tipo": "union",
+                "entrada": lado,
+            }
+            if all(e["id"] != arista["id"] for e in edges):
+                edges.append(arista)
 
     return {"nodes": nodes, "edges": edges, "cadenas": cadenas}
 

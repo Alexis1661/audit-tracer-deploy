@@ -349,3 +349,90 @@ class TestRutas:
         resp = client.get("/linaje")
         assert resp.status_code == 302
         assert "/login" in resp.headers["Location"]
+
+
+# ──────────────────────────────────────────────────────────────
+# Uniones (merge): la cohorte queda en un solo grafo
+# ──────────────────────────────────────────────────────────────
+
+def _sembrar_cohorte(conn, sesion_id="s-cohorte"):
+    """ADMISSIONS (carga, fillna, merge) + PATIENTS (carga) → merge(A,P) (drop, exportación)."""
+    dia = "2026-11-21"
+    ca = _ev(conn, sesion_id=sesion_id, tipo_accion="CARGA", dataset_nombre="ADMISSIONS.csv", timestamp=f"{dia}T10:00:00")
+    cp = _ev(conn, sesion_id=sesion_id, tipo_accion="CARGA", dataset_nombre="PATIENTS.csv", timestamp=f"{dia}T10:00:01")
+    fa = _ev(conn, sesion_id=sesion_id, tipo_accion="TRANSFORMACION", dataset_nombre="ADMISSIONS.csv",
+             motivo_fallo="[IMPUTACION] fillna()", timestamp=f"{dia}T10:01:00")
+    mg = _ev(conn, sesion_id=sesion_id, tipo_accion="TRANSFORMACION", dataset_nombre="ADMISSIONS.csv",
+             motivo_fallo="[MERGE] merge(ADMISSIONS.csv ⟕ PATIENTS.csv, how='left', on=['subject_id'])",
+             timestamp=f"{dia}T10:02:00")
+    dr = _ev(conn, sesion_id=sesion_id, tipo_accion="TRANSFORMACION", dataset_nombre="merge(ADMISSIONS.csv,PATIENTS.csv)",
+             motivo_fallo="[ELIMINACION_COLS] drop(columns=['row_id'])", timestamp=f"{dia}T10:03:00")
+    ex = _ev(conn, sesion_id=sesion_id, tipo_accion="EXPORTACION", dataset_nombre="merge(ADMISSIONS.csv,PATIENTS.csv)",
+             ruta_destino="out/reporte.csv", filas_exportadas=129, timestamp=f"{dia}T10:04:00")
+    return dict(ca=ca, cp=cp, fa=fa, mg=mg, dr=dr, ex=ex)
+
+
+class TestUniones:
+
+    def test_entradas_de_union(self):
+        from audit_tracer.lineage import entradas_de_union
+        assert entradas_de_union("merge(A.csv,B.csv)") == ("A.csv", "B.csv")
+        assert entradas_de_union("merge(merge(A.csv,B.csv),C.csv)") == ("merge(A.csv,B.csv)", "C.csv")
+        assert entradas_de_union("merge(A.csv,merge(B.csv,C.csv))") == ("A.csv", "merge(B.csv,C.csv)")
+        assert entradas_de_union("ADMISSIONS.csv") is None and entradas_de_union(None) is None
+
+    def test_el_resultado_se_conecta_con_sus_dos_entradas_en_un_solo_grafo(self, conn):
+        e = _sembrar_cohorte(conn)
+        g = build_lineage_graph(conn, dataset_nombre="merge(ADMISSIONS.csv,PATIENTS.csv)")
+        # los eventos de las dos entradas y del resultado están en el mismo grafo
+        for k in ("ca", "cp", "fa", "mg", "dr", "ex"):
+            _nodo(g, e[k])
+        union = _aristas(g, "union")
+        assert (f"ev-{e['mg']}", f"ev-{e['dr']}") in union     # izquierda: el evento MERGE de ADMISSIONS
+        assert (f"ev-{e['cp']}", f"ev-{e['dr']}") in union     # derecha: la carga de PATIENTS
+        assert len(union) == 2
+
+    def test_la_cadena_de_la_cohorte_se_recorre_de_la_carga_a_la_exportacion(self, conn):
+        e = _sembrar_cohorte(conn)
+        g = build_lineage_graph(conn, dataset_nombre="merge(ADMISSIONS.csv,PATIENTS.csv)")
+        alcanzables, pendientes = {f"ev-{e['ca']}"}, [f"ev-{e['ca']}"]
+        while pendientes:
+            actual = pendientes.pop()
+            for a in g["edges"]:
+                if a["source"] == actual and a["target"] not in alcanzables:
+                    alcanzables.add(a["target"])
+                    pendientes.append(a["target"])
+        assert f"ev-{e['ex']}" in alcanzables
+        assert any(n["tipo"] == "archivo" and n["label"] == "reporte.csv" for n in g["nodes"] if n["id"] in alcanzables)
+
+    def test_se_llega_al_mismo_grafo_desde_una_entrada_o_desde_un_evento(self, conn):
+        e = _sembrar_cohorte(conn)
+        desde_entrada = build_lineage_graph(conn, dataset_nombre="ADMISSIONS.csv")
+        desde_evento = build_lineage_graph(conn, event_id=e["ex"])
+        for g in (desde_entrada, desde_evento):
+            assert {n["event_id"] for n in g["nodes"] if n.get("event_id")} >= set(e.values())
+            assert len(_aristas(g, "union")) == 2
+
+    def test_las_posiciones_ubican_el_resultado_despues_de_las_entradas(self, conn):
+        e = _sembrar_cohorte(conn)
+        g = build_lineage_graph(conn, dataset_nombre="merge(ADMISSIONS.csv,PATIENTS.csv)")
+        assert _nodo(g, e["dr"])["position"]["x"] > _nodo(g, e["mg"])["position"]["x"]
+
+    def test_sesiones_distintas_no_se_unen(self, conn):
+        e1 = _sembrar_cohorte(conn, "s-1")
+        # misma unión pero la entrada PATIENTS solo existe en otra sesión
+        e2 = _ev(conn, sesion_id="s-2", tipo_accion="CARGA", dataset_nombre="PATIENTS.csv", timestamp="2026-11-21T11:00:00")
+        g = build_lineage_graph(conn, event_id=e1["ex"])
+        assert e2 not in {n.get("event_id") for n in g["nodes"]}
+
+    def test_una_union_con_entrada_de_otra_sesion_no_inventa_aristas(self, conn):
+        _ev(conn, sesion_id="s-a", tipo_accion="CARGA", dataset_nombre="ADMISSIONS.csv", timestamp="2026-11-21T10:00:00")
+        dr = _ev(conn, sesion_id="s-b", tipo_accion="TRANSFORMACION", dataset_nombre="merge(ADMISSIONS.csv,PATIENTS.csv)",
+                 motivo_fallo="[ELIMINACION_COLS] drop()", timestamp="2026-11-21T10:03:00")
+        g = build_lineage_graph(conn, event_id=dr)
+        assert _aristas(g, "union") == set()
+
+    def test_datasets_sin_uniones_no_cambian(self, conn):
+        ids = _sembrar_flujo_completo(conn)
+        g = build_lineage_graph(conn, dataset_nombre="vitals.csv")
+        assert _aristas(g, "union") == set() and len(g["nodes"]) == 6  # 5 eventos + archivo

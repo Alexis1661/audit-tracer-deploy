@@ -326,21 +326,36 @@ class ValidacionMIMIC:
         lab = pasos("LABEVENTS.csv")
         lab_ok = lab == ["CARGA", "TRANSFORMACION", "EXPORTACION"] and archivos_exportados("LABEVENTS.csv") == ["anexo_creatinina.csv"]
         adm, coh = pasos("ADMISSIONS.csv"), pasos("merge(ADMISSIONS.csv,PATIENTS.csv)")
-        # ¿Algún grafo enlaza la carga de ADMISSIONS con la exportación del reporte de cohorte?
-        cadena_completa_cohorte = any(
-            "CARGA" in pasos(n) and "reporte_clinico_cohorte.csv" in archivos_exportados(n) for n in grafos)
+        # La cohorte unida: desde la carga de ADMISSIONS y la de PATIENTS hasta el archivo exportado.
+        g = grafos["merge(ADMISSIONS.csv,PATIENTS.csv)"]
+        cargas = {n["dataset_nombre"]: n["id"] for n in g["nodes"] if n.get("tipo_accion") == "CARGA"
+                  and n.get("sesion_id") == sesion}
+        archivo = next((n["id"] for n in g["nodes"] if n.get("tipo") == "archivo"
+                        and n["label"] == "reporte_clinico_cohorte.csv"), None)
+
+        def alcanza(origen):
+            vistos, pendientes = {origen}, [origen]
+            while pendientes:
+                actual = pendientes.pop()
+                for e in g["edges"]:
+                    if e["source"] == actual and e["target"] not in vistos:
+                        vistos.add(e["target"])
+                        pendientes.append(e["target"])
+            return vistos
+
+        cadena_completa_cohorte = bool(archivo) and all(
+            archivo in alcanza(cargas[d]) for d in ("ADMISSIONS.csv", "PATIENTS.csv") if d in cargas)             and {"ADMISSIONS.csv", "PATIENTS.csv"} <= set(cargas)
+        uniones = [e for e in g["edges"] if e["tipo"] == "union"]
         self._v("1.4a", C, "El grafo de linaje reconstruye la cadena de una tabla sin uniones "
                 "(LABEVENTS: carga → limpieza → exportación).", lab_ok,
                 f"Cadena LABEVENTS.csv en la sesión: {' → '.join(lab)} → archivo "
                 f"{', '.join(archivos_exportados('LABEVENTS.csv'))}.", [ev_linaje])
         self._v("1.4b", C, "El grafo de linaje reconstruye la cadena completa de la cohorte "
-                "(carga de ADMISSIONS → merge con PATIENTS → limpieza → exportación del reporte).",
+                "(carga de ADMISSIONS y de PATIENTS → merge → limpieza → exportación del reporte).",
                 cadena_completa_cohorte,
-                f"El grafo se arma por (sesión, dataset_nombre) y el merge le pone otro nombre al resultado, "
-                f"así que la cadena se parte en dos grafos sin arista entre ellos: ADMISSIONS.csv = "
-                f"{' → '.join(adm)}; merge(ADMISSIONS.csv,PATIENTS.csv) = {' → '.join(coh)} → archivo "
-                f"{', '.join(archivos_exportados('merge(ADMISSIONS.csv,PATIENTS.csv)'))}. La carga de "
-                f"PATIENTS.csv queda sola.", [ev_linaje])
+                f"Un solo grafo (dataset merge(ADMISSIONS.csv,PATIENTS.csv)) con {len(g['nodes'])} nodos y "
+                f"{len(uniones)} aristas de unión; desde las cargas de {', '.join(sorted(cargas))} se llega al "
+                f"archivo reporte_clinico_cohorte.csv.", [ev_linaje])
 
         # 1.5 Referencias normativas del reporte
         from audit_tracer.normative_mapping import SIN_REFERENCIA_NORMATIVA, referencia_normativa

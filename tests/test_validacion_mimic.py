@@ -31,8 +31,6 @@ pytestmark = pytest.mark.skipif(
     DATOS is None, reason="Faltan los CSV de MIMIC-III Demo: python validacion/descargar_mimic.py")
 
 NO_CUMPLE = {
-    "1.4b": "lineage.py agrupa por (sesion_id, dataset_nombre) y el merge renombra el dataset: "
-            "la cadena de la cohorte se parte en dos grafos sin arista",
     "3.2b": "REPORT_CSV_COLUMNS no incluye sesion_id, contexto_ejecucion, hash_integridad, "
             "ruta_destino ni filas_exportadas",
 }
