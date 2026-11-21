@@ -47,7 +47,7 @@ python -m pytest tests/test_ataques_simulados.py     # ataques simulados de HU-6
 - **`TestMitigacionesVerificadas`** prueba las mitigaciones que no tenían una prueba propia (por ejemplo, que el token de la librería no abre el dashboard).
 - **`TestRiesgosAbiertos`** reproduce los riesgos confirmados. Cada prueba describe el comportamiento seguro y está marcada `xfail(strict=True)`: hoy aparece como `XFAIL`. **Cuando alguien implemente la mitigación, la prueba pasará y la suite fallará**, lo que obliga a quitar el `xfail` y actualizar el estado de la amenaza en este anexo.
 
-**Ejecución registrada:** 03/11/2026, Python 3.12, Windows 11. Resultado: 154 pruebas superadas y 11 riesgos abiertos reproducidos (`XFAIL`).
+**Ejecución registrada:** 21/11/2026, Python 3.12.6, Windows 11. Resultado: 154 pruebas superadas y 9 riesgos abiertos reproducidos (`XFAIL`). Entre el 03/11 y el 21/11 el commit `3d7dc2b` (08/11) cerró DSH-I1 y DSH-I3, y el 21/11 se corrigió el ayudante `_sesion()` de las pruebas, que había quedado sin token de sesión.
 
 ## 3. Arquitectura y superficies de ataque
 
@@ -156,14 +156,14 @@ Se aplicó **STRIDE por elemento**: para cada componente de la sección 3.2 se r
 | Librería | 2 | 3 | 2 | 2 | 2 | 2 | 4 | 8 | 1 |
 | Canal de transmisión | 2 | 3 | 1 | 2 | 1 | 1 | 6 | 4 | 0 |
 | Servidor central | 3 | 3 | 3 | 2 | 2 | 2 | 5 | 8 | 2 |
-| Dashboard | 4 | 2 | 1 | 4 | 2 | 3 | 4 | 7 | 5 |
-| **Total** | **11** | **11** | **7** | **10** | **7** | **8** | **19** | **27** | **8** |
+| Dashboard | 4 | 2 | 1 | 4 | 2 | 3 | 6 | 7 | 3 |
+| **Total** | **11** | **11** | **7** | **10** | **7** | **8** | **21** | **27** | **6** |
 
 | Riesgo residual | Amenazas |
 |---|---|
-| Alto | 9 |
+| Alto | 7 |
 | Medio | 20 |
-| Bajo | 25 |
+| Bajo | 27 |
 
 **Riesgos residuales altos** (prioridad de la sección 8):
 
@@ -174,8 +174,6 @@ Se aplicó **STRIDE por elemento**: para cada componente de la sección 3.2 se r
 - **SRV-T3**: el servidor acepta el nivel de alerta y la fecha que decide el cliente.
 - **SRV-I1**: tokens personales en claro en la base central.
 - **SRV-I2**: modo de depuración activo por defecto y errores con detalles internos.
-- **DSH-I1**: XSS almacenado en el detalle de evento.
-- **DSH-E3**: cadena XSS + falta de CSRF que permite crear un ADMIN.
 
 ## 6. Amenazas por componente
 
@@ -247,15 +245,15 @@ La librería corre en un entorno que **controla el propio usuario auditado** (ac
 | DSH-T1 | Tampering | CSRF: una página externa hace que un ADMIN con sesión abierta envíe formularios (crear usuario, cambiar rol, emitir o revocar tokens, confirmar un código de dispositivo)<br>*Superficie:* Todos los formularios POST del dashboard | **Planeada:** CSRFProtect (Flask-WTF) en todos los POST y SameSite='Lax' explícito en la cookie | Planeada · Medio | **HU-1.2, HU-5.5, HU-5.7**<br>CT-10 | `test_modelo_amenazas.py` → `test_riesgo_abierto_post_sin_token_csrf_es_rechazado` |
 | DSH-T2 | Tampering | Alterar un reporte CSV después de descargarlo y presentarlo como evidencia<br>*Superficie:* /reportes/exportar; /eventos/criticos/exportar | **Implementada:** El CSV de eventos críticos incluye hash_integridad; cada evento se puede verificar contra la central y su prueba Merkle<br>**Planeada:** Incluir hash_integridad en el reporte de HU-4.5 y HU-7.3 y publicar un hash o firma del archivo completo | Parcial · Medio | **HU-4.4, HU-6.2**<br>CT-23, CT-30 | `test_merkle.py` → `test_endpoint_verificar_evento_individual` |
 | DSH-R1 | Repudiation | Un usuario del dashboard consulta eventos o descarga reportes y luego lo niega: esas lecturas no se registran, solo los accesos denegados<br>*Superficie:* /eventos; /eventos/<id>; /reportes/exportar; /eventos/criticos/exportar; /linaje | **Implementada:** Se registra cada acceso denegado por rol<br>**Planeada:** Registrar las consultas y descargas de la bitácora con el usuario y los filtros usados | Parcial · Medio | **HU-1.4, HU-4.5**<br>CT-11 | `test_modelo_amenazas.py` → `test_riesgo_abierto_descarga_de_reporte_queda_registrada` |
-| DSH-I1 | Information Disclosure | XSS almacenado: la librería controla dataset_nombre, columnas, ruta y motivo; el detalle de evento (HU-7.4) los inserta sin escapar en HTML que la plantilla pinta con \| safe, así que ese código corre en el navegador del auditor<br>*Superficie:* audit_tracer/event_explainer.py (explicación narrativa); templates/dashboard/detalle_evento.html; resto de plantillas | **Implementada:** Autoescape de Jinja en el resto de las plantillas; tojson para los datos que van a JavaScript; Cytoscape dibuja las etiquetas como texto en canvas<br>**Planeada:** Escapar cada valor con markupsafe.escape antes de interpolarlo en event_explainer (o mover el HTML a la plantilla); agregar una cabecera Content-Security-Policy | Parcial · Alto | **HU-4.1, HU-4.3, HU-7.1, HU-7.4** | `test_modelo_amenazas.py` → `test_datos_del_evento_se_escapan_en_listados_y_reportes`<br>`test_modelo_amenazas.py` → `test_riesgo_abierto_detalle_de_evento_escapa_los_datos_de_la_libreria` |
+| DSH-I1 | Information Disclosure | XSS almacenado: la librería controla dataset_nombre, columnas, ruta y motivo; el detalle de evento (HU-7.4) los mostraba sin escapar con \| safe y ese código corría en el navegador del auditor. Cerrado el 08/11/2026 (commit 3d7dc2b)<br>*Superficie:* audit_tracer/event_explainer.py (explicación narrativa); templates/dashboard/detalle_evento.html; resto de plantillas | **Implementada:** Autoescape de Jinja en todas las plantillas, incluido el detalle de evento (ya sin \| safe); tojson para los datos que van a JavaScript; Cytoscape dibuja las etiquetas como texto en canvas | Implementada · Bajo | **HU-4.1, HU-4.3, HU-7.1, HU-7.4** | `test_modelo_amenazas.py` → `test_datos_del_evento_se_escapan_en_listados_y_reportes`<br>`test_modelo_amenazas.py` → `test_mitigado_detalle_de_evento_escapa_los_datos_de_la_libreria` |
 | DSH-I2 | Information Disclosure | Inyección de fórmulas en los CSV exportados: un dataset_nombre como =HYPERLINK(...) se ejecuta cuando el auditor abre el reporte en Excel<br>*Superficie:* /reportes/exportar; /eventos/criticos/exportar | **Planeada:** Anteponer un apóstrofo a las celdas que empiecen con =, +, -, @, tabulación o retorno de carro | Planeada · Medio | **HU-4.4, HU-4.5, HU-7.3**<br>CT-30 | `test_modelo_amenazas.py` → `test_riesgo_abierto_csv_neutraliza_formulas` |
-| DSH-I3 | Information Disclosure | El token personal (30 días) se guarda en la cookie de sesión, que Flask firma pero no cifra: quien vea la cookie lo lee en claro, y el dashboard no lo usa<br>*Superficie:* session['token'] en login_post | **Planeada:** No guardar el token en la sesión | Planeada · Medio | **HU-5.5**<br>CT-06 | `test_modelo_amenazas.py` → `test_riesgo_abierto_token_personal_no_viaja_en_la_cookie` |
+| DSH-I3 | Information Disclosure | El token personal (30 días) se guardaba en la cookie de sesión, que Flask firma pero no cifra. Cerrado el 08/11/2026 (commit 3d7dc2b): la sesión guarda solo token_id<br>*Superficie:* session['token_id'] en login_post | **Implementada:** login_post guarda en la sesión solo el token_id; el token no sale del servidor | Implementada · Bajo | **HU-5.5**<br>CT-06 | `test_modelo_amenazas.py` → `test_mitigado_token_personal_no_viaja_en_la_cookie` |
 | DSH-I4 | Information Disclosure | Un rol que no lo necesita consulta la bitácora (mínimo necesario)<br>*Superficie:* Módulo consulta_reportes | **Implementada:** Matriz de permisos rol × módulo validada en cada llamada | Implementada · Bajo | **HU-1.4**<br>CT-09 | `test_ataques_simulados.py` → `test_cientifico_de_datos_no_puede_consultar_eventos` |
 | DSH-D1 | Denial of Service | Bloquear cuentas ajenas: 5 contraseñas erróneas bloquean a cualquier usuario cuyo correo se conozca, y no hay desbloqueo desde la aplicación<br>*Superficie:* POST /login | **Implementada:** El bloqueo protege contra la fuerza bruta y queda registrado<br>**Planeada:** Bloqueo temporal con expiración y límite de intentos por IP; desbloqueo por ADMIN registrado en audit_log | Parcial · Medio | **HU-1.3**<br>CT-04, CT-05, B6 | `test_autenticacion.py` → `test_user_blocking` |
 | DSH-D2 | Denial of Service | Páginas que cargan todo audit_log sin paginar (/dashboard, /reportes) y /verificar-integridad, que cualquier usuario con sesión puede lanzar y recorre todos los eventos<br>*Superficie:* /dashboard; /reportes; POST /verificar-integridad | **Implementada:** La verificación de un evento puntual usa la prueba Merkle en O(log n)<br>**Planeada:** Paginar y limitar las consultas; restringir la verificación completa a ADMIN y AUDITOR y ejecutarla en segundo plano | Parcial · Bajo | **HU-6.2**<br>CT-23 | `test_merkle.py` → `test_endpoint_verificar_evento_individual` |
 | DSH-E1 | Elevation of Privilege | Un rol bajo entra a la administración, se crea un ADMIN o emite tokens ajenos<br>*Superficie:* /admin/* | **Implementada:** login_required, admin_required y modulo_required en cada ruta; el intento queda como ACCESO_DENEGADO | Implementada · Bajo | **HU-1.2, HU-1.4, HU-6.5**<br>CT-09, CT-10, CT-11 | `test_ataques_simulados.py` → `test_analista_no_puede_crearse_un_usuario_admin`<br>`test_ataques_simulados.py` → `test_analista_no_puede_generar_tokens_para_otro_usuario`<br>`test_control_acceso.py` → `test_role_check_is_per_call_not_once` |
 | DSH-E2 | Elevation of Privilege | El rol y el estado de la cuenta se leen de la cookie y no de la base: después de degradar el rol o bloquear la cuenta, la sesión abierta conserva sus privilegios<br>*Superficie:* session['rol'] | **Planeada:** Recargar rol y estado desde la base en cada petición, o invalidar las sesiones al cambiar el rol o bloquear la cuenta | Planeada · Medio | **HU-1.2, HU-1.4**<br>CT-09, CT-10 | `test_modelo_amenazas.py` → `test_riesgo_abierto_rol_degradado_pierde_privilegios_en_la_sesion_activa` |
-| DSH-E3 | Elevation of Privilege | Cadena de ataque: un CIENTIFICO_DATOS sincroniza un evento con un dataset_nombre que contiene JavaScript (DSH-I1); cuando un ADMIN abre el detalle, el script envía formularios de administración con la sesión del ADMIN, sin CSRF que lo impida (DSH-T1), y crea una cuenta ADMIN<br>*Superficie:* /eventos/<id> + formularios POST de /admin/* | **Planeada:** Se cierra con las mitigaciones de DSH-I1 (escapado y CSP) y DSH-T1 (CSRF); cualquiera de las dos rompe la cadena | Planeada · Alto | **HU-7.4, HU-1.2**<br>CT-10 | `test_modelo_amenazas.py` → `test_riesgo_abierto_detalle_de_evento_escapa_los_datos_de_la_libreria`<br>`test_modelo_amenazas.py` → `test_riesgo_abierto_post_sin_token_csrf_es_rechazado` |
+| DSH-E3 | Elevation of Privilege | Cadena de ataque: un CIENTIFICO_DATOS sincroniza un evento con un dataset_nombre que contiene JavaScript (DSH-I1); cuando un ADMIN abre el detalle, el script envía formularios de administración con la sesión del ADMIN, sin CSRF que lo impida (DSH-T1), y crea una cuenta ADMIN<br>*Superficie:* /eventos/<id> + formularios POST de /admin/* | **Implementada:** La cadena está rota en su primer eslabón: el detalle de evento escapa los datos de la librería (DSH-I1)<br>**Planeada:** Protección CSRF en los formularios de /admin/* (DSH-T1) y cabecera Content-Security-Policy | Parcial · Medio | **HU-7.4, HU-1.2**<br>CT-10 | `test_modelo_amenazas.py` → `test_mitigado_detalle_de_evento_escapa_los_datos_de_la_libreria`<br>`test_modelo_amenazas.py` → `test_riesgo_abierto_post_sin_token_csrf_es_rechazado` |
 
 ## 7. Hallazgos confirmados durante el análisis
 
@@ -264,8 +262,8 @@ Estos riesgos no estaban documentados en HU-6.5 ni en HU-6.6. Se confirmaron eje
 1. **Eventos a nombre de otro usuario (SRV-S1).** `/api/eventos/sincronizar` valida el token pero guarda el `usuario_id` que trae el evento. Con su propio token, un usuario registró una exportación a nombre de otro y el servidor respondió 201. Si además firma con su llave, el evento se acepta igual: la firma se verifica con la llave del dueño del token, no con la del usuario que el evento dice ser.
 2. **Reemplazo silencioso de la llave pública (SRV-S2, SRV-R2).** Cualquier token vigente puede reemplazar la llave del usuario, cuantas veces quiera, sin que quede un evento. Con un token robado, el atacante registra su llave y firma eventos que el servidor acepta. Además, las firmas de los eventos anteriores dejan de verificarse en la vista de detalle.
 3. **Clasificación decidida por el cliente (SRV-T3).** Una exportación de 50 000 filas enviada como `NORMAL` y con fecha de 2020 se guardó así. El umbral de exportación masiva (HU-2.3) solo se aplica en la librería, que controla el usuario.
-4. **XSS almacenado en el detalle de evento (DSH-I1, DSH-E3).** La explicación narrativa de HU-7.4 (`event_explainer.py`) interpola `dataset_nombre`, `ruta_destino` y `motivo_fallo` en HTML que la plantilla pinta con `| safe`. Un `dataset_nombre` con `<script>` se ejecuta en el navegador de quien abra el evento. Como el dashboard no tiene protección CSRF (DSH-T1), ese script puede usar la sesión de un ADMIN para crear otra cuenta ADMIN.
-5. **Token personal legible en la cookie (DSH-I3).** El login guarda el token de 30 días en la sesión de Flask, que está firmada pero no cifrada; se lee decodificando la cookie en base64. El dashboard no lo usa.
+4. **[Cerrado el 08/11/2026, commit `3d7dc2b`] XSS almacenado en el detalle de evento (DSH-I1, DSH-E3).** La explicación narrativa de HU-7.4 (`event_explainer.py`) interpola `dataset_nombre`, `ruta_destino` y `motivo_fallo` en HTML que la plantilla pinta con `| safe`. Un `dataset_nombre` con `<script>` se ejecuta en el navegador de quien abra el evento. Como el dashboard no tiene protección CSRF (DSH-T1), ese script puede usar la sesión de un ADMIN para crear otra cuenta ADMIN.
+5. **[Cerrado el 08/11/2026, commit `3d7dc2b`] Token personal legible en la cookie (DSH-I3).** El login guarda el token de 30 días en la sesión de Flask, que está firmada pero no cifrada; se lee decodificando la cookie en base64. El dashboard no lo usa.
 6. **Rol cacheado en la sesión (DSH-E2).** Después de degradar a un ANALISTA a CIENTIFICO_DATOS, su sesión abierta siguió consultando `/eventos` (200).
 7. **Configuración de sesión y peticiones (DSH-S3, DSH-T1, SRV-D1).** La cookie no se marca `Secure` ni `SameSite`, no hay tokens CSRF y no hay límite de tamaño de petición (`MAX_CONTENT_LENGTH`).
 8. **Bloqueo de cuentas ajenas (DSH-D1).** Cinco contraseñas erróneas enviadas por cualquiera bloquean la cuenta del dueño del correo. Es efecto de la mitigación contra fuerza bruta (CT-04) y, sin desbloqueo en la aplicación (B6), deja al usuario fuera hasta que alguien edite la base.
@@ -289,12 +287,12 @@ Las medidas se agrupan por esfuerzo y en orden de prioridad. Cada una cierra o r
 
 | Prioridad | Medida | Amenazas | Esfuerzo |
 |---|---|---|---|
-| 1 | Escapar los valores en `event_explainer.py` (`markupsafe.escape`) y agregar una cabecera `Content-Security-Policy` | DSH-I1, DSH-E3 | Bajo |
+| 1 | Agregar una cabecera `Content-Security-Policy` (el escapado ya está hecho) | DSH-E3 | Bajo |
 | 2 | En `/api/eventos/sincronizar`, rechazar con 403 (y registrar como CRITICO) los eventos cuyo `usuario_id` no sea el dueño del token | SRV-S1, LIB-S1 | Bajo |
 | 3 | Registrar la llave pública solo una vez (o con confirmación desde el dashboard), dejar el cambio en `audit_log` y guardar el historial de llaves con vigencia | SRV-S2, SRV-R2 | Medio |
 | 4 | Protección CSRF en todos los formularios y cookie `Secure` + `SameSite=Lax` con vencimiento por inactividad | DSH-T1, DSH-S3, DSH-E3 | Bajo |
 | 5 | `FLASK_DEBUG=0` por defecto, servidor WSGI y mensajes de error genéricos | SRV-I2, SRV-D2 | Bajo |
-| 6 | Quitar el token de la cookie de sesión; guardar tokens y device codes como SHA-256 | DSH-I3, SRV-I1 | Medio |
+| 6 | Guardar tokens y device codes como SHA-256 | SRV-I1 | Medio |
 | 7 | Recalcular en el servidor el nivel de alerta y guardar la fecha de recepción | SRV-T3 | Medio |
 | 8 | Recargar el rol y el estado de la cuenta en cada petición; bloqueo temporal y desbloqueo por ADMIN | DSH-E2, DSH-D1 | Medio |
 | 9 | Retirar `.audit_keys/` del repositorio; cifrar la llave local o guardarla en el llavero del sistema | LIB-I2 | Bajo |

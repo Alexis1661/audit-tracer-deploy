@@ -225,12 +225,34 @@ def _login(client, email, **extra):
     return client.post("/login", data={"email": email, "password": PASSWORD, **extra})
 
 
-def _sesion(client, usuario_id, rol):
+def _sesion(client, conectar, usuario_id, rol):
+    """
+    Sesión web válida: la cookie lleva el token_id de un token de login vigente
+    (el dashboard lo exige desde que la sesión web vence a la hora, commit 3d7dc2b).
+    Si `usuario_id` aún no existe, se crea con ese rol.
+    """
+    import secrets
+    from datetime import timezone
+    from audit_tracer.models.tokens import insert_token
+    conn = conectar()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO usuarios (usuario_id, email, password_hash, rol) VALUES (?, ?, ?, ?)",
+            (usuario_id, f"{usuario_id}@sesion.test", "no-usado", rol))
+        conn.commit()
+        token_id = insert_token(conn, {
+            "usuario_id": usuario_id,
+            "token": secrets.token_urlsafe(32),
+            "fecha_expiracion": (datetime.now(timezone.utc) + app_module.app.permanent_session_lifetime).isoformat(),
+        })
+    finally:
+        conn.close()
     with client.session_transaction() as sess:
         sess["usuario_id"] = usuario_id
         sess["rol"] = rol
         sess["nombre"] = "test"
         sess["sesion_id"] = "s-stride"
+        sess["token_id"] = token_id
 
 
 def _evento(usuario_id, **extra):
@@ -347,12 +369,32 @@ class TestMitigacionesVerificadas:
         """DSH-I1 (parte implementada): el autoescape de Jinja protege estas vistas."""
         client, conectar = servidor
         _sembrar_evento_con_xss(conectar)
-        _sesion(client, "auditor", "AUDITOR")
+        _sesion(client, conectar, "auditor", "AUDITOR")
         for ruta in ("/eventos", "/reportes", "/dashboard"):
             html = client.get(ruta).get_data(as_text=True)
             assert XSS not in html, ruta
         for ruta in ("/eventos", "/reportes"):  # vistas que muestran dataset_nombre
             assert "&lt;script&gt;" in client.get(ruta).get_data(as_text=True), ruta
+
+    def test_mitigado_detalle_de_evento_escapa_los_datos_de_la_libreria(self, servidor):
+        """DSH-I1 / DSH-E3: desde 3d7dc2b el detalle usa autoescape de Jinja, sin `| safe`."""
+        client, conectar = servidor
+        event_id = _sembrar_evento_con_xss(conectar)
+        _sesion(client, conectar, "auditor", "AUDITOR")
+        resp = client.get(f"/eventos/{event_id}")
+        assert resp.status_code == 200
+        html = resp.get_data(as_text=True)
+        assert XSS not in html
+        assert "&lt;script&gt;" in html
+
+    def test_mitigado_token_personal_no_viaja_en_la_cookie(self, servidor):
+        """DSH-I3: la sesión guarda solo el token_id, no el token."""
+        client, conectar = servidor
+        _usuario(conectar, "analista@x.co", "ANALISTA")
+        assert _login(client, "analista@x.co").status_code == 302
+        cookie = client.get_cookie("session").value
+        datos = app_module.app.session_interface.get_signing_serializer(app_module.app).loads(cookie)
+        assert "token" not in datos and datos.get("token_id")
 
 
 XSS = "<script>alert('xss')</script>"
@@ -440,7 +482,7 @@ class TestRiesgosAbiertos:
         client, conectar = servidor
         admin = _usuario(conectar, "admin@x.co", "ADMIN")
         analista = _usuario(conectar, "analista@x.co", "ANALISTA")
-        _sesion(client, admin, "ADMIN")
+        _sesion(client, conectar, admin, "ADMIN")
         # Un formulario de otro sitio no conoce ningún token CSRF.
         client.post(f"/admin/usuarios/editar/{analista}", data={"rol": "ADMIN"})
         conn = conectar()
@@ -450,19 +492,10 @@ class TestRiesgosAbiertos:
             conn.close()
         assert rol == "ANALISTA"
 
-    @riesgo_abierto("DSH-I1")
-    def test_riesgo_abierto_detalle_de_evento_escapa_los_datos_de_la_libreria(self, servidor):
-        client, conectar = servidor
-        event_id = _sembrar_evento_con_xss(conectar)
-        _sesion(client, "auditor", "AUDITOR")
-        resp = client.get(f"/eventos/{event_id}")
-        assert resp.status_code == 200
-        assert XSS not in resp.get_data(as_text=True)
-
     @riesgo_abierto("DSH-R1")
     def test_riesgo_abierto_descarga_de_reporte_queda_registrada(self, servidor):
         client, conectar = servidor
-        _sesion(client, "auditor-1", "AUDITOR")
+        _sesion(client, conectar, "auditor-1", "AUDITOR")
         assert client.get("/reportes/exportar").status_code == 200
         conn = conectar()
         try:
@@ -480,19 +513,10 @@ class TestRiesgosAbiertos:
                                 "dataset_nombre": formula})
         finally:
             conn.close()
-        _sesion(client, "auditor-1", "AUDITOR")
+        _sesion(client, conectar, "auditor-1", "AUDITOR")
         filas = list(csv.DictReader(client.get("/reportes/exportar").get_data(as_text=True).splitlines()))
         assert filas
         assert not any(f["dataset_nombre"].startswith(("=", "+", "-", "@")) for f in filas)
-
-    @riesgo_abierto("DSH-I3")
-    def test_riesgo_abierto_token_personal_no_viaja_en_la_cookie(self, servidor):
-        client, conectar = servidor
-        _usuario(conectar, "analista@x.co", "ANALISTA")
-        assert _login(client, "analista@x.co").status_code == 302
-        cookie = client.get_cookie("session").value
-        datos = app_module.app.session_interface.get_signing_serializer(app_module.app).loads(cookie)
-        assert "token" not in datos
 
     @riesgo_abierto("DSH-E2")
     def test_riesgo_abierto_rol_degradado_pierde_privilegios_en_la_sesion_activa(self, servidor):
