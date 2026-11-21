@@ -1,0 +1,27 @@
+[AuditTracer] La auditoría está activa, pero no hay un usuario identificado: los eventos se registran como DESCONOCIDO (nivel CRITICO). Ejecuta audit_tracer.login(api_url=...) para identificarte.
+APScheduler 3.11.3; fecha 2026-11-21T14:30:36-05:00
+Eventos: 2 horas completas (4 y 3 eventos) y la hora en curso (2 eventos)
+2026-11-21 14:30:37,357 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-11-21 14:30:37,357 [INFO] Added job "Publicación periódica de raíces Merkle" to job store "default"
+2026-11-21 14:30:37,357 [INFO] Scheduler started
+2026-11-21 14:30:37,357 [INFO] [MerkleScheduler] Scheduler iniciado. Job ejecutará cada 0.0005555555555555556 hora(s).
+2026-11-21 14:30:37,357 [INFO] Running job "Publicación periódica de raíces Merkle (trigger: interval[0:00:02], next run at: 2026-11-21 19:30:37 UTC)" (scheduled at 2026-11-21 19:30:37.355171+00:00)
+2026-11-21 14:30:37,368 [INFO] [MerkleScheduler] Publicando 2 lote(s) pendiente(s): ['2026-11-21T16', '2026-11-21T17']
+2026-11-21 14:30:37,372 [INFO] [MerkleScheduler] Lote 2026-11-21T16 publicado → raíz=00095698ee3b… (4 hojas) en C:\Users\alexd\AppData\Local\Temp\merkle_demo_nlnr9c2q\anclas\merkle_2026-11-21T16.json
+2026-11-21 14:30:37,372 [INFO] [MerkleScheduler] Lote 2026-11-21T17 publicado → raíz=21b1af112c75… (3 hojas) en C:\Users\alexd\AppData\Local\Temp\merkle_demo_nlnr9c2q\anclas\merkle_2026-11-21T17.json
+2026-11-21 14:30:37,375 [INFO] Job "Publicación periódica de raíces Merkle (trigger: interval[0:00:02], next run at: 2026-11-21 14:30:39 -05)" executed successfully
+2026-11-21 14:30:39,363 [INFO] Running job "Publicación periódica de raíces Merkle (trigger: interval[0:00:02], next run at: 2026-11-21 14:30:41 -05)" (scheduled at 2026-11-21 14:30:39.355171-05:00)
+2026-11-21 14:30:39,363 [INFO] [MerkleScheduler] Sin lotes pendientes de publicar.
+2026-11-21 14:30:39,363 [INFO] Job "Publicación periódica de raíces Merkle (trigger: interval[0:00:02], next run at: 2026-11-21 14:30:41 -05)" executed successfully
+Anclas tras el primer ciclo: ['merkle_2026-11-21T16.json', 'merkle_2026-11-21T17.json']
+>>> llegan eventos de otra hora completa
+2026-11-21 14:30:41,364 [INFO] Running job "Publicación periódica de raíces Merkle (trigger: interval[0:00:02], next run at: 2026-11-21 14:30:43 -05)" (scheduled at 2026-11-21 14:30:41.355171-05:00)
+2026-11-21 14:30:41,364 [INFO] [MerkleScheduler] Publicando 1 lote(s) pendiente(s): ['2026-11-21T18']
+2026-11-21 14:30:41,373 [INFO] [MerkleScheduler] Lote 2026-11-21T18 publicado → raíz=68e009945732… (5 hojas) en C:\Users\alexd\AppData\Local\Temp\merkle_demo_nlnr9c2q\anclas\merkle_2026-11-21T18.json
+2026-11-21 14:30:41,375 [INFO] Job "Publicación periódica de raíces Merkle (trigger: interval[0:00:02], next run at: 2026-11-21 14:30:43 -05)" executed successfully
+2026-11-21 14:30:43,370 [INFO] Running job "Publicación periódica de raíces Merkle (trigger: interval[0:00:02], next run at: 2026-11-21 14:30:45 -05)" (scheduled at 2026-11-21 14:30:43.355171-05:00)
+2026-11-21 14:30:43,375 [INFO] [MerkleScheduler] Sin lotes pendientes de publicar.
+2026-11-21 14:30:43,378 [INFO] Job "Publicación periódica de raíces Merkle (trigger: interval[0:00:02], next run at: 2026-11-21 14:30:45 -05)" executed successfully
+Anclas tras la ejecución automática siguiente: ['merkle_2026-11-21T16.json', 'merkle_2026-11-21T17.json', 'merkle_2026-11-21T18.json']
+2026-11-21 14:30:44,394 [INFO] Scheduler has been shut down
+2026-11-21 14:30:44,394 [INFO] [MerkleScheduler] Scheduler detenido.

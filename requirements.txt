@@ -11,3 +11,4 @@ nbformat>=5.10.0
 ipykernel>=6.29.0
 reportlab>=4.0
 pypdf>=4.0
+apscheduler>=3.10,<4

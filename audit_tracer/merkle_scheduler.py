@@ -46,7 +46,10 @@ def run_publish_job(db_path: Optional[str] = None, anchors_dir: Optional[str] = 
     conn = get_central_connection(**conn_args)
 
     try:
-        pending = get_pending_batch_hours(conn, anchors_dir)
+        # Solo lotes completos: la raíz de la hora en curso cambiaría con cada evento
+        # nuevo y su ancla daría una falsa alteración al verificarla después.
+        hora_actual = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
+        pending = [h for h in get_pending_batch_hours(conn, anchors_dir) if h < hora_actual]
         if not pending:
             logger.info("[MerkleScheduler] Sin lotes pendientes de publicar.")
             return
@@ -56,7 +59,8 @@ def run_publish_job(db_path: Optional[str] = None, anchors_dir: Optional[str] = 
             len(pending),
             pending,
         )
-        published = publish_all_pending(conn, anchors_dir)
+        from audit_tracer.merkle import publish_batch_root
+        published = [publish_batch_root(conn, hora, anchors_dir) for hora in pending]
         for anchor in published:
             logger.info(
                 "[MerkleScheduler] Lote %s publicado → raíz=%s… (%d hojas) en %s",
@@ -79,7 +83,7 @@ _scheduler = None
 def start_scheduler(
     db_path: Optional[str] = None,
     anchors_dir: Optional[str] = None,
-    interval_hours: int = 1,
+    interval_hours: float = 1,
 ) -> None:
     """
     Inicia el job periódico de publicación usando APScheduler BackgroundScheduler.
@@ -121,7 +125,7 @@ def start_scheduler(
     )
     _scheduler.start()
     logger.info(
-        "[MerkleScheduler] Scheduler iniciado. Job ejecutará cada %d hora(s).",
+        "[MerkleScheduler] Scheduler iniciado. Job ejecutará cada %s hora(s).",
         interval_hours,
     )
 

@@ -18,7 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 excel = ["openpyxl>=3.1"]
 parquet = ["pyarrow>=14.0"]
-servidor = ["Flask>=2.3", "reportlab>=4.0"]
+servidor = ["Flask>=2.3", "reportlab>=4.0", "apscheduler>=3.10,<4"]
 dev = [
     "pytest>=7.0",
     "nbclient>=0.10",
@@ -29,6 +29,7 @@ dev = [
     "Flask>=2.3",
     "reportlab>=4.0",
     "pypdf>=4.0",
+    "apscheduler>=3.10,<4",
 ]
 
 [tool.setuptools.packages.find]
