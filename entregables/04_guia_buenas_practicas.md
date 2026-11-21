@@ -23,7 +23,7 @@ Esta guía parte de `docs/lineamientos_buenas_practicas_seguridad.md` (commit `0
 | 5.2 | `verify_integrity` «recalcula periódicamente» | Se ejecuta a demanda (botón «Verificar integridad») | Corregido. |
 | 5.3 | Llave privada en `~/.audit_keys/user_ed25519.key` | `~/.audit_tracer/keys/private_key.pem` (`utils/paths.py`, `digital_signatures.py`) | Corregido. |
 | Escenario 3 | CONSULTA → «Ley 1581 Art. 17 lit. a»; EXPORTACION → «§164.312(a)(2)(iv) / Art. 18 lit. b»; el CSV trae «los hashes de cada evento» | CONSULTA → §164.312(b) \| Art. 17 lit. m; EXPORTACION → §164.312(b); §164.308(a)(1)(ii)(D); §164.528 \| Art. 4 lit. f; Art. 17 lit. m. El reporte no trae hashes (el de críticos sí). | Corregido con la tabla real. |
-| Marco normativo | HIPAA, Ley 1581 e ISO/IEC 27001:2022 | El documento final dice ISO/IEC 27701. Ningún archivo del repositorio menciona ISO/IEC 27701. | Se conserva ISO/IEC 27001 como estaba. [PENDIENTE: alineación con ISO/IEC 27701 (cláusulas y controles) no documentada en el repositorio; debe definirla el equipo] |
+| Marco normativo | HIPAA, Ley 1581 e ISO/IEC 27001:2022 | El documento final dice ISO/IEC 27701. Ningún archivo del repositorio la mencionaba. | Se agregó la sección 9 con la alineación a ISO/IEC 27701:2019 (solo lo verificado; el resto, [PENDIENTE]). |
 
 **Verificación de los requisitos de HU-5.2 que pide el documento:**
 
@@ -34,7 +34,7 @@ Esta guía parte de `docs/lineamientos_buenas_practicas_seguridad.md` (commit `0
 | Políticas de credenciales y tokens, incluida la revocación | Sí | Sección 4 |
 | Protocolo ante incidentes: triaje con el explicador, integridad y firma, linaje, acción correctiva, reporte | Sí | Sección 6 |
 | Tres escenarios: Colab con datos oncológicos seudonimizados; exportación masiva fuera de horario; reporte para la SIC | Sí | Sección 8 |
-| Alineación con HIPAA, Ley 1581 e ISO/IEC 27701 | Parcial | HIPAA y Ley 1581 sí; ISO/IEC 27701 no (ver tabla anterior) |
+| Alineación con HIPAA, Ley 1581 e ISO/IEC 27701 | Sí, con límites | HIPAA y Ley 1581 en toda la guía; ISO/IEC 27701:2019 en la sección 9, citando solo los encabezados verificados y marcando el resto como [PENDIENTE] |
 
 # 1. Propósito y alcance
 
@@ -56,7 +56,7 @@ Aplica a los entornos de análisis (Jupyter, Google Colab, scripts de Python), a
 | Ley Estatutaria 1581 de 2012 (Colombia) | Art. 4 (principios: finalidad, libertad, veracidad, seguridad, confidencialidad), Art. 5 (datos sensibles: salud), Art. 17 y 18 (deberes del responsable y del encargado) |
 | HIPAA, 45 CFR Parte 164 | §164.308 (salvaguardas administrativas), §164.312(a) control de acceso, §164.312(b) controles de auditoría, §164.312(c) integridad, §164.312(d) autenticación, §164.312(e) transmisión; §164.502(b) mínimo necesario |
 | ISO/IEC 27001:2022, Anexo A | A.5.15 control de acceso, A.8.15 registro de eventos, A.8.24 uso de criptografía |
-| ISO/IEC 27701 | [PENDIENTE: no documentado en el repositorio] |
+| ISO/IEC 27701:2019 | Ver la sección 9 |
 
 **Principios obligatorios:** finalidad y libertad (Ley 1581 Art. 4 lit. a y b); mínimo necesario (HIPAA §164.502(b)): solo las columnas y filas que exige el objetivo; veracidad (Art. 4 lit. c); responsabilidad demostrada: la institución debe poder probar con la bitácora cómo se custodiaron los datos.
 
@@ -216,3 +216,21 @@ Lo que ocurre hoy (validado con MIMIC-III el 21/11/2026, Anexo 13, caso 2): a la
 
 3. Descarga **Exportar Reporte (CSV)** o **Exportar Reporte (PDF)**; ambos tienen las mismas filas y columnas. Si los filtros no dan resultados, el archivo es válido y lo indica.
 4. Para la huella de cada evento crítico agrega **Exportar Críticos (CSV)**, que incluye `hash_integridad`, y documenta la verificación con «Verificar integridad» y las anclas Merkle del período.
+
+# 9. Alineación con ISO/IEC 27701:2019
+
+ISO/IEC 27701:2019 extiende ISO/IEC 27001 y 27002 con un sistema de gestión de privacidad (PIMS). Su Anexo A reúne los objetivos y controles para quien decide el tratamiento de datos personales (responsable) y su Anexo B los del encargado. La institución que use Audit Tracer con datos clínicos suele ser responsable; el equipo que opera el servidor puede actuar como encargado.
+
+**Qué se verificó y cómo.** No se dispone del texto de la norma en el repositorio. El 21/11/2026 se consultó la búsqueda web ([ISO/IEC 27701 en Wikipedia, con enlace a la tabla de contenido oficial de ISO](https://en.wikipedia.com/wiki/ISO/IEC_27701), [guía de controles del Anexo A de NQA](https://www.nqa.com/medialibraries/NQA/NQA-Media-Library/PDFs/NQA-ISO-27701-Annex-A-Controls-Analysis.pdf)), que confirmó los encabezados de tres grupos del Anexo A. No se pudo confirmar el contenido de sus subcontroles ni la numeración de las cláusulas 5 y 6; por eso no se citan.
+
+| Grupo del Anexo A (responsable; el Anexo B equivale para el encargado) | Qué aporta Audit Tracer / esta guía | Estado |
+|---|---|---|
+| **A.7.2 Conditions for collection and processing** (condiciones de recolección y tratamiento) | Clasificación de datos y prohibición de cargar identificadores directos (sección 3.1); mínimo necesario (sección 2); la bitácora registra qué dataset y columnas se tocan (Anexo 10), lo que permite demostrar el tratamiento. | Parcial: la guía no define base legal, consentimiento ni evaluación de impacto de privacidad. [PENDIENTE: subcontroles de A.7.2] |
+| **A.7.3 Obligations to PII principals** (obligaciones frente a los titulares) | Ninguna: Audit Tracer no gestiona solicitudes de acceso, corrección ni supresión de titulares, y la bitácora es inmutable por diseño. | No cubierto. [PENDIENTE: subcontroles de A.7.3 y su tensión con la inmutabilidad] |
+| **A.7.4 Privacy by design and by default** (privacidad desde el diseño y por defecto) | La bitácora guarda solo metadatos y nunca valores de celdas (sección 1); captura sin modificar el código del analista; minimización de columnas registradas. | Parcial. [PENDIENTE: subcontroles de A.7.4] |
+| A.7.5 (compartición, transferencia y divulgación de datos personales) | Los reportes salen del dashboard solo para roles con permiso; no hay controles de transferencia entre países. | [PENDIENTE: no verificado el título ni los subcontroles] |
+| Cláusulas 5 y 6 (requisitos y controles adicionales sobre 27001 y 27002) | La guía ya cubre controles de acceso, registro, criptografía e integridad con HIPAA y ISO/IEC 27001 (secciones 4 y 5). | [PENDIENTE: numeración de cláusulas] |
+
+**Conclusión.** La guía queda alineada con ISO/IEC 27701:2019 en lo que corresponde a minimización y seguridad del tratamiento (que comparte con ISO/IEC 27001, HIPAA y la Ley 1581), pero **no** puede afirmarse una alineación completa: faltan los procesos de privacidad (base legal, derechos de los titulares, evaluaciones de impacto) que la norma exige al responsable y que están fuera del alcance de la herramienta. Para el documento final conviene decir «alineada con los principios de ISO/IEC 27701», no «cumple la norma».
+
+**Matriz de trazabilidad (06).** No se agregó una columna ISO/IEC 27701: no hay cláusulas verificadas con número y título para mapear los 32 controles uno a uno, y una columna con numeración sin verificar sería inventada. [PENDIENTE: mapeo control por control cuando el equipo tenga el texto de la norma]

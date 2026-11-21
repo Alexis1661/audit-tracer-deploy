@@ -25,6 +25,8 @@ Normas: HIPAA §164.312(b) · Ley 1581/2012 · ISO/IEC 27001
 
 import os
 import json
+import re
+import time
 from datetime import datetime
 from typing import Optional
 
@@ -246,9 +248,118 @@ def _audited_read_excel(io=None, *args, **kwargs) -> pd.DataFrame:
     return _audited_read(_original_read_excel, io, "buffer_excel", args, kwargs)
 
 
+_RE_TABLA_SQL = re.compile(r"\bfrom\s+([A-Za-z_][\w.]*)", re.I)
+
+
+def _nombre_dataset_sql(consulta, default: str) -> str:
+    """
+    Nombre de dataset de una consulta SQL: solo la tabla (sql:tabla). El texto de
+    la consulta no se guarda: puede llevar valores o identificadores de pacientes.
+    """
+    if isinstance(consulta, str):
+        m = _RE_TABLA_SQL.search(consulta)
+        if m:
+            return f"sql:{m.group(1)}"
+        if re.fullmatch(r"[A-Za-z_][\w.]*", consulta.strip()):   # read_sql_table("tabla")
+            return f"sql:{consulta.strip()}"
+    return default
+
+
+def _audited_read_sql_factory(nombre_original: str):
+    def _audited(sql=None, *args, **kwargs):
+        original = _originales_sql[nombre_original]
+        if in_audit_scope():
+            return original(sql, *args, **kwargs)
+        dataset = guard(_nombre_dataset_sql, sql, "sql:consulta", _default="sql:consulta")
+        with audit_scope():
+            resultado = original(sql, *args, **kwargs)
+        return guard(_registrar_carga, resultado, dataset, _contexto="Registro de CARGA (SQL)",
+                     _default=resultado)
+    _audited.__name__ = f"_audited_{nombre_original}"
+    return _audited
+
+
+_FUNCIONES_SQL = ("read_sql", "read_sql_query", "read_sql_table")
+_originales_sql: dict = {}
+
+
 # ──────────────────────────────────────────────────────────────
 # INTERCEPTORES DE CONSULTA  (PDGTRAZDSA-51)
 # ──────────────────────────────────────────────────────────────
+
+def _es_mascara_booleana(key) -> bool:
+    """True si `key` es una Series/array/lista de booleanos (seleccion de filas)."""
+    try:
+        if hasattr(key, "dtype"):
+            return pd.api.types.is_bool_dtype(key.dtype) and getattr(key, "ndim", 1) == 1
+        return isinstance(key, list) and bool(key) and all(isinstance(k, bool) or type(k).__name__ == "bool_"
+                                                          for k in key)
+    except Exception:
+        return False
+
+
+# Las lecturas por celda dentro de un bucle (df.loc[i, "x"]) generarian miles de
+# eventos identicos: un mismo (dataset, operacion, columnas) se registra una vez por segundo.
+_VENTANA_REPETIDOS_S = 1.0
+_ultimos_loc: dict = {}
+
+
+class _IndexerAuditado:
+    """Envoltura de df.loc / df.iloc: registra la lectura y delega todo lo demas."""
+
+    def __init__(self, df, indexador, nombre: str):
+        object.__setattr__(self, "_df", df)
+        object.__setattr__(self, "_indexador", indexador)
+        object.__setattr__(self, "_nombre", nombre)
+
+    def __getitem__(self, key):
+        if in_audit_scope():
+            return self._indexador[key]
+        with audit_scope():
+            result = self._indexador[key]
+        guard(self._registrar, key, result, _contexto=f"Registro de df.{self._nombre}[...]")
+        return result
+
+    def _registrar(self, key, result) -> None:
+        df = self._df
+        filas = key[0] if isinstance(key, tuple) and key else key
+        if _es_mascara_booleana(filas):
+            df._registrar_filtrado(filas, result, f"df.{self._nombre}[mascara]")
+            return
+        cols = []
+        if isinstance(key, tuple) and len(key) > 1:
+            seleccion = key[1]
+            if self._nombre == "loc":
+                cols = [c for c in (seleccion if isinstance(seleccion, (list, pd.Index)) else [seleccion])
+                        if isinstance(c, str)]
+            elif isinstance(seleccion, (int, list, slice)):
+                try:
+                    pos = [seleccion] if isinstance(seleccion, int) else seleccion
+                    cols = [str(c) for c in df.columns[pos]]
+                except Exception:
+                    cols = []
+        elif isinstance(result, pd.DataFrame):
+            cols = [str(c) for c in result.columns]
+        nombre = getattr(df, "_dataset_nombre", "dataset_desconocido")
+        firma = (nombre, self._nombre, tuple(cols))
+        ahora = time.monotonic()
+        if ahora - _ultimos_loc.get(firma, -1e9) < _VENTANA_REPETIDOS_S:
+            return
+        _ultimos_loc[firma] = ahora
+        if len(_ultimos_loc) > 1000:
+            _ultimos_loc.clear()
+        _log_event(tipo_accion="CONSULTA", dataset_nombre=nombre,
+                   columnas_afectadas=json.dumps(cols) if cols else None)
+
+    def __setitem__(self, key, value):
+        self._indexador[key] = value
+
+    def __call__(self, *args, **kwargs):  # df.loc(axis=...)[...]
+        return _IndexerAuditado(self._df, self._indexador(*args, **kwargs), self._nombre)
+
+    def __getattr__(self, nombre):
+        return getattr(self._indexador, nombre)
+
 
 class AuditedDataFrame(pd.DataFrame):
     """
@@ -276,8 +387,39 @@ class AuditedDataFrame(pd.DataFrame):
             return super().__getitem__(key)
         with audit_scope():
             result = super().__getitem__(key)
-        guard(self._registrar_getitem, key, _contexto="Registro de CONSULTA df[...]")
+        if _es_mascara_booleana(key):
+            guard(self._registrar_filtrado, key, result, "df[mascara]", _contexto="Registro de FILTRADO df[mascara]")
+        else:
+            guard(self._registrar_getitem, key, _contexto="Registro de CONSULTA df[...]")
         return result
+
+    # ── df[mascara booleana] / df.loc[...] / df.iloc[...] ─────
+    def _registrar_filtrado(self, mascara, resultado, origen: str) -> None:
+        """Seleccion de filas por mascara booleana: TRANSFORMACION con subtipo FILTRADO."""
+        from .transform_capture import _log_transform, TIPO_FILTRADO, _comparar_estructura
+        total = len(self)
+        if isinstance(resultado, pd.DataFrame):
+            conservadas = len(resultado)
+            comparacion = _comparar_estructura((self.shape, self.columns), resultado)
+            columnas = [str(c) for c in resultado.columns]
+        else:
+            conservadas, comparacion, columnas = None, None, []
+        detalle = f"{origen}: {conservadas} de {total} filas" if conservadas is not None else origen
+        _log_transform(
+            tipo_transformacion=TIPO_FILTRADO,
+            dataset_nombre=getattr(self, "_dataset_nombre", "dataset_desconocido"),
+            columnas_afectadas=columnas,
+            descripcion=detalle, comparacion=comparacion,
+        )
+
+    # ── df.loc / df.iloc ──────────────────────────────────────
+    @property
+    def loc(self):
+        return _IndexerAuditado(self, pd.DataFrame.loc.fget(self), "loc")
+
+    @property
+    def iloc(self):
+        return _IndexerAuditado(self, pd.DataFrame.iloc.fget(self), "iloc")
 
     def _registrar_getitem(self, key) -> None:
         dataset_nombre = getattr(self, "_dataset_nombre", "dataset_desconocido")
@@ -416,6 +558,14 @@ def activate() -> None:
     pd.read_csv = _audited_read_csv
     pd.read_excel = _audited_read_excel
 
+    # Lecturas desde bases de datos -> CARGA (21/11/2026)
+    for nombre in _FUNCIONES_SQL:
+        original = _unwrap(getattr(pd, nombre))
+        _originales_sql[nombre] = original
+        parche = _audited_read_sql_factory(nombre)
+        parche._audit_tracer_original = original
+        setattr(pd, nombre, parche)
+
     # Parchear también en el namespace del módulo pandas (para imports previos)
     import pandas.io.parsers as _parsers          # noqa: F401
     pd.io.parsers.readers.read_csv = _audited_read_csv
@@ -438,6 +588,8 @@ def deactivate() -> None:
 
     pd.read_csv = _unwrap(pd.read_csv)
     pd.read_excel = _unwrap(pd.read_excel)
+    for nombre in _FUNCIONES_SQL:
+        setattr(pd, nombre, _unwrap(getattr(pd, nombre)))
     pd.io.parsers.readers.read_csv = _unwrap(pd.io.parsers.readers.read_csv)
 
     _interceptor_active = False
