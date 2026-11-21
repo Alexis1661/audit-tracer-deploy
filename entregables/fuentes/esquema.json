@@ -1,0 +1,1476 @@
+{
+ "local": {
+  "tablas": {
+   "audit_intentos_bloqueados": {
+    "sql": "CREATE TABLE audit_intentos_bloqueados (\n    intento_id        INTEGER  PRIMARY KEY AUTOINCREMENT,\n    timestamp         TEXT     NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now')),\n    tipo_intento      TEXT     NOT NULL,   -- 'INTENTO_MODIFICACION' | 'INTENTO_ELIMINACION'\n    event_id_objetivo INTEGER  NOT NULL,\n    usuario_id        TEXT,\n    sesion_id         TEXT,\n    nivel_alerta      TEXT     NOT NULL DEFAULT 'CRITICO',\n    motivo_alerta     TEXT\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "intento_id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "timestamp",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "strftime('%Y-%m-%dT%H:%M:%f', 'now')",
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "tipo_intento",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "event_id_objetivo",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "sesion_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "nivel_alerta",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'CRITICO'",
+      "pk": 0
+     },
+     {
+      "cid": 7,
+      "nombre": "motivo_alerta",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [],
+    "indices": [],
+    "disparadores": []
+   },
+   "audit_log": {
+    "sql": "CREATE TABLE audit_log (\n\n    -- IDENTIFICADOR ÚNICO DEL EVENTO (en esta base)\n    event_id          INTEGER  PRIMARY KEY AUTOINCREMENT,\n    -- Clave primaria autogenerada. Nunca puede repetirse ni ser nula.\n    -- Única solo dentro de ESTA base; para deduplicar entre esta base\n    -- local y la central (HU-5.4) se usa evento_uuid, no este campo.\n\n    -- IDENTIFICADOR ÚNICO GLOBAL DEL EVENTO (HU-5.4 CA1)\n    evento_uuid       TEXT     UNIQUE NOT NULL,\n    -- UUID4 generado en Python al construir el evento (ver\n    -- audit_tracer/models/audit_log.py::_prepare_event()). No participa\n    -- del cálculo de hash_integridad. Permite que la futura sincronización\n    -- HU-5.8 reintente sin duplicar eventos en la base central.\n\n    -- IDENTIFICACIÓN DEL ACTOR\n    usuario_id        TEXT     NOT NULL,\n    -- ID único del usuario que ejecutó la acción.\n    -- Si no es identificable: 'DESCONOCIDO'\n    -- Exigido por HIPAA §164.312(b)\n\n    sesion_id         TEXT     NOT NULL,\n    -- UUID único por sesión de trabajo.\n    -- Vincula todos los eventos de una misma ejecución.\n\n    -- TEMPORALIDAD\n    timestamp         TEXT     NOT NULL,\n    -- Fecha y hora en formato ISO 8601: 'YYYY-MM-DDTHH:MM:SS.ffffff'\n    -- Ejemplo: '2026-04-14T10:32:15.123456'\n    -- Exigido por HIPAA §164.312(b)\n\n    -- TIPO DE EVENTO\n    tipo_accion       TEXT     NOT NULL,\n    -- Valores permitidos:\n    -- CARGA              → pd.read_csv(), pd.read_excel()\n    -- CONSULTA           → df[], df.query()\n    -- TRANSFORMACION     → dropna(), fillna(), drop(), rename(), apply(), merge()\n    -- EXPORTACION        → to_csv(), to_excel(), to_json(), to_parquet()\n    -- MODELADO           → model.fit()\n    -- MODELADO_FALLIDO   → error durante entrenamiento\n    -- ACCESO_FALLIDO     → PermissionError, FileNotFoundError\n    -- INICIO_SESION      → import audit_tracer\n    -- CIERRE_SESION      → fin normal de script/kernel\n    -- SESION_INTERRUMPIDA → cierre abrupto del kernel\n    -- CAMBIO_ROL         → asignación/modificación de rol\n    -- CREACION_USUARIO   → registro de nuevo usuario\n    -- ACCESO_DENEGADO    → intento sin permisos\n\n    -- CONTEXTO DEL DATO AFECTADO\n    dataset_nombre    TEXT,\n    -- Nombre del archivo o dataset sobre el que se operó.\n    -- Ejemplo: 'PATIENTS.csv', 'admissions_clean.csv'\n\n    columnas_afectadas TEXT,\n    -- Lista de columnas involucradas (JSON array o string separado por comas).\n    -- Ejemplo: '[\"subject_id\", \"diagnosis\", \"age\"]'\n\n    ruta_destino      TEXT,\n    -- Ruta del archivo de destino en operaciones de exportación.\n    -- Ejemplo: '/outputs/resultados_modelo.csv'\n\n    filas_exportadas  INTEGER,\n    -- Número de filas incluidas en una exportación (tipo_accion = EXPORTACION).\n    -- Exigido por HU-2.3 CA2.\n\n    sobrescritura     INTEGER,\n    -- Indicador de sobrescritura de archivo en exportaciones (0/1).\n    -- 1 = el archivo de destino ya existía y fue sobreescrito.\n    -- Exigido por HU-2.3 CA3.\n\n    -- CONTEXTO DE EJECUCIÓN\n    contexto_ejecucion TEXT,\n    -- Nombre del script o notebook desde el cual se ejecutó la operación.\n    -- Ejemplo: 'analisis_readmision.ipynb', 'preprocesamiento.py'\n\n    -- INFORMACIÓN DE FALLOS Y ALERTAS\n    motivo_fallo      TEXT,\n    -- Causa del fallo en eventos ACCESO_FALLIDO o MODELADO_FALLIDO.\n    -- Ejemplo: 'PermissionError', 'FileNotFoundError', 'usuario no autorizado'\n\n    nivel_alerta      TEXT     DEFAULT 'NORMAL',\n    -- Clasificación de severidad del evento.\n    -- Valores: 'NORMAL', 'ADVERTENCIA', 'CRITICO'\n    -- CRITICO: >3 intentos fallidos en <5 min, exportaciones masivas >1000 filas\n\n    motivo_alerta     TEXT,\n    -- Descripción de la causa de clasificación crítica.\n    -- Ejemplo: '3 intentos fallidos en 4 minutos'\n\n    -- INTEGRIDAD DEL REGISTRO\n    hash_integridad   TEXT     NOT NULL,\n    -- Hash SHA-256 calculado sobre los campos del evento.\n    -- Permite detectar alteraciones posteriores al registro.\n    -- Exigido por HIPAA §164.312(c)(1)\n\n    firma_digital     TEXT\n    -- HU-6.1 CA4: Firma digital Ed25519 generada por la llave privada del usuario.\n    -- Base64url sin padding, ~86 caracteres. Almacenada para verificación forense.\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "event_id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "evento_uuid",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "sesion_id",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "timestamp",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "tipo_accion",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "dataset_nombre",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 7,
+      "nombre": "columnas_afectadas",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 8,
+      "nombre": "ruta_destino",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 9,
+      "nombre": "filas_exportadas",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 10,
+      "nombre": "sobrescritura",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 11,
+      "nombre": "contexto_ejecucion",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 12,
+      "nombre": "motivo_fallo",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 13,
+      "nombre": "nivel_alerta",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": "'NORMAL'",
+      "pk": 0
+     },
+     {
+      "cid": 14,
+      "nombre": "motivo_alerta",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 15,
+      "nombre": "hash_integridad",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 16,
+      "nombre": "firma_digital",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [],
+    "indices": [
+     {
+      "nombre": "idx_audit_evento_uuid",
+      "sql": "CREATE INDEX idx_audit_evento_uuid\n    ON audit_log(evento_uuid)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_audit_nivel_alerta",
+      "sql": "CREATE INDEX idx_audit_nivel_alerta\n    ON audit_log(nivel_alerta)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_audit_sesion",
+      "sql": "CREATE INDEX idx_audit_sesion\n    ON audit_log(sesion_id)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_audit_timestamp",
+      "sql": "CREATE INDEX idx_audit_timestamp\n    ON audit_log(timestamp)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_audit_tipo_accion",
+      "sql": "CREATE INDEX idx_audit_tipo_accion\n    ON audit_log(tipo_accion)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_audit_usuario",
+      "sql": "CREATE INDEX idx_audit_usuario\n    ON audit_log(usuario_id)",
+      "unico": false
+     }
+    ],
+    "disparadores": [
+     {
+      "nombre": "trg_audit_log_no_delete",
+      "sql": "CREATE TRIGGER trg_audit_log_no_delete\nBEFORE DELETE ON audit_log\nBEGIN\n    INSERT INTO audit_intentos_bloqueados (\n        tipo_intento, event_id_objetivo, usuario_id, sesion_id, motivo_alerta\n    )\n    VALUES (\n        'INTENTO_ELIMINACION',\n        OLD.event_id,\n        COALESCE(OLD.usuario_id, 'DESCONOCIDO'),\n        COALESCE(OLD.sesion_id, 'SISTEMA'),\n        'Intento de DELETE sobre event_id=' || OLD.event_id || ' bloqueado por trigger de inmutabilidad.'\n    );\n    SELECT RAISE(FAIL, 'INMUTABILIDAD: No se permite eliminar registros de auditoría.');\nEND"
+     },
+     {
+      "nombre": "trg_audit_log_no_update",
+      "sql": "CREATE TRIGGER trg_audit_log_no_update\nBEFORE UPDATE ON audit_log\nBEGIN\n    INSERT INTO audit_intentos_bloqueados (\n        tipo_intento, event_id_objetivo, usuario_id, sesion_id, motivo_alerta\n    )\n    VALUES (\n        'INTENTO_MODIFICACION',\n        OLD.event_id,\n        COALESCE(OLD.usuario_id, 'DESCONOCIDO'),\n        COALESCE(OLD.sesion_id, 'SISTEMA'),\n        'Intento de UPDATE sobre event_id=' || OLD.event_id || ' bloqueado por trigger de inmutabilidad.'\n    );\n    SELECT RAISE(FAIL, 'INMUTABILIDAD: No se permite modificar registros de auditoría.');\nEND"
+     }
+    ]
+   },
+   "audit_sync_queue": {
+    "sql": "CREATE TABLE audit_sync_queue (\n\n    event_id        INTEGER PRIMARY KEY REFERENCES audit_log(event_id),\n    -- Mismo event_id de la fila local que representa. Uno a uno.\n\n    evento_uuid     TEXT    NOT NULL UNIQUE,\n    -- Copia de audit_log.evento_uuid: identificador estable enviado al\n    -- servidor central en cada intento, nunca regenerado entre reintentos.\n\n    estado          TEXT    NOT NULL DEFAULT 'PENDIENTE',\n    -- 'PENDIENTE' | 'SINCRONIZADO' | 'FALLIDO'\n\n    intentos        INTEGER NOT NULL DEFAULT 0,\n    -- Número de intentos de envío realizados hasta ahora.\n\n    ultimo_intento  TEXT,\n    -- Timestamp ISO 8601 del último intento de envío (exitoso o no).\n\n    ultimo_error    TEXT,\n    -- Motivo del último fallo (sin datos sensibles: nunca el token).\n\n    sincronizado_en TEXT\n    -- Timestamp ISO 8601 de la confirmación positiva del servidor central.\n\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "event_id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "evento_uuid",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "estado",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'PENDIENTE'",
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "intentos",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "0",
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "ultimo_intento",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "ultimo_error",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "sincronizado_en",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [
+     {
+      "id": 0,
+      "seq": 0,
+      "tabla": "audit_log",
+      "desde": "event_id",
+      "hacia": "event_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     }
+    ],
+    "indices": [
+     {
+      "nombre": "idx_sync_queue_estado",
+      "sql": "CREATE INDEX idx_sync_queue_estado\n    ON audit_sync_queue(estado)",
+      "unico": false
+     }
+    ],
+    "disparadores": []
+   },
+   "tokens_acceso": {
+    "sql": "CREATE TABLE tokens_acceso (\n\n    token_id          TEXT     PRIMARY KEY,\n    -- Identificador único del token (UUID).\n\n    usuario_id        TEXT     NOT NULL,\n    -- ID del usuario propietario del token.\n    \n    token             TEXT     NOT NULL UNIQUE,\n    -- Token criptográficamente seguro (ej. tk_...).\n\n    fecha_creacion    TEXT     NOT NULL,\n    -- Fecha y hora de creación en formato ISO 8601 UTC.\n\n    fecha_expiracion  TEXT     NOT NULL,\n    -- Fecha y hora de expiración en formato ISO 8601 UTC (por defecto +30 días).\n\n    estado            TEXT     NOT NULL DEFAULT 'ACTIVO',\n    -- Estado del token: 'ACTIVO', 'REVOCADO', 'EXPIRADO'.\n\n    creado_por        TEXT     NOT NULL DEFAULT 'LOGIN',\n    -- Origen o actor de generación: 'LOGIN', 'ADMIN', 'SISTEMA', etc.\n\n    FOREIGN KEY (usuario_id) REFERENCES usuarios(usuario_id)\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "token_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "token",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "fecha_creacion",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "fecha_expiracion",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "estado",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'ACTIVO'",
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "creado_por",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'LOGIN'",
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [
+     {
+      "id": 0,
+      "seq": 0,
+      "tabla": "usuarios",
+      "desde": "usuario_id",
+      "hacia": "usuario_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     }
+    ],
+    "indices": [
+     {
+      "nombre": "idx_tokens_estado",
+      "sql": "CREATE INDEX idx_tokens_estado ON tokens_acceso(estado)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_tokens_token",
+      "sql": "CREATE INDEX idx_tokens_token ON tokens_acceso(token)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_tokens_usuario",
+      "sql": "CREATE INDEX idx_tokens_usuario ON tokens_acceso(usuario_id)",
+      "unico": false
+     }
+    ],
+    "disparadores": []
+   },
+   "usuarios": {
+    "sql": "CREATE TABLE usuarios (\n\n    usuario_id        TEXT     PRIMARY KEY,\n    -- ID único del usuario. Generado con UUID.\n\n    email             TEXT     NOT NULL UNIQUE,\n    -- Correo electrónico del usuario. No puede repetirse.\n\n    password_hash     TEXT     NOT NULL,\n    -- Contraseña almacenada con hash bcrypt. Nunca en texto plano.\n\n    rol               TEXT     NOT NULL,\n    -- Roles válidos: 'ADMIN', 'ANALISTA', 'AUDITOR', 'CIENTIFICO_DATOS'\n\n    activo            INTEGER  NOT NULL DEFAULT 1,\n    -- 1 = activo, 0 = inactivo/bloqueado\n\n    intentos_fallidos INTEGER  NOT NULL DEFAULT 0,\n    -- Contador de intentos fallidos consecutivos.\n    -- Al llegar a 5 se bloquea la cuenta 15 minutos.\n\n    llave_publica     TEXT\n    -- HU-6.1 CA1/CA3: PEM Ed25519 SubjectPublicKeyInfo del usuario.\n    -- Null hasta que el usuario se autentique con la libreria actualizada.\n\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "email",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "password_hash",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "rol",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "activo",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "1",
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "intentos_fallidos",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "0",
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "llave_publica",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [],
+    "indices": [],
+    "disparadores": []
+   }
+  },
+  "journal_mode": "wal"
+ },
+ "central": {
+  "tablas": {
+   "alertas_destinatarios": {
+    "sql": "CREATE TABLE alertas_destinatarios (\n            destinatario_id   INTEGER PRIMARY KEY AUTOINCREMENT,\n            tipo_destino      TEXT    NOT NULL CHECK (tipo_destino IN ('ROL', 'EMAIL')),\n            valor             TEXT    NOT NULL,\n            severidad_minima  TEXT    NOT NULL DEFAULT 'MEDIA'\n                              CHECK (severidad_minima IN ('MEDIA', 'ALTA', 'CRITICA')),\n            tipos_evento      TEXT,   -- CSV de códigos del catálogo; NULL = todos\n            activo            INTEGER NOT NULL DEFAULT 1,\n            creado_por        TEXT    NOT NULL DEFAULT 'SISTEMA',\n            creado_en         TEXT    NOT NULL,\n            actualizado_en    TEXT,\n            UNIQUE (tipo_destino, valor)\n        )",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "destinatario_id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "tipo_destino",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "valor",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "severidad_minima",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'MEDIA'",
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "tipos_evento",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "activo",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "1",
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "creado_por",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'SISTEMA'",
+      "pk": 0
+     },
+     {
+      "cid": 7,
+      "nombre": "creado_en",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 8,
+      "nombre": "actualizado_en",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [],
+    "indices": [],
+    "disparadores": []
+   },
+   "alertas_notificaciones": {
+    "sql": "CREATE TABLE alertas_notificaciones (\n            notificacion_id   INTEGER PRIMARY KEY AUTOINCREMENT,\n            event_id          INTEGER NOT NULL UNIQUE,\n            evento_uuid       TEXT,\n            usuario_id        TEXT,\n            tipo_accion       TEXT,\n            tipos_criticos    TEXT    NOT NULL,  -- CSV de códigos del catálogo\n            severidad         TEXT    NOT NULL,\n            destinatarios     TEXT,              -- CSV de correos\n            estado            TEXT    NOT NULL DEFAULT 'PENDIENTE',\n            intentos          INTEGER NOT NULL DEFAULT 0,\n            error             TEXT,\n            creado_en         TEXT    NOT NULL,\n            enviado_en        TEXT\n        )",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "notificacion_id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "event_id",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "evento_uuid",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "tipo_accion",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "tipos_criticos",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "severidad",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 7,
+      "nombre": "destinatarios",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 8,
+      "nombre": "estado",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'PENDIENTE'",
+      "pk": 0
+     },
+     {
+      "cid": 9,
+      "nombre": "intentos",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "0",
+      "pk": 0
+     },
+     {
+      "cid": 10,
+      "nombre": "error",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 11,
+      "nombre": "creado_en",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 12,
+      "nombre": "enviado_en",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [],
+    "indices": [
+     {
+      "nombre": "idx_alertas_notif_usuario",
+      "sql": "CREATE INDEX idx_alertas_notif_usuario ON alertas_notificaciones(usuario_id, creado_en)",
+      "unico": false
+     }
+    ],
+    "disparadores": []
+   },
+   "audit_alert_history": {
+    "sql": "CREATE TABLE audit_alert_history (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    event_id INTEGER NOT NULL REFERENCES audit_log(event_id),\n    autor_id TEXT NOT NULL REFERENCES usuarios(usuario_id),\n    fecha TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now')),\n    estado TEXT NOT NULL,\n    responsable_id TEXT REFERENCES usuarios(usuario_id),\n    comentario TEXT NOT NULL DEFAULT ''\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "event_id",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "autor_id",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "fecha",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "strftime('%Y-%m-%dT%H:%M:%f', 'now')",
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "estado",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "responsable_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "comentario",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "''",
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [
+     {
+      "id": 0,
+      "seq": 0,
+      "tabla": "usuarios",
+      "desde": "responsable_id",
+      "hacia": "usuario_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     },
+     {
+      "id": 1,
+      "seq": 0,
+      "tabla": "usuarios",
+      "desde": "autor_id",
+      "hacia": "usuario_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     },
+     {
+      "id": 2,
+      "seq": 0,
+      "tabla": "audit_log",
+      "desde": "event_id",
+      "hacia": "event_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     }
+    ],
+    "indices": [
+     {
+      "nombre": "idx_alert_history_event",
+      "sql": "CREATE INDEX idx_alert_history_event ON audit_alert_history(event_id, id DESC)",
+      "unico": false
+     }
+    ],
+    "disparadores": []
+   },
+   "audit_alert_reviews": {
+    "sql": "CREATE TABLE audit_alert_reviews (\n    event_id INTEGER PRIMARY KEY REFERENCES audit_log(event_id),\n    estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE', 'EN_REVISION', 'RESUELTA')),\n    responsable_id TEXT REFERENCES usuarios(usuario_id),\n    version INTEGER NOT NULL DEFAULT 0\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "event_id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "estado",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'PENDIENTE'",
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "responsable_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "version",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "0",
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [
+     {
+      "id": 0,
+      "seq": 0,
+      "tabla": "usuarios",
+      "desde": "responsable_id",
+      "hacia": "usuario_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     },
+     {
+      "id": 1,
+      "seq": 0,
+      "tabla": "audit_log",
+      "desde": "event_id",
+      "hacia": "event_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     }
+    ],
+    "indices": [],
+    "disparadores": []
+   },
+   "audit_intentos_bloqueados": {
+    "sql": "CREATE TABLE audit_intentos_bloqueados (\n    intento_id        INTEGER  PRIMARY KEY AUTOINCREMENT,\n    timestamp         TEXT     NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now')),\n    tipo_intento      TEXT     NOT NULL,   -- 'INTENTO_MODIFICACION' | 'INTENTO_ELIMINACION'\n    event_id_objetivo INTEGER  NOT NULL,\n    usuario_id        TEXT,\n    sesion_id         TEXT,\n    nivel_alerta      TEXT     NOT NULL DEFAULT 'CRITICO',\n    motivo_alerta     TEXT\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "intento_id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "timestamp",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "strftime('%Y-%m-%dT%H:%M:%f', 'now')",
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "tipo_intento",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "event_id_objetivo",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "sesion_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "nivel_alerta",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'CRITICO'",
+      "pk": 0
+     },
+     {
+      "cid": 7,
+      "nombre": "motivo_alerta",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [],
+    "indices": [],
+    "disparadores": []
+   },
+   "audit_log": {
+    "sql": "CREATE TABLE audit_log (\n\n    -- IDENTIFICADOR ÚNICO DEL EVENTO (en esta base)\n    event_id          INTEGER  PRIMARY KEY AUTOINCREMENT,\n    -- Autoincremental y único solo dentro de ESTA base. No sirve como\n    -- clave de deduplicación entre orígenes distintos — para eso existe\n    -- evento_uuid.\n\n    -- IDENTIFICADOR ÚNICO GLOBAL DEL EVENTO (HU-5.4 CA1)\n    evento_uuid       TEXT     UNIQUE NOT NULL,\n    -- UUID4 generado en Python al construir el evento (mismo valor si el\n    -- evento también se escribió en la base local — ver insert_event_dual()).\n    -- Permite que HU-5.8 reintente una sincronización fallida sin crear\n    -- eventos duplicados en la central (idempotencia).\n\n    -- IDENTIFICACIÓN DEL ACTOR\n    usuario_id        TEXT     NOT NULL,\n    -- ID único del usuario que ejecutó la acción.\n    -- Si no es identificable: 'DESCONOCIDO'.\n    -- Con múltiples orígenes consolidados en una sola tabla, este campo\n    -- es lo que permite trazar el usuario emisor de cada evento (HU-5.4 CA1).\n    -- Exigido por HIPAA §164.312(b)\n\n    sesion_id         TEXT     NOT NULL,\n    -- UUID único por sesión de trabajo.\n    -- Vincula todos los eventos de una misma ejecución.\n\n    -- TEMPORALIDAD\n    timestamp         TEXT     NOT NULL,\n    -- Fecha y hora en formato ISO 8601: 'YYYY-MM-DDTHH:MM:SS.ffffff'\n    -- Exigido por HIPAA §164.312(b)\n\n    -- TIPO DE EVENTO\n    tipo_accion       TEXT     NOT NULL,\n    -- Mismos valores que en el audit_log local: CARGA, CONSULTA,\n    -- TRANSFORMACION, EXPORTACION, MODELADO, MODELADO_FALLIDO,\n    -- ACCESO_FALLIDO, INICIO_SESION, CIERRE_SESION, SESION_INTERRUMPIDA,\n    -- CAMBIO_ROL/MODIFICACION_ROL, CREACION_USUARIO, ACCESO_DENEGADO,\n    -- INTENTO_MODIFICACION, INTENTO_ELIMINACION.\n\n    -- CONTEXTO DEL DATO AFECTADO\n    dataset_nombre    TEXT,\n    columnas_afectadas TEXT,\n    ruta_destino      TEXT,\n\n    filas_exportadas  INTEGER,\n    -- Número de filas incluidas en una exportación (HU-2.3 CA2).\n\n    sobrescritura     INTEGER,\n    -- Indicador de sobrescritura de archivo en exportaciones (0/1) (HU-2.3 CA3).\n\n    -- CONTEXTO DE EJECUCIÓN\n    contexto_ejecucion TEXT,\n\n    -- INFORMACIÓN DE FALLOS Y ALERTAS\n    motivo_fallo      TEXT,\n\n    nivel_alerta      TEXT     DEFAULT 'NORMAL',\n    -- Valores: 'NORMAL', 'ADVERTENCIA', 'CRITICO'\n\n    motivo_alerta     TEXT,\n\n    -- INTEGRIDAD DEL REGISTRO (HU-5.4 CA3 — mismo mecanismo que el local)\n    hash_integridad   TEXT     NOT NULL,\n    -- SHA-256 calculado en Python (hash_event()) sobre los 13 campos\n    -- funcionales. evento_uuid y event_id quedan fuera del cálculo,\n    -- igual que en el audit_log local — así el hash de un evento es\n    -- idéntico sin importar en qué base se calculó o insertó.\n\n    firma_digital     TEXT\n    -- HU-6.1 CA4: Firma digital Ed25519 generada por la llave privada del usuario.\n    -- Base64url sin padding, ~86 caracteres. Almacenada para verificación forense.\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "event_id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "evento_uuid",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "sesion_id",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "timestamp",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "tipo_accion",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "dataset_nombre",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 7,
+      "nombre": "columnas_afectadas",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 8,
+      "nombre": "ruta_destino",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 9,
+      "nombre": "filas_exportadas",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 10,
+      "nombre": "sobrescritura",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 11,
+      "nombre": "contexto_ejecucion",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 12,
+      "nombre": "motivo_fallo",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 13,
+      "nombre": "nivel_alerta",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": "'NORMAL'",
+      "pk": 0
+     },
+     {
+      "cid": 14,
+      "nombre": "motivo_alerta",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 15,
+      "nombre": "hash_integridad",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 16,
+      "nombre": "firma_digital",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [],
+    "indices": [
+     {
+      "nombre": "idx_audit_evento_uuid",
+      "sql": "CREATE INDEX idx_audit_evento_uuid\n    ON audit_log(evento_uuid)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_audit_nivel_alerta",
+      "sql": "CREATE INDEX idx_audit_nivel_alerta\n    ON audit_log(nivel_alerta)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_audit_sesion",
+      "sql": "CREATE INDEX idx_audit_sesion\n    ON audit_log(sesion_id)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_audit_timestamp",
+      "sql": "CREATE INDEX idx_audit_timestamp\n    ON audit_log(timestamp)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_audit_tipo_accion",
+      "sql": "CREATE INDEX idx_audit_tipo_accion\n    ON audit_log(tipo_accion)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_audit_usuario",
+      "sql": "CREATE INDEX idx_audit_usuario\n    ON audit_log(usuario_id)",
+      "unico": false
+     }
+    ],
+    "disparadores": [
+     {
+      "nombre": "trg_audit_log_no_delete",
+      "sql": "CREATE TRIGGER trg_audit_log_no_delete\nBEFORE DELETE ON audit_log\nBEGIN\n    INSERT INTO audit_intentos_bloqueados (\n        tipo_intento, event_id_objetivo, usuario_id, sesion_id, motivo_alerta\n    )\n    VALUES (\n        'INTENTO_ELIMINACION',\n        OLD.event_id,\n        COALESCE(OLD.usuario_id, 'DESCONOCIDO'),\n        COALESCE(OLD.sesion_id, 'SISTEMA'),\n        'Intento de DELETE sobre event_id=' || OLD.event_id || ' bloqueado por trigger de inmutabilidad.'\n    );\n    SELECT RAISE(FAIL, 'INMUTABILIDAD: No se permite eliminar registros de auditoría.');\nEND"
+     },
+     {
+      "nombre": "trg_audit_log_no_update",
+      "sql": "CREATE TRIGGER trg_audit_log_no_update\nBEFORE UPDATE ON audit_log\nBEGIN\n    INSERT INTO audit_intentos_bloqueados (\n        tipo_intento, event_id_objetivo, usuario_id, sesion_id, motivo_alerta\n    )\n    VALUES (\n        'INTENTO_MODIFICACION',\n        OLD.event_id,\n        COALESCE(OLD.usuario_id, 'DESCONOCIDO'),\n        COALESCE(OLD.sesion_id, 'SISTEMA'),\n        'Intento de UPDATE sobre event_id=' || OLD.event_id || ' bloqueado por trigger de inmutabilidad.'\n    );\n    SELECT RAISE(FAIL, 'INMUTABILIDAD: No se permite modificar registros de auditoría.');\nEND"
+     }
+    ]
+   },
+   "audit_notification_settings": {
+    "sql": "CREATE TABLE audit_notification_settings (\n    usuario_id TEXT PRIMARY KEY REFERENCES usuarios(usuario_id),\n    en_panel INTEGER NOT NULL DEFAULT 1,\n    por_correo INTEGER NOT NULL DEFAULT 0,\n    leido_hasta INTEGER NOT NULL DEFAULT 0,\n    correo_hasta INTEGER NOT NULL DEFAULT 0,\n    correo_reserva TEXT,\n    correo_reserva_hasta INTEGER NOT NULL DEFAULT 0\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "en_panel",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "1",
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "por_correo",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "0",
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "leido_hasta",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "0",
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "correo_hasta",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "0",
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "correo_reserva",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "correo_reserva_hasta",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "0",
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [
+     {
+      "id": 0,
+      "seq": 0,
+      "tabla": "usuarios",
+      "desde": "usuario_id",
+      "hacia": "usuario_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     }
+    ],
+    "indices": [],
+    "disparadores": []
+   },
+   "audit_saved_filters": {
+    "sql": "CREATE TABLE audit_saved_filters (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    usuario_id TEXT NOT NULL REFERENCES usuarios(usuario_id),\n    nombre TEXT NOT NULL,\n    filtros TEXT NOT NULL,\n    UNIQUE (usuario_id, nombre COLLATE NOCASE)\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "nombre",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "filtros",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [
+     {
+      "id": 0,
+      "seq": 0,
+      "tabla": "usuarios",
+      "desde": "usuario_id",
+      "hacia": "usuario_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     }
+    ],
+    "indices": [],
+    "disparadores": []
+   },
+   "codigos_dispositivo": {
+    "sql": "CREATE TABLE codigos_dispositivo (\n            codigo            TEXT     PRIMARY KEY,\n            device_code       TEXT     NOT NULL UNIQUE,\n            estado            TEXT     NOT NULL DEFAULT 'PENDIENTE',\n            usuario_id        TEXT,\n            token             TEXT,\n            fecha_creacion    TEXT     NOT NULL,\n            fecha_expiracion  TEXT     NOT NULL\n        )",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "codigo",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "device_code",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "estado",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'PENDIENTE'",
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "token",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "fecha_creacion",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "fecha_expiracion",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [],
+    "indices": [
+     {
+      "nombre": "idx_codigos_device_code",
+      "sql": "CREATE INDEX idx_codigos_device_code ON codigos_dispositivo(device_code)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_codigos_estado",
+      "sql": "CREATE INDEX idx_codigos_estado ON codigos_dispositivo(estado)",
+      "unico": false
+     }
+    ],
+    "disparadores": []
+   },
+   "tokens_acceso": {
+    "sql": "CREATE TABLE tokens_acceso (\n\n    token_id          TEXT     PRIMARY KEY,\n    -- Identificador único del token (UUID).\n\n    usuario_id        TEXT     NOT NULL,\n    -- ID del usuario propietario del token.\n    \n    token             TEXT     NOT NULL UNIQUE,\n    -- Token criptográficamente seguro (ej. tk_...).\n\n    fecha_creacion    TEXT     NOT NULL,\n    -- Fecha y hora de creación en formato ISO 8601 UTC.\n\n    fecha_expiracion  TEXT     NOT NULL,\n    -- Fecha y hora de expiración en formato ISO 8601 UTC (por defecto +30 días).\n\n    estado            TEXT     NOT NULL DEFAULT 'ACTIVO',\n    -- Estado del token: 'ACTIVO', 'REVOCADO', 'EXPIRADO'.\n\n    creado_por        TEXT     NOT NULL DEFAULT 'LOGIN',\n    -- Origen o actor de generación: 'LOGIN', 'ADMIN', 'SISTEMA', etc.\n\n    FOREIGN KEY (usuario_id) REFERENCES usuarios(usuario_id)\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "token_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "token",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "fecha_creacion",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "fecha_expiracion",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "estado",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'ACTIVO'",
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "creado_por",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": "'LOGIN'",
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [
+     {
+      "id": 0,
+      "seq": 0,
+      "tabla": "usuarios",
+      "desde": "usuario_id",
+      "hacia": "usuario_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     }
+    ],
+    "indices": [
+     {
+      "nombre": "idx_tokens_estado",
+      "sql": "CREATE INDEX idx_tokens_estado ON tokens_acceso(estado)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_tokens_token",
+      "sql": "CREATE INDEX idx_tokens_token ON tokens_acceso(token)",
+      "unico": false
+     },
+     {
+      "nombre": "idx_tokens_usuario",
+      "sql": "CREATE INDEX idx_tokens_usuario ON tokens_acceso(usuario_id)",
+      "unico": false
+     }
+    ],
+    "disparadores": []
+   },
+   "usuarios": {
+    "sql": "CREATE TABLE usuarios (\n\n    usuario_id        TEXT     PRIMARY KEY,\n    -- ID único del usuario. Generado con UUID.\n\n    email             TEXT     NOT NULL UNIQUE,\n    -- Correo electrónico del usuario. No puede repetirse.\n\n    password_hash     TEXT     NOT NULL,\n    -- Contraseña almacenada con hash bcrypt. Nunca en texto plano.\n\n    rol               TEXT     NOT NULL,\n    -- Roles válidos: 'ADMIN', 'ANALISTA', 'AUDITOR', 'CIENTIFICO_DATOS'\n\n    activo            INTEGER  NOT NULL DEFAULT 1,\n    -- 1 = activo, 0 = inactivo/bloqueado\n\n    intentos_fallidos INTEGER  NOT NULL DEFAULT 0,\n    -- Contador de intentos fallidos consecutivos.\n    -- Al llegar a 5 se bloquea la cuenta 15 minutos.\n\n    llave_publica     TEXT\n    -- HU-6.1 CA1/CA3: PEM Ed25519 SubjectPublicKeyInfo del usuario.\n    -- Null hasta que el usuario se autentique con la libreria actualizada.\n\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "email",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "password_hash",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "rol",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "activo",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "1",
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "intentos_fallidos",
+      "tipo": "INTEGER",
+      "notnull": 1,
+      "default": "0",
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "llave_publica",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [],
+    "indices": [],
+    "disparadores": []
+   }
+  },
+  "journal_mode": "wal"
+ }
+}

@@ -1,0 +1,83 @@
+{
+ "usuarios": {
+  "usuario_id": "d6e3a74b-a010-4feb-a4f3-ec8b1a5d4523",
+  "email": "admin@mimic.validacion",
+  "password_hash": "$2b$12$hl1j8… (60 caracteres, enmascarado)",
+  "rol": "ADMIN",
+  "activo": 1,
+  "intentos_fallidos": 0,
+  "llave_publica": null
+ },
+ "audit_log": {
+  "event_id": 53,
+  "evento_uuid": "574f2f07-cc5a-409c-8bc8-eb89c17e4aff",
+  "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+  "sesion_id": "cc487f74-ced4-4f46-af57-d64b6eb2b678",
+  "timestamp": "2026-11-21T08:10:01.015000",
+  "tipo_accion": "EXPORTACION",
+  "dataset_nombre": "LABEVENTS.csv",
+  "columnas_afectadas": null,
+  "ruta_destino": "C:\\Users\\alexd\\AppData\\Local\\Temp\\validacion_mimic_uupohp3n\\salidas_caso2\\extraccion_laboratorio_completa.csv",
+  "filas_exportadas": 76074,
+  "sobrescritura": 0,
+  "contexto_ejecucion": "Script: caso2_exportacion_masiva.py | Env: Script (.py) | Host: AlexComputer | Formato: CSV",
+  "motivo_fallo": null,
+  "nivel_alerta": "CRITICO",
+  "motivo_alerta": "Exportación masiva: 76074 filas (> 1000)",
+  "hash_integridad": "1dc8b6815cbffa7b5824639090ae01f9334ed79e6e35acc4b58b2948828289f8",
+  "firma_digital": "ZCOr-NyZfOJ0… (86 caracteres, enmascarado)"
+ },
+ "tokens_acceso": {
+  "token_id": "84f08f3c-cd30-403c-9056-463741f6aa61",
+  "usuario_id": "d6e3a74b-a010-4feb-a4f3-ec8b1a5d4523",
+  "token": "tk_IuXMM5yE7… (46 caracteres, enmascarado)",
+  "fecha_creacion": "2026-11-21T18:23:30.289738",
+  "fecha_expiracion": "2026-11-21T19:23:30.288373",
+  "estado": "ACTIVO",
+  "creado_por": "LOGIN"
+ },
+ "alertas_destinatarios": {
+  "destinatario_id": 1,
+  "tipo_destino": "ROL",
+  "valor": "AUDITOR",
+  "severidad_minima": "MEDIA",
+  "tipos_evento": null,
+  "activo": 1,
+  "creado_por": "SISTEMA",
+  "creado_en": "2026-11-21T18:23:30.364172",
+  "actualizado_en": null
+ },
+ "alertas_notificaciones": {
+  "notificacion_id": 1,
+  "event_id": 27,
+  "evento_uuid": "8219a0b4-dc83-4fea-8bda-02818c8fed09",
+  "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+  "tipo_accion": "EXPORTACION",
+  "tipos_criticos": "EXPORTACION_MASIVA",
+  "severidad": "ALTA",
+  "destinatarios": "admin@mimic.validacion,auditor@mimic.validacion,oficial.cumplimiento@mimic.validacion",
+  "estado": "ENVIADA",
+  "intentos": 1,
+  "error": null,
+  "creado_en": "2026-11-21T18:23:45.555350",
+  "enviado_en": "2026-11-21T18:23:45.601643"
+ },
+ "codigos_dispositivo": {
+  "codigo": "CTE5-HDNZ",
+  "device_code": "59s8HMP8C0q9… (43 caracteres, enmascarado)",
+  "estado": "CONSUMIDO",
+  "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
+  "token": null,
+  "fecha_creacion": "2026-11-21T18:23:34.979387",
+  "fecha_expiracion": "2026-11-21T18:33:34.960217"
+ },
+ "audit_sync_queue": {
+  "event_id": 1,
+  "evento_uuid": "fe27909d-5f2d-449b-908b-d7ab6ced972c",
+  "estado": "SINCRONIZADO",
+  "intentos": 1,
+  "ultimo_intento": "2026-11-21T15:00:00.329000",
+  "ultimo_error": null,
+  "sincronizado_en": "2026-11-21T15:00:00.329000"
+ }
+}
