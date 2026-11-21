@@ -485,6 +485,7 @@ def verify_integrity(conn: sqlite3.Connection) -> List[Dict]:
 REPORT_CSV_COLUMNS = [
     'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
     'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+    'sesion_id', 'contexto_ejecucion', 'hash_integridad',   # trazabilidad de cada evento (21/11/2026)
     'referencia_normativa',
 ]
 

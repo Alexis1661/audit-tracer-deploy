@@ -561,8 +561,18 @@ class TestGenerateReport:
         assert REPORT_CSV_COLUMNS == [
             'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
             'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+            'sesion_id', 'contexto_ejecucion', 'hash_integridad',  # sesión, origen y huella del evento
             'referencia_normativa',  # HU-7.3 CA2
         ]
+
+    def test_el_reporte_trae_sesion_origen_y_hash_de_cada_evento(self, eventos_reporte):
+        fila = generate_report(eventos_reporte, usuario_id='usuario123')[0]
+        evento = eventos_reporte.execute(
+            "SELECT sesion_id, contexto_ejecucion, hash_integridad FROM audit_log WHERE event_id = ?",
+            (fila['event_id'],)).fetchone()
+        assert fila['sesion_id'] == evento[0] == 's1'
+        assert fila['contexto_ejecucion'] == evento[1]
+        assert fila['hash_integridad'] == evento[2] and len(fila['hash_integridad']) == 64
 
 
 class TestExportReportToCsv:
@@ -583,7 +593,7 @@ class TestExportReportToCsv:
         return db_conn
 
     # ── Test 7: CSV ───────────────────────────────────────────────
-    def test_csv_tiene_cabecera_correcta_y_ocho_columnas(self, eventos_reporte, tmp_path):
+    def test_csv_tiene_cabecera_correcta_y_once_columnas(self, eventos_reporte, tmp_path):
         dest = tmp_path / "reporte.csv"
         total = export_report_to_csv(eventos_reporte, str(dest))
         assert total == 2
@@ -595,9 +605,10 @@ class TestExportReportToCsv:
         assert header == [
             'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
             'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+            'sesion_id', 'contexto_ejecucion', 'hash_integridad',
             'referencia_normativa',  # HU-7.3 CA2
         ]
-        assert len(header) == 8  # 7 de HU-4.5 + referencia_normativa (HU-7.3)
+        assert len(header) == 11  # 7 de HU-4.5 + sesión, origen y hash + referencia_normativa (HU-7.3)
 
     def test_csv_respeta_orden_cronologico_y_solo_incluye_eventos_filtrados(self, eventos_reporte, tmp_path):
         dest = tmp_path / "reporte_u123.csv"
@@ -634,6 +645,7 @@ class TestExportReportToCsv:
         assert rows[0] == [
             'event_id', 'usuario_id', 'timestamp', 'tipo_accion',
             'dataset_nombre', 'columnas_afectadas', 'nivel_alerta',
+            'sesion_id', 'contexto_ejecucion', 'hash_integridad',
             'referencia_normativa',  # HU-7.3 CA2
         ]
 

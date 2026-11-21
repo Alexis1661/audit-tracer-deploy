@@ -87,6 +87,15 @@ class TestDescargaPDF:
             assert _sin_espacios(fila["timestamp"]) in texto  # mismo formato (hora Colombia)
         assert _sin_espacios(SIN_REFERENCIA_NORMATIVA) in texto  # MODELADO, igual que en el CSV
 
+    def test_incluye_sesion_origen_y_hash_como_el_csv(self, central_db):
+        client = _cliente()
+        filas = _csv(client)
+        texto = _sin_espacios(_texto_pdf(client.get("/reportes/exportar/pdf").data))
+        for fila in filas:
+            assert len(fila["hash_integridad"]) == 64 and fila["sesion_id"]
+            assert fila["hash_integridad"] in texto
+            assert _sin_espacios(fila["sesion_id"]) in texto
+
     def test_mismas_columnas_que_el_csv(self, central_db):
         client = _cliente()
         cabecera_csv = list(csv.reader(io.StringIO(client.get("/reportes/exportar").get_data(as_text=True))))[0]

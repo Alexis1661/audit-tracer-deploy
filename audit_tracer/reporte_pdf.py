@@ -34,6 +34,9 @@ ENCABEZADOS = {
     "dataset_nombre": "Dataset",
     "columnas_afectadas": "Columnas afectadas",
     "nivel_alerta": "Nivel",
+    "sesion_id": "Sesión",
+    "contexto_ejecucion": "Origen (contexto de ejecución)",
+    "hash_integridad": "Hash SHA-256",
     "referencia_normativa": "Referencia normativa",
 }
 
@@ -115,8 +118,8 @@ def construir_reporte_pdf(
 
     est_titulo = ParagraphStyle("titulo", fontName=negrita, fontSize=15, leading=19, spaceAfter=4)
     est_meta = ParagraphStyle("meta", fontName=normal, fontSize=9, leading=12)
-    est_celda = ParagraphStyle("celda", fontName=normal, fontSize=6.6, leading=8.2)
-    est_enc = ParagraphStyle("enc", fontName=negrita, fontSize=7, leading=8.6, textColor=colors.white)
+    est_celda = ParagraphStyle("celda", fontName=normal, fontSize=5.4, leading=6.6)
+    est_enc = ParagraphStyle("enc", fontName=negrita, fontSize=5.8, leading=7, textColor=colors.white)
     est_vacio = ParagraphStyle("vacio", fontName=normal, fontSize=10, leading=13, spaceBefore=8)
 
     buffer = io.BytesIO()
@@ -143,7 +146,7 @@ def construir_reporte_pdf(
     if not eventos:
         historia.append(Paragraph(t(NO_RESULTS_MESSAGE), est_vacio))
     else:
-        anchos = [12, 47, 30, 31, 34, 45, 18, 60]  # mm; suman el ancho útil de A4 horizontal
+        anchos = [9, 24, 22, 22, 22, 24, 13, 24, 30, 36, 51]  # mm; A4 horizontal (277 mm útiles)
         filas = [[Paragraph(t(ENCABEZADOS[c]), est_enc) for c in REPORT_CSV_COLUMNS]]
         for ev in eventos:
             valores = dict(ev)

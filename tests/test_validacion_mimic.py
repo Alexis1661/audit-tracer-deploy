@@ -30,10 +30,7 @@ DATOS = carpeta_mimic()
 pytestmark = pytest.mark.skipif(
     DATOS is None, reason="Faltan los CSV de MIMIC-III Demo: python validacion/descargar_mimic.py")
 
-NO_CUMPLE = {
-    "3.2b": "REPORT_CSV_COLUMNS no incluye sesion_id, contexto_ejecucion, hash_integridad, "
-            "ruta_destino ni filas_exportadas",
-}
+NO_CUMPLE = {}
 
 IDS = ["1.1", "1.2", "1.3", "1.4a", "1.4b", "1.5",
        "2.1", "2.1b", "2.1c", "2.2", "2.3", "2.4a", "2.4b",

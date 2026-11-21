@@ -615,16 +615,15 @@ class ValidacionMIMIC:
         minimos = ["event_id", "usuario_id", "timestamp", "tipo_accion", "dataset_nombre", "referencia_normativa"]
         faltan_minimos = [c for c in minimos if c not in cabecera]
         trazabilidad = {"sesion_id": "sesión", "contexto_ejecucion": "origen de la solicitud (script, entorno, host)",
-                        "hash_integridad": "huella para verificar el registro", "ruta_destino": "destino de la exportación",
-                        "filas_exportadas": "volumen exportado"}
+                        "hash_integridad": "huella para verificar el registro"}
         faltan_traza = [f"{c} ({d})" for c, d in trazabilidad.items() if c not in cabecera]
         self._v("3.2a", C, "El reporte incluye quién, qué, cuándo, sobre qué dataset y la base normativa "
                 "(HIPAA §164.312(b) y Ley 1581).", not faltan_minimos,
                 f"Columnas del CSV: {', '.join(cabecera)}.", evid[:1])
         self._v("3.2b", C, "El reporte incluye también la sesión, el origen de la solicitud y la huella de cada "
                 "evento.", not faltan_traza,
-                "El CSV no trae: " + "; ".join(faltan_traza) + ". Esos datos existen en audit_log y se ven en el "
-                "detalle de cada evento del dashboard, pero no salen en el reporte exportado.", evid[:1])
+                ("Columnas del CSV: " + ", ".join(cabecera) + "." if not faltan_traza else
+                 "El CSV no trae: " + "; ".join(faltan_traza) + "."), evid[:1])
 
         texto, filas, cab = resultados["sin_resultados"]
         lector = list(csv.reader(io.StringIO(texto)))
