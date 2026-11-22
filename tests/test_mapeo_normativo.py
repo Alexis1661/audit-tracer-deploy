@@ -117,7 +117,7 @@ class TestCA1TablaDeMapeo:
     def test_obtener_mapeo_normaliza_mayusculas_y_espacios(self):
         assert obtener_mapeo(" exportacion ") is MAPEO_NORMATIVO["EXPORTACION"]
 
-    @pytest.mark.parametrize("tipo", [None, "", "MODELADO", "TIPO_INVENTADO"])
+    @pytest.mark.parametrize("tipo", [None, "", "ANOMALIA_DETECTADA", "TIPO_INVENTADO"])
     def test_obtener_mapeo_de_tipo_sin_referencia_es_none(self, tipo):
         assert obtener_mapeo(tipo) is None
 
@@ -140,7 +140,7 @@ class TestTextoReferencia:
         for tipo in MAPEO_NORMATIVO:
             assert "," not in referencia_normativa(tipo)
 
-    @pytest.mark.parametrize("tipo", [None, "", "MODELADO", "MODELADO_FALLIDO", "TIPO_INVENTADO"])
+    @pytest.mark.parametrize("tipo", [None, "", "ANOMALIA_DETECTADA", "CONFIGURACION_ALERTAS", "TIPO_INVENTADO"])
     def test_ca3_sin_referencia_devuelve_texto_explicito(self, tipo):
         texto = referencia_normativa(tipo)
         assert texto == SIN_REFERENCIA_NORMATIVA
@@ -162,7 +162,7 @@ class TestGeneracionReporte:
                 columnas_afectadas='["diagnostico"]')
         _evento(db_conn, "EXPORTACION", timestamp="2026-10-01T11:00:00",
                 ruta_destino="/tmp/salida.csv", filas_exportadas=120)
-        _evento(db_conn, "MODELADO", timestamp="2026-10-01T12:00:00")        # sin mapeo
+        _evento(db_conn, "ANOMALIA_DETECTADA", timestamp="2026-10-01T12:00:00")        # sin mapeo
         return db_conn
 
     def test_ca2_columna_referencia_normativa_es_parte_del_reporte(self):
@@ -186,7 +186,7 @@ class TestGeneracionReporte:
         assert "Ley 1581" in ref and articulo_ley in ref
 
     def test_ca3_evento_sin_mapeo_se_marca_explicitamente(self, eventos_dod):
-        (fila,) = generate_report(eventos_dod, tipo_accion="MODELADO")
+        (fila,) = generate_report(eventos_dod, tipo_accion="ANOMALIA_DETECTADA")
         assert fila["referencia_normativa"] == SIN_REFERENCIA_NORMATIVA
 
     def test_ninguna_fila_del_reporte_queda_sin_referencia(self, eventos_dod):
@@ -196,7 +196,7 @@ class TestGeneracionReporte:
 
     def test_mapeo_no_altera_filtros_ni_orden_de_hu_4_5(self, eventos_dod):
         reporte = generate_report(eventos_dod, fecha_inicio="2026-10-01T09:30:00")
-        assert [f["tipo_accion"] for f in reporte] == ["TRANSFORMACION", "EXPORTACION", "MODELADO"]
+        assert [f["tipo_accion"] for f in reporte] == ["TRANSFORMACION", "EXPORTACION", "ANOMALIA_DETECTADA"]
 
     def test_referencia_no_se_guarda_en_audit_log_ni_cambia_el_hash(self, eventos_dod):
         """La columna se calcula al reportar: audit_log y su hash_integridad quedan intactos."""
@@ -215,7 +215,7 @@ class TestExportacionCsv:
         _evento(db_conn, "CONSULTA", timestamp="2026-10-02T08:00:00")
         _evento(db_conn, "TRANSFORMACION", timestamp="2026-10-02T09:00:00")
         _evento(db_conn, "EXPORTACION", timestamp="2026-10-02T10:00:00")
-        _evento(db_conn, "MODELADO_FALLIDO", timestamp="2026-10-02T11:00:00")
+        _evento(db_conn, "CONFIGURACION_ALERTAS", timestamp="2026-10-02T11:00:00")
         return db_conn
 
     def test_ca2_csv_incluye_columna_y_valor_por_evento(self, eventos, tmp_path):
@@ -239,7 +239,7 @@ class TestExportacionCsv:
         buffer.seek(0)
         filas = list(csv.DictReader(buffer))
         assert all(f["referencia_normativa"].strip() for f in filas)
-        (sin_mapeo,) = [f for f in filas if f["tipo_accion"] == "MODELADO_FALLIDO"]
+        (sin_mapeo,) = [f for f in filas if f["tipo_accion"] == "CONFIGURACION_ALERTAS"]
         assert sin_mapeo["referencia_normativa"] == SIN_REFERENCIA_NORMATIVA
 
     def test_caracter_seccion_sobrevive_el_round_trip_utf8(self, eventos, tmp_path):
@@ -262,7 +262,7 @@ def central_db(tmp_path, monkeypatch):
     _evento(conn, "CONSULTA", timestamp="2026-10-03T08:00:00")
     _evento(conn, "TRANSFORMACION", timestamp="2026-10-03T09:00:00")
     _evento(conn, "EXPORTACION", timestamp="2026-10-03T10:00:00")
-    _evento(conn, "MODELADO", timestamp="2026-10-03T11:00:00")
+    _evento(conn, "ANOMALIA_DETECTADA", timestamp="2026-10-03T11:00:00")
     conn.close()
 
 
@@ -285,7 +285,7 @@ class TestRutasDashboard:
         por_tipo = {f["tipo_accion"]: f["referencia_normativa"] for f in filas}
         for tipo in ("CONSULTA", "TRANSFORMACION", "EXPORTACION"):
             assert por_tipo[tipo] == referencia_normativa(tipo)
-        assert por_tipo["MODELADO"] == SIN_REFERENCIA_NORMATIVA
+        assert por_tipo["ANOMALIA_DETECTADA"] == SIN_REFERENCIA_NORMATIVA
 
     def test_descarga_csv_respeta_filtros(self, central_db):
         resp = _cliente().get("/reportes/exportar?reporte_tipo_accion=EXPORTACION")
@@ -299,7 +299,7 @@ class TestRutasDashboard:
         assert resp.status_code == 200
         assert "Referencia Normativa" in html
         assert "HIPAA §164.312(b); §164.312(c)(1)" in html  # TRANSFORMACION
-        assert "referencia-normativa--ausente" in html       # MODELADO (CA3)
+        assert "referencia-normativa--ausente" in html       # ANOMALIA_DETECTADA (CA3)
         assert SIN_REFERENCIA_NORMATIVA in html
 
     def test_vista_sin_resultados_ocupa_las_ocho_columnas(self, central_db):

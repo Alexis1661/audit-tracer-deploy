@@ -40,6 +40,7 @@ DESC = {
         "motivo_alerta": "Explicación del nivel de alerta.",
         "hash_integridad": "SHA-256 (hex) sobre los 13 campos funcionales del evento, con claves ordenadas.",
         "firma_digital": "Firma Ed25519 (base64url) del evento con la llave del usuario. Nula en eventos generados por el servidor.",
+        "recibido_en": "Fecha UTC en que el servidor central recibió el evento, con su propio reloj (SRV-T3). Nula en la base local y en los eventos del servidor. No entra en el hash ni en la firma.",
     },
     "audit_sync_queue": {
         "event_id": "Evento de la base local pendiente de sincronizar (FK a audit_log).",
@@ -65,14 +66,26 @@ DESC = {
         "email": "Correo institucional; único.",
         "password_hash": "Contraseña con bcrypt y sal propia; nunca en claro.",
         "rol": "ADMIN, ANALISTA, AUDITOR o CIENTIFICO_DATOS.",
-        "activo": "1 activo; 0 bloqueado (5 intentos fallidos).",
+        "activo": "1 activo; 0 bloqueado (bloqueo temporal por 5 intentos fallidos, o deshabilitada por un ADMIN).",
         "intentos_fallidos": "Intentos fallidos acumulados desde el último acceso exitoso.",
-        "llave_publica": "Llave pública Ed25519 (PEM) para verificar las firmas del usuario.",
+        "llave_publica": "Última llave pública Ed25519 (PEM) registrada; el historial completo está en llaves_publicas.",
+        "bloqueado_hasta": "Fin UTC del bloqueo temporal (15 min). Nulo con activo = 0: cuenta deshabilitada por un ADMIN.",
+    },
+    "llaves_publicas": {
+        "llave_id": "Identificador de la llave.",
+        "usuario_id": "Dueño de la llave (FK a usuarios).",
+        "llave_publica": "Llave pública Ed25519 (PEM SubjectPublicKeyInfo).",
+        "huella": "Primeros 16 hex del SHA-256 del PEM; identifica la llave en el dashboard.",
+        "token_id": "Token con el que se registró (sin el valor del token).",
+        "registrada_en": "Fecha UTC de registro.",
+        "revocada_en": "Fecha UTC de revocación; nula si está activa. Una llave revocada sigue verificando los eventos anteriores.",
+        "revocada_por": "ADMIN que la revocó.",
     },
     "tokens_acceso": {
         "token_id": "Identificador del token.",
         "usuario_id": "Dueño del token (FK a usuarios).",
-        "token": "Token personal de 256 bits (se guarda en claro: brecha B3 de la matriz).",
+        "token": "SHA-256 del token personal ('sha256:<hex>'); el valor en claro solo se entrega una vez (B3 cerrada el 21/11/2026).",
+        "token_sufijo": "Últimos 4 caracteres del token, para distinguirlo en la interfaz.",
         "fecha_creacion": "Fecha UTC de emisión.",
         "fecha_expiracion": "Fecha UTC de vencimiento (30 días por defecto).",
         "estado": "ACTIVO, REVOCADO o EXPIRADO.",
@@ -80,10 +93,14 @@ DESC = {
     },
     "codigos_dispositivo": {
         "codigo": "Código corto que ve el usuario (formato XXXX-XXXX).",
-        "device_code": "Secreto largo que solo conoce el proceso de la librería; sirve para consultar el estado.",
+        "device_code": "SHA-256 del secreto largo que solo conoce el proceso de la librería (con él consulta el estado).",
         "estado": "PENDIENTE, CONFIRMADO, CONSUMIDO o EXPIRADO.",
         "usuario_id": "Usuario que confirmó el código en el dashboard.",
-        "token": "Token emitido al confirmar (se entrega una sola vez a la librería).",
+        "token": "Ya no se usa: el token se genera en el polling que lo entrega y nunca se guarda aquí (columna conservada por compatibilidad).",
+        "ip_origen": "IP de quien pidió el código; se muestra en la página de confirmación (CAN-S2).",
+        "agente_origen": "User-Agent de quien pidió el código.",
+        "host_origen": "Nombre del equipo que pidió el código (lo envía la librería).",
+        "sesion_confirmacion": "Sesión del dashboard que confirmó el código.",
         "fecha_creacion": "Fecha UTC de creación.",
         "fecha_expiracion": "Fecha UTC de vencimiento del código.",
     },
@@ -150,7 +167,8 @@ PROPOSITO = {
     "audit_sync_queue": "Cola de sincronización de la librería (solo base local).",
     "audit_intentos_bloqueados": "Constancia de los UPDATE/DELETE bloqueados por los disparadores.",
     "usuarios": "Cuentas, roles y llave pública de firma.",
-    "tokens_acceso": "Tokens personales de la librería y del dashboard.",
+    "tokens_acceso": "Tokens personales de la librería y del dashboard (solo su SHA-256).",
+    "llaves_publicas": "Historial de llaves Ed25519 por usuario, con su vigencia.",
     "codigos_dispositivo": "Login por código de dispositivo (RFC 8628).",
     "alertas_destinatarios": "Quién recibe las alertas por correo.",
     "alertas_notificaciones": "Resultado de cada notificación de evento crítico.",
@@ -166,6 +184,7 @@ CREACION = {
     "audit_intentos_bloqueados": "schema/*.sql; db._IMMUTABILITY_DDL",
     "usuarios": "schema/usuarios.sql",
     "tokens_acceso": "schema/tokens.sql",
+    "llaves_publicas": "schema/usuarios.sql; db._migrate_usuarios",
     "codigos_dispositivo": "models/device_codes.py (primer uso del login por dispositivo)",
     "alertas_destinatarios": "models/alertas.py (al arrancar el despachador)",
     "alertas_notificaciones": "models/alertas.py",
@@ -179,6 +198,7 @@ CREACION = {
 RELACIONES = [
     ("audit_log.usuario_id", "usuarios.usuario_id", "N:1", False),
     ("tokens_acceso.usuario_id", "usuarios.usuario_id", "N:1", True),
+    ("llaves_publicas.usuario_id", "usuarios.usuario_id", "N:1", True),
     ("audit_sync_queue.event_id", "audit_log.event_id", "1:1", True),
     ("audit_intentos_bloqueados.event_id_objetivo", "audit_log.event_id", "N:1", False),
     ("codigos_dispositivo.usuario_id", "usuarios.usuario_id", "N:1", False),
@@ -277,21 +297,21 @@ def _svg(tablas: dict, posiciones: dict, titulo: str, ancho: int, alto: int) -> 
 def diagramas(esquema: dict) -> None:
     IMG.mkdir(exist_ok=True)
     local = {
-        "usuarios": (40, 60), "tokens_acceso": (40, 250),
+        "usuarios": (40, 60), "tokens_acceso": (40, 290), "llaves_publicas": (40, 500),
         "audit_log": (380, 60), "audit_sync_queue": (720, 60), "audit_intentos_bloqueados": (720, 250),
     }
     (IMG / "er_local.svg").write_text(
-        _svg(esquema["local"]["tablas"], local, "Base local de la librería (~/.audit_tracer/audit_trail.db)", 1010, 470),
+        _svg(esquema["local"]["tablas"], local, "Base local de la librería (~/.audit_tracer/audit_trail.db)", 1010, 720),
         encoding="utf-8")
     central = {
-        "codigos_dispositivo": (40, 60), "tokens_acceso": (40, 230), "usuarios": (40, 400),
-        "audit_saved_filters": (40, 580), "audit_notification_settings": (40, 700),
-        "audit_log": (380, 60), "audit_intentos_bloqueados": (380, 400),
+        "codigos_dispositivo": (40, 60), "tokens_acceso": (40, 275), "usuarios": (40, 445),
+        "audit_saved_filters": (40, 615), "audit_notification_settings": (40, 755),
+        "audit_log": (380, 60), "audit_intentos_bloqueados": (380, 470), "llaves_publicas": (380, 680),
         "alertas_notificaciones": (720, 60), "alertas_destinatarios": (720, 300),
         "audit_alert_reviews": (720, 480), "audit_alert_history": (720, 590),
     }
     (IMG / "er_central.svg").write_text(
-        _svg(esquema["central"]["tablas"], central, "Base central del servidor (audit_central.db)", 1010, 885),
+        _svg(esquema["central"]["tablas"], central, "Base central del servidor (audit_central.db)", 1010, 960),
         encoding="utf-8")
 
 

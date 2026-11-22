@@ -20,7 +20,7 @@ def test_register_user_success(db_conn):
     """register_user() crea usuario con todos los campos correctos y registra el evento."""
     admin_id = "admin_uuid"
     email = "test@example.com"
-    pwd = "password123"
+    pwd = "Clave-Registro-2026"
     rol = "ANALISTA"
     
     user_id = register_user(db_conn, email, pwd, rol, admin_id)
@@ -41,15 +41,15 @@ def test_register_user_success(db_conn):
 
 def test_register_duplicate_email(db_conn):
     """No permite emails duplicados (ValueError)."""
-    register_user(db_conn, "test@example.com", "pwd", "ANALISTA", "admin")
+    register_user(db_conn, "test@example.com", "Clave-Prueba-2026", "ANALISTA", "admin")
     with pytest.raises(ValueError, match="ya se encuentra registrado"):
-        register_user(db_conn, "test@example.com", "pwd2", "AUDITOR", "admin")
+        register_user(db_conn, "test@example.com", "Otra-Clave-2026", "AUDITOR", "admin")
 
 def test_email_duplicado_no_deja_transaccion_abierta(db_conn):
     """Un correo repetido no debe retener el bloqueo de escritura de la base."""
-    register_user(db_conn, "test@example.com", "pwd", "ANALISTA", "admin")
+    register_user(db_conn, "test@example.com", "Clave-Prueba-2026", "ANALISTA", "admin")
     with pytest.raises(ValueError):
-        register_user(db_conn, "test@example.com", "pwd2", "AUDITOR", "admin")
+        register_user(db_conn, "test@example.com", "Otra-Clave-2026", "AUDITOR", "admin")
     assert not db_conn.in_transaction
 
 
@@ -66,7 +66,7 @@ def cliente_admin(monkeypatch, tmp_path):
 
 def _crear_por_formulario(client, email):
     return client.post("/admin/usuarios/nuevo", data={
-        "email": email, "password": "Password123!", "confirmar_password": "Password123!", "rol": "ANALISTA",
+        "email": email, "password": "Clave-Formulario-2026", "confirmar_password": "Clave-Formulario-2026", "rol": "ANALISTA",
     })
 
 
@@ -100,4 +100,4 @@ def test_correo_repetido_no_bloquea_la_base_central(cliente_admin):
 def test_register_invalid_rol(db_conn):
     """ValueError si rol inválido."""
     with pytest.raises(ValueError, match="Rol inválido"):
-        register_user(db_conn, "test@example.com", "pwd", "HACKER", "admin")
+        register_user(db_conn, "test@example.com", "Clave-Prueba-2026", "HACKER", "admin")

@@ -25,10 +25,20 @@ from audit_tracer.models.usuarios import get_user_by_email
 conn = get_central_connection()
 
 # ── Usuarios de demo (además del admin ya sembrado) ──────────────────────
+# B10 (21/11/2026): sin contraseñas escritas en el repositorio. Se usa
+# SEED_DEMO_PASSWORD o, si no está, una aleatoria por cuenta que se imprime una vez.
+import secrets as _secrets
+_FIJA = os.environ.get("SEED_DEMO_PASSWORD", "").strip()
+
+
+def _clave():
+    return _FIJA or f"Demo-{_secrets.token_urlsafe(9)}-9"
+
+
 DEMO_USERS = [
-    ("analista.garcia@audit.com", "Analista123*", "ANALISTA"),
-    ("cientifico.lopez@audit.com", "Cientifico123*", "CIENTIFICO_DATOS"),
-    ("auditor.perez@audit.com", "Auditor123*", "AUDITOR"),
+    ("analista.garcia@audit.com", _clave(), "ANALISTA"),
+    ("cientifico.lopez@audit.com", _clave(), "CIENTIFICO_DATOS"),
+    ("auditor.perez@audit.com", _clave(), "AUDITOR"),
 ]
 
 admin = get_user_by_email(conn, "admin@audit.com")
@@ -44,7 +54,7 @@ for email, pwd, rol in DEMO_USERS:
         continue
     try:
         user_ids[email] = register_user(conn, email, pwd, rol, admin_id=admin_id)
-        print(f"Usuario creado: {email} ({rol})")
+        print(f"Usuario creado: {email} ({rol})" + ("" if _FIJA else f" — contraseña: {pwd}"))
     except ValueError as e:
         print(f"Aviso: {e}")
 

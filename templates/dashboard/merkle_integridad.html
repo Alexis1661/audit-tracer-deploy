@@ -221,6 +221,7 @@
         <div class="verify-form-card">
             <h2>🔍 Verificar ancla de un lote horario</h2>
             <form method="POST" action="{{ url_for('merkle_verificar_ancla') }}" class="form-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="form-group">
                     <label for="batch_hour">Lote horario</label>
                     <input
@@ -393,6 +394,7 @@
                     </td>
                     <td>
                         <form method="POST" action="{{ url_for('merkle_verificar_ancla') }}" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <input type="hidden" name="batch_hour" value="{{ a.batch_hour }}">
                             <button type="submit" class="btn-verify" style="padding:6px 14px;font-size:12px;">
                                 Verificar

@@ -21,8 +21,73 @@ os.environ.pop("AUDIT_TRACER_API_URL", None)
 # alertas crean sus propios despachadores contra bases temporales y con un
 # servicio de correo en memoria, así ningún test manda correos reales.
 os.environ["AUDIT_ALERTAS_DESACTIVADAS"] = "1"
-for _var in ("AUDIT_SMTP_HOST", "AUDIT_ALERTAS_OUTBOX", "AUDIT_DASHBOARD_URL"):
+for _var in ("AUDIT_SMTP_HOST", "AUDIT_ALERTAS_OUTBOX", "AUDIT_DASHBOARD_URL",
+             "AUDIT_TRACER_KEY_PASSPHRASE", "AUDIT_EXIGIR_FIRMA", "AUDIT_TSA_URL"):
     os.environ.pop(_var, None)
+
+# LIB-I2 — la suite nunca escribe en el llavero real del sistema operativo
+# (Administrador de credenciales de Windows, Llavero de macOS): las pruebas del
+# cifrado de la llave usan un llavero en memoria.
+os.environ["AUDIT_TRACER_KEYRING"] = "0"
+
+import secrets as _secrets  # noqa: E402
+
+import pytest  # noqa: E402
+from flask.testing import FlaskClient  # noqa: E402
+
+_METODOS_SEGUROS = ("GET", "HEAD", "OPTIONS", "TRACE")
+
+
+class ClienteConCsrf(FlaskClient):
+    """
+    DSH-T1 — Simula el navegador: todo POST lleva el token CSRF de su sesión,
+    como lo hacen los formularios del dashboard. Una prueba que quiera
+    simular un formulario de otro sitio pasa csrf=False.
+    """
+
+    def open(self, *args, **kwargs):
+        csrf = kwargs.pop("csrf", True)
+        metodo = str(kwargs.get("method") or "GET").upper()
+        if csrf and metodo not in _METODOS_SEGUROS and not (args and not isinstance(args[0], str)):
+            token = None
+            try:
+                with self.session_transaction() as sesion:
+                    token = sesion.get("_csrf")
+                    if not token:
+                        token = _secrets.token_urlsafe(32)
+                        sesion["_csrf"] = token
+            except (TypeError, RuntimeError):
+                token = None
+            if token:
+                cabeceras = dict(kwargs.get("headers") or {})
+                cabeceras.setdefault("X-CSRF-Token", token)
+                kwargs["headers"] = cabeceras
+        return super().open(*args, **kwargs)
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "horario_real: usa el horario laboral real en la clasificación del servidor (SRV-T3)")
+    import app as _app
+    _app.app.test_client_class = ClienteConCsrf
+
+
+@pytest.fixture(autouse=True)
+def _servidor_en_estado_limpio(request, monkeypatch):
+    """
+    Cada prueba empieza con los contadores de límite de peticiones y de
+    consultas a la bitácora en cero, y con la clasificación del servidor
+    (SRV-T3) en horario laboral, para que el resultado no dependa de la hora
+    a la que se corre la suite (salvo en las pruebas marcadas horario_real).
+    """
+    import sys
+    modulo_app = sys.modules.get("app")
+    if modulo_app is not None:
+        modulo_app.limitador.reiniciar()
+        modulo_app._ultimas_consultas.clear()
+    if request.node.get_closest_marker("horario_real") is None:
+        monkeypatch.setattr("audit_tracer.clasificacion_servidor.es_horario_laboral", lambda dt: True)
+    yield
 
 def crear_sesion_web(client, usuario_id, rol, nombre=None, sesion_id="sesion-web-test"):
     """Prepara una cookie respaldada por un token de prueba sin agregar eventos."""

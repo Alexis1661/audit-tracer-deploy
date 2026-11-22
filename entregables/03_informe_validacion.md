@@ -1,20 +1,21 @@
 ---
 titulo: Informe de validación del prototipo
 anexo: Anexo 13 · Informe de validación
-fecha: 2026-11-21
+fecha: 2026-11-22
 ---
 
 [TOC]
 
 # 1. Resumen
 
-Este informe se actualizó el 21/11/2026 después de cerrar los hallazgos de la primera ejecución del mismo día (la versión anterior reportaba 14 CUMPLE y 5 NO CUMPLE).
+Este informe se actualizó el 21/11/2026 después de cerrar los hallazgos de la primera ejecución del mismo día (la versión anterior reportaba 14 CUMPLE y 5 NO CUMPLE) y de nuevo el 22/11/2026, después de la segunda ronda de robustez, que ejecutó el plan de mitigación del modelo STRIDE (sección 3.4).
 
 | Validación | Fecha de ejecución | Commit | Resultado |
 |---|---|---|---|
-| Tres casos de uso con MIMIC-III Clinical Database Demo v1.4 | 21/11/2026 18:10 (hora Colombia) | `1dc8537` | 19 afirmaciones verificadas: **19 CUMPLE, 0 NO CUMPLE** |
-| Suite automatizada completa | 21/11/2026 18:04–18:10 | `1dc8537` | 1 059 pruebas en 36 archivos: **1 050 aprobadas, 0 fallidas, 9 xfail** (343,3 s) |
-| Ataques simulados (HU-6.5) | 21/11/2026, dentro de la suite | `1dc8537` | **32 de 32** aprobadas |
+| Tres casos de uso con MIMIC-III Clinical Database Demo v1.4 | 21/11/2026 18:10 (hora Colombia); repetidos dentro de la suite del 22/11/2026 | `1dc8537`; segunda ronda | 19 afirmaciones verificadas: **19 CUMPLE, 0 NO CUMPLE** en ambas ejecuciones |
+| Suite automatizada completa | 22/11/2026 (segunda ronda) | rama `entregables-documento-final` | 1 183 pruebas en 38 archivos: **1 180 aprobadas, 0 fallidas, 1 xfail, 2 omitidas** (394 s). El 21/11/2026 (`1dc8537`): 1 059 pruebas, 1 050 aprobadas y 9 xfail |
+| Ataques simulados (HU-6.5) | 21 y 22/11/2026, dentro de la suite | `1dc8537`; segunda ronda | **32 de 32** aprobadas |
+| Modelo de amenazas STRIDE (HU-6.4) | 22/11/2026, dentro de la suite | segunda ronda | 166 de 167 aprobadas y 1 xfail (riesgo residual B9); los 9 riesgos abiertos del 21/11 quedaron cerrados |
 | Benchmark de sobrecarga | 21/11/2026 (5 corridas por modo) | `1dc8537` | 1 000 000 de filas: **+2,35 %** en tiempo total; 50 000: +8,96 %; 200 000: +7,48 % |
 
 **Entorno:** Windows 11, AMD Ryzen 5 7520U (4 núcleos, 8 hilos), 15,3 GB de RAM, SSD NVMe; Python 3.12.6, pandas 3.0.2, Flask 3.1.0, cryptography 44.0.2, reportlab 4.2.5, APScheduler 3.11.3.
@@ -78,7 +79,7 @@ Este informe se actualizó el 21/11/2026 después de cerrar los hallazgos de la 
 | 2.1c | El detector, con el historial previo a la sesión, activa las dos reglas | **CUMPLE** | Volumen y horario («08:10 fuera del horario habitual (13:00 - 19:00)»). |
 | 2.2 | El evento queda con su nivel de alerta | **CUMPLE** | La exportación #55 conserva el nivel de la librería (nivel_alerta=CRITICO, motivo «Exportación masiva: 76074 filas (> 1000)») porque está firmada y su nivel y motivo forman parte de la firma; el evento #54 que la acompaña tiene nivel_alerta=ANOMALIA. |
 | 2.3 | Se genera la descripción del motivo (reglas de anomalía) | **CUMPLE** | motivo_alerta del evento ANOMALIA_DETECTADA: «Anomalía (reglas: volumen anómalo, horario inusual): Volumen anómalo: 13 operaciones en el día supera significativamente el promedio diario histórico del usuario (2.0 ops/día) \| Horario inusual: acceso registrado a las 08:10 fuera del horario habitual del usuario (13:00 - 17:00)». |
-| 2.4a | Correo automático al oficial de cumplimiento | **CUMPLE** | `alertas_notificaciones`: ENVIADA, tipo EXPORTACION_MASIVA, severidad ALTA, 1 intento; el `.eml` va (en copia oculta) a admin, auditor y `oficial.cumplimiento@…` con el enlace al evento. Lo dispara la exportación masiva, no una anomalía. Se usó la entrega en carpeta del sistema; no se probó un servidor SMTP real. |
+| 2.4a | Correo automático al oficial de cumplimiento | **CUMPLE** | `alertas_notificaciones`: ENVIADA, tipo EXPORTACION_MASIVA, severidad ALTA, 1 intento; el `.eml` va (en copia oculta) a admin, auditor y `oficial.cumplimiento@…` con el enlace al evento. Lo dispara la exportación masiva, no una anomalía. En el caso se usó la entrega en carpeta del sistema; desde la segunda ronda la suite envía además el correo por protocolo SMTP (EHLO, AUTH, MAIL, RCPT, DATA) a un servidor SMTP local (`tests/test_robustez.py::test_el_correo_de_alerta_sale_por_smtp_real`). No se probó contra el servidor de correo de una institución. |
 | 2.4b | El correo es independiente del registro | **CUMPLE** | Con un servicio de correo que tarda 2 s y falla siempre: `insert_event` volvió en 0,009 s, el evento quedó guardado y la notificación terminó FALLIDA tras 3 intentos en otro hilo. |
 
 **Evidencia:** `caso2/linea_base.json`, `caso2/eventos_servidor_central.json`, `caso2/evaluacion_detector_anomalias.json`, `caso2/notificacion.json`, `caso2/correo_oficial_cumplimiento.eml`, `caso2/independencia_correo.json`.
@@ -109,18 +110,20 @@ Este informe se actualizó el 21/11/2026 después de cerrar los hallazgos de la 
 
 ## 3.1 Resultado
 
-Ejecución completa: `python -m pytest -q --junitxml=…` sobre el commit `1dc8537`, 21/11/2026 de 18:04:31 a 18:10:36 (343,3 s).
+Ejecución completa del 22/11/2026, después de la segunda ronda: `python -m pytest -q` (394 s).
 
 | Medida | Valor |
 |---|---|
-| Archivos de prueba (`tests/test_*.py`) | 36 |
-| Pruebas recolectadas (`pytest --collect-only -q`) | 1 059 |
-| Aprobadas | 1 050 |
+| Archivos de prueba (`tests/test_*.py`) | 38 |
+| Pruebas recolectadas (`pytest --collect-only -q`) | 1 183 |
+| Aprobadas | 1 180 |
 | Fallidas | 0 |
-| Fallos esperados (`xfail`, documentados) | 9 (riesgos abiertos del modelo STRIDE) |
-| Omitidas | 0 |
+| Fallos esperados (`xfail`, documentados) | 1 (riesgo residual B9 del modelo STRIDE: alterar un evento en el equipo del analista antes de sincronizarlo) |
+| Omitidas | 2 (permisos de archivo de Linux/macOS; no aplican en Windows) |
 
-Las 4 fallas de la primera ejecución del día (`test_modelo_amenazas.py`) venían de un ayudante de prueba sin token de sesión; se corrigió y se comprobó que dos de esos riesgos (DSH-I1 y DSH-I3) ya estaban mitigados (Anexo 15).
+Ejecución anterior, 21/11/2026 (`1dc8537`): 36 archivos y 1 059 pruebas; 1 050 aprobadas y 9 fallos esperados (los riesgos abiertos del modelo STRIDE que la segunda ronda cerró). Las 4 fallas de la primera ejecución de ese día venían de un ayudante de prueba sin token de sesión; se corrigió y se comprobó que dos de esos riesgos (DSH-I1 y DSH-I3) ya estaban mitigados.
+
+**Pruebas que dependían de la hora.** En la segunda ronda se encontró que cinco pruebas del detector de anomalías fallaban cuando la suite se corría entre las 19:00 y las 09:00 de Colombia (un evento real de generación de token ensanchaba el horario habitual, y una hora fija «hoy a las 03:10» podía quedar en el futuro). Se corrigieron los datos de prueba; desde entonces el resultado no depende de la hora de ejecución.
 
 ## 3.2 Pruebas por archivo y componente
 
@@ -133,6 +136,7 @@ Las 4 fallas de la primera ejecución del día (`test_modelo_amenazas.py`) vení
 | test_audit_log.py | 45 | 45 ✓ | Modelo de eventos, hash, reportes |
 | test_autenticacion.py | 5 | 5 ✓ | Login y bloqueo |
 | test_benchmark_overhead.py | 10 | 10 ✓ | Benchmark (HU-6.7) |
+| test_captura_ampliada.py | 24 | 24 ✓ | Lectores y exportaciones adicionales, head/groupby/at, open(), modelado con scikit-learn |
 | test_captura_consultas.py | 19 | 19 ✓ | loc, iloc, FILTRADO, read_sql |
 | test_central_db.py | 23 | 23 ✓ | Base central, WAL, inmutabilidad (HU-5.4) |
 | test_consulta_eventos.py | 5 | 5 ✓ | Consulta de eventos |
@@ -140,21 +144,22 @@ Las 4 fallas de la primera ejecución del día (`test_modelo_amenazas.py`) vení
 | test_data_capture.py | 45 | 45 ✓ | Carga y consulta (HU-2.1) |
 | test_db.py | 2 | 2 ✓ | Conexión y esquema |
 | test_detalle_evento.py | 17 | 17 ✓ | Detalle y explicador (HU-7.4) |
-| test_device_login.py | 34 | 34 ✓ | Device code, RFC 8628 (HU-5.7) |
+| test_device_login.py | 35 | 35 ✓ | Device code, RFC 8628 (HU-5.7) |
 | test_digital_signatures.py | 34 | 34 ✓ | Firmas Ed25519 (HU-6.1) |
 | test_export_capture.py | 26 | 26 ✓ | Exportaciones (HU-2.3) |
 | test_failed_access.py | 29 | 29 ✓ | Accesos fallidos (HU-2.4) |
 | test_filtro_usuario_correo.py | 8 | 8 ✓ | Filtro de usuario por ID o correo |
 | test_integracion_automatica.py | 26 | 26 ✓ | import audit_tracer (HU-5.1) |
 | test_lineage.py | 32 | 32 ✓ | Linaje y uniones (HU-7.1) |
-| test_mapeo_normativo.py | 54 | 54 ✓ | Mapeo normativo (HU-7.3) |
-| test_matriz_normativa.py | 100 | 100 ✓ | Matriz normativa (HU-6.6) |
+| test_mapeo_normativo.py | 62 | 62 ✓ | Mapeo normativo (HU-7.3) |
+| test_matriz_normativa.py | 142 | 142 ✓ | Matriz normativa (HU-6.6) |
 | test_merkle.py | 17 | 17 ✓ | Árbol de Merkle (HU-6.2) |
 | test_merkle_scheduler.py | 5 | 5 ✓ | Job de Merkle con APScheduler |
-| test_modelo_amenazas.py | 163 | 154 ✓ · 9 xfail | STRIDE (HU-6.4) |
+| test_modelo_amenazas.py | 167 | 166 ✓ · 1 xfail | STRIDE (HU-6.4): mitigaciones del plan y riesgo residual |
 | test_paginacion_eventos.py | 2 | 2 ✓ | Paginación y filtro de acción |
 | test_registro.py | 6 | 6 ✓ | Registro de usuarios |
 | test_reporte_pdf.py | 16 | 16 ✓ | Reporte en PDF |
+| test_robustez.py | 45 | 43 ✓ · 2 omitidas | Tokens como hash, contraseñas, bloqueo temporal, límites, errores, RFC 3161, retención, llave cifrada, SMTP |
 | test_seed_usuarios.py | 6 | 6 ✓ | Cuentas por SEED_USUARIOS |
 | test_session_tracker.py | 14 | 14 ✓ | Sesiones de la librería |
 | test_sync_events.py | 33 | 33 ✓ | Sincronización y cola (HU-5.6/5.8) |
@@ -162,13 +167,31 @@ Las 4 fallas de la primera ejecución del día (`test_modelo_amenazas.py`) vení
 | test_transform_capture.py | 46 | 46 ✓ | Transformaciones (HU-2.2) |
 | test_validacion_mimic.py | 20 | 20 ✓ | Casos de uso MIMIC-III |
 | test_zona_horaria.py | 16 | 16 ✓ | Hora de Colombia |
-| **Total** | **1059** | 1050 ✓ · 9 xfail | |
+| **Total** | **1183** | 1180 ✓ · 1 xfail · 2 omitidas | |
 
 Los componentes que enumera la sección 7.4.5 del documento tienen todos al menos un archivo de pruebas.
 
 ## 3.3 Ataques simulados (HU-6.5)
 
 `tests/test_ataques_simulados.py`: **32 pruebas, 32 aprobadas** el 21/11/2026; forman parte del total. El archivo se agregó en el commit `bb1548d` (22/10/2026 15:54). La «ejecución registrada el 22 de octubre» consta solo en el texto de `docs/validacion_resultados.md` (commit `1ef9c97`: «32 de 32 casos superados; suite completa 491/491»); no hay CI ni log de esa ejecución. Al recolectar las pruebas del commit `a116a44` (punta de la rama de HU-6.5, 22/10/2026) se obtienen exactamente **491**, consistente con esa cifra. «28 grupos» equivale a los 28 archivos de prueba del commit `cfbdddd` (09/11/2026).
+
+## 3.4 Segunda ronda de robustez (21–22/11/2026)
+
+La segunda ronda ejecutó el plan de mitigación del modelo STRIDE y cerró ocho de las diez brechas de la matriz normativa. Cada cambio tiene su prueba:
+
+| Cambio | Prueba |
+|---|---|
+| El servidor rechaza eventos a nombre de otro usuario, recalcula la criticidad y guarda la fecha de recepción | `test_modelo_amenazas.py::TestMitigacionesDelPlan` |
+| Historial de llaves públicas con registro y revocación; las firmas anteriores siguen verificándose | `test_modelo_amenazas.py::TestMitigacionesDelPlan` |
+| Protección CSRF, cabeceras de seguridad, cookie Secure/HttpOnly/SameSite, cierre por inactividad y rol releído en cada petición | `test_modelo_amenazas.py::TestMitigacionesDelPlan` |
+| Registro de consultas y descargas de la bitácora con SHA-256 del archivo; CSV sin fórmulas | `test_modelo_amenazas.py::TestMitigacionesDelPlan` |
+| Tokens y códigos de dispositivo como SHA-256; política de contraseñas; bloqueo temporal y desbloqueo por ADMIN | `test_robustez.py` |
+| Límite de peticiones y tamaño máximo; errores genéricos; depuración apagada; Gunicorn | `test_robustez.py` |
+| Sello de tiempo RFC 3161 de las raíces de Merkle; retención con archivo verificable; panel de sesiones sin cierre | `test_robustez.py` |
+| Llave de firma local cifrada; archivos locales con permisos de solo-dueño | `test_robustez.py` |
+| Captura ampliada (parquet, json, SQL, NumPy, polars, head/groupby, open()) y modelado con scikit-learn (HU-03) | `test_captura_ampliada.py` |
+
+La validación con MIMIC-III se repitió dentro de la suite con estos cambios: 19 de 19 verificaciones cumplidas. La verificación 3.1 comprueba además que cada descarga del auditor queda registrada. El benchmark de la sección 4 es del 21/11/2026, anterior a la captura ampliada.
 
 # 4. Sobrecarga de rendimiento
 

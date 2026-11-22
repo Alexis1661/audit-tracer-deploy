@@ -21,10 +21,15 @@ def register_user(conn: sqlite3.Connection, email: str, password: str, rol: str,
         str: The newly created user ID.
 
     Raises:
-        ValueError: If role is invalid or email already exists.
+        ValueError: If role is invalid, email already exists or the password
+        does not meet the policy (B5: aplica a cualquier origen, no solo al
+        formulario del dashboard).
     """
     if rol not in VALID_ROLES:
         raise ValueError(f"Rol inválido: {rol}. Roles permitidos: {', '.join(VALID_ROLES)}")
+
+    from .politica_contrasenas import validar_contrasena
+    validar_contrasena(password, email)
 
     # Create the user (this handles email duplication check and hashing)
     new_user_id = create_user(conn, email, password, rol)

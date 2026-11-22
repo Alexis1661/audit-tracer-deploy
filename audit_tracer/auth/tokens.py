@@ -155,6 +155,27 @@ def validar_token_sesion(conn: sqlite3.Connection, token_id: str, usuario_id: st
     return bool(user and user["activo"] == 1 and user["rol"] == rol)
 
 
+def usuario_de_sesion(conn: sqlite3.Connection, token_id: str, usuario_id: str) -> Optional[Dict]:
+    """
+    DSH-E2 (21/11/2026) — Usuario vigente detrás de una cookie de sesión:
+    token de LOGIN activo y cuenta activa. Devuelve el registro leído de la
+    base (con el rol ACTUAL) o None. El dashboard toma el rol de aquí en cada
+    petición, no de la cookie: degradar un rol o bloquear una cuenta surte
+    efecto de inmediato en las sesiones abiertas.
+    """
+    if not isinstance(token_id, str) or not token_id:
+        return None
+    token = get_token_by_id(conn, token_id)
+    if not token or token["usuario_id"] != usuario_id or token["creado_por"] != "LOGIN":
+        return None
+    if not _validar_vigencia(conn, token)[0]:
+        return None
+    user = get_user_by_id(conn, usuario_id)
+    if not user or user["activo"] != 1:
+        return None
+    return user
+
+
 def _validar_vigencia(conn: sqlite3.Connection, token_record: Dict) -> Tuple[bool, str]:
     estado_actual = token_record.get("estado", "").upper()
     if estado_actual == "REVOCADO":

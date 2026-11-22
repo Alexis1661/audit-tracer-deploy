@@ -11,3 +11,7 @@ validacion_usuarios/render_env_*.json
 
 # Validación MIMIC-III Demo: los CSV se descargan de PhysioNet (validacion/descargar_mimic.py)
 validacion/datos/
+
+# B4: las llaves de firma nunca se versionan (la que estuvo en el repositorio se considera comprometida).
+.audit_keys/
+*.pem

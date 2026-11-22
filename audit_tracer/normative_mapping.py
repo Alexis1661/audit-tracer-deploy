@@ -146,6 +146,47 @@ MAPEO_NORMATIVO: Dict[str, ReferenciaNormativa] = {
         "ley_1581": ("Art. 4 lit. h", "Art. 17 lit. d"),
         "controles": ("CT-25",),
     },
+    # ── Agregados el 21/11/2026 (controles CT-33 a CT-46) ─────────
+    "DESBLOQUEO_CUENTA": {
+        "hipaa": ("§164.308(a)(5)(ii)(C)", "§164.308(a)(4)(ii)(C)"),
+        "ley_1581": ("Art. 17 lit. d",),
+        "controles": ("CT-34",),
+    },
+    "CONSULTA_BITACORA": {
+        "hipaa": ("§164.312(b)", "§164.308(a)(1)(ii)(D)"),
+        "ley_1581": ("Art. 17 lit. m",),
+        "controles": ("CT-38",),
+    },
+    "DESCARGA_REPORTE": {
+        "hipaa": ("§164.312(b)", "§164.308(a)(1)(ii)(D)"),
+        "ley_1581": ("Art. 17 lit. m",),
+        "controles": ("CT-38",),
+    },
+    "MODELADO": {
+        "hipaa": ("§164.312(b)",),
+        "ley_1581": ("Art. 4 lit. d", "Art. 17 lit. m"),
+        "controles": ("CT-39",),
+    },
+    "MODELADO_FALLIDO": {
+        "hipaa": ("§164.312(b)",),
+        "ley_1581": ("Art. 4 lit. d", "Art. 17 lit. m"),
+        "controles": ("CT-39",),
+    },
+    "REGISTRO_LLAVE_PUBLICA": {
+        "hipaa": ("§164.312(c)(2)", "§164.312(d)"),
+        "ley_1581": ("Art. 17 lit. d",),
+        "controles": ("CT-40",),
+    },
+    "REVOCACION_LLAVE_PUBLICA": {
+        "hipaa": ("§164.312(c)(2)", "§164.312(d)"),
+        "ley_1581": ("Art. 17 lit. d",),
+        "controles": ("CT-40",),
+    },
+    "RECLASIFICACION_SERVIDOR": {
+        "hipaa": ("§164.312(c)(1)", "§164.312(d)", "§164.308(a)(1)(ii)(D)"),
+        "ley_1581": ("Art. 17 lit. d",),
+        "controles": ("CT-41",),
+    },
 }
 
 

@@ -91,9 +91,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
     -- igual que en el audit_log local — así el hash de un evento es
     -- idéntico sin importar en qué base se calculó o insertó.
 
-    firma_digital     TEXT
+    firma_digital     TEXT,
     -- HU-6.1 CA4: Firma digital Ed25519 generada por la llave privada del usuario.
     -- Base64url sin padding, ~86 caracteres. Almacenada para verificación forense.
+
+    recibido_en       TEXT
+    -- SRV-T3: fecha UTC (ISO 8601) en que el servidor central recibió el
+    -- evento, tomada de su propio reloj. NULL en la base local y en los
+    -- eventos que el servidor genera. No participa del hash ni de la firma:
+    -- el cliente no la controla.
 );
 
 -- ============================================================

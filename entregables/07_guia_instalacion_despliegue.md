@@ -15,7 +15,8 @@ Parte de `docs/guia_instalacion.md` (commit `b13459e`, 03/11/2026, HU-5.3) y `do
 | Instalación local (sección 3) | Copia limpia del commit (`git archive`), `python scratch/seed_admin.py`, `python app.py`, login como admin, `/dashboard` y `/reportes/exportar/pdf` | **Funciona.** El seed imprime un UUID, no `usr_…` como decía la guía. |
 | Ejemplo mínimo (sección 7) | Se ejecutó el script de la guía original en un HOME aislado | **No coincidía**: la guía mostraba 4 eventos NORMAL y una consulta a `audit_trail.db` en la carpeta actual. La salida real es de 8 eventos, todos CRITICO por usuario no identificado, y la base está en `~/.audit_tracer/` (el comando del Paso 4 original falla con `no such table: audit_log`). Corregido abajo con la salida real. |
 | Render (sección 5.1) | Es el despliegue que se usó en la validación externa del 20/11/2026 (`render.yaml`, plan gratuito) | Funciona; disco efímero (ver advertencias). |
-| Railway (sección 5.1) | No se verificó: el periodo de prueba de la cuenta terminó antes de la migración a Render. | [PENDIENTE: verificación en Railway] |
+| Railway | No se verificó: el periodo de prueba de la cuenta terminó antes de la migración a Render. | Retirado de la guía (sección 5.2): las plataformas probadas son Render y un servidor Linux propio. |
+| Segunda ronda (21/11/2026, noche) | Gunicorn con `wsgi.py`, depuración apagada por defecto, cookie Secure, CSRF, límites de peticiones, política de contraseñas, sello de tiempo RFC 3161 y retención | La suite completa pasa en Windows con `python app.py`. El arranque con `gunicorn wsgi:app` no se pudo ejecutar en Windows (Gunicorn solo corre en Linux/macOS): **probar en el servidor Linux o en Render antes de la sustentación**. |
 | Linux con Nginx y systemd (sección 4) | **Probado el 21/11/2026** en WSL2 con Ubuntu 24.04 (Python 3.12.3, Nginx 1.24, Gunicorn 27, systemd real) siguiendo esta sección con un certificado autofirmado en lugar de Let's Encrypt: HTTP→HTTPS 301; login, dashboard y PDF por HTTPS; sesión válida entre los 2 workers (10/10 peticiones 200); la API responde 426 sin HTTPS y 401 sin token; `kill -9` del proceso maestro y systemd lo reinicia; el CLI de Merkle corre como `www-data`. | Funciona. La prueba destapó un fallo real: la librería interceptaba SIGTERM/SIGINT también dentro de Gunicorn y `systemctl restart` tardaba 30 s con `KeyboardInterrupt`; corregido (`session_tracker.py`): reinicio en 0,6 s. |
 
 # 1. Arquitectura
@@ -39,7 +40,8 @@ Python ≥ 3.10 (verificado con 3.12.6). SQLite viene con Python.
 | pyarrow | 14.0 | Exportar Parquet | `requirements.txt`; extra `parquet` |
 | pytest, nbclient, nbformat, ipykernel, pypdf | — | Pruebas | `requirements.txt`; extra `dev` |
 | APScheduler | 3.10 (< 4) | Publicación horaria automática de raíces Merkle (solo lotes completos) | `requirements.txt`; extra `servidor` (agregada el 21/11/2026). Solo corre con `python app.py`; bajo Gunicorn se programa con cron (sección 6.3). |
-| gunicorn | — | Servidor WSGI en Linux | No está declarada; se instala aparte (sección 4) |
+| gunicorn | 22 o superior | Servidor WSGI de producción (Linux/macOS) | `requirements.txt` (solo fuera de Windows) y extra `servidor` (segunda ronda) |
+| keyring | 24 o superior | Opcional, en el equipo del analista: guarda la frase que cifra la llave de firma en el llavero del sistema | Extra `seguridad` |
 
 # 3. Instalación local
 
@@ -59,23 +61,20 @@ Crear el administrador inicial en la base central (`audit_central.db`, junto a `
 python scratch/seed_admin.py
 ```
 
-Salida real (21/11/2026):
+Desde la segunda ronda (21/11/2026) la contraseña no está en el script: se toma de `AUDIT_ADMIN_PASSWORD` o se pide por teclado, y debe cumplir la política (al menos 8 caracteres y tres de: minúsculas, mayúsculas, números y símbolos; no una contraseña común). Sin teclado, el script genera una y la muestra una sola vez.
 
 ```text
 Intentando crear usuario admin: admin@audit.com...
 ¡Éxito! Usuario admin creado con ID: 00ecb12c-4679-4bd1-b457-4da081de13a9
-Credenciales:
-  Email: admin@audit.com
-  Password: Admin123*
 ```
 
 Arrancar el servidor:
 
 ```bash
-python app.py            # http://localhost:5000  (FLASK_DEBUG=1 por defecto: no usar así en un servidor público)
+python app.py            # http://localhost:5000  (servidor de desarrollo; FLASK_DEBUG=0 por defecto)
 ```
 
-Cambiar la contraseña de `admin@audit.com` antes de cualquier uso real: está publicada en el repositorio.
+**Desarrollo por `http://`.** La cookie de sesión es `Secure`: Chrome y Edge la aceptan en `http://localhost`; si un navegador o un cliente (p. ej. `requests`) no la guarda y el login vuelve a pedir credenciales, arrancar con `AUDIT_COOKIE_SEGURA=0` solo en el equipo de desarrollo.
 
 # 4. Servidor Linux con Nginx y systemd
 
@@ -84,7 +83,7 @@ Cambiar la contraseña de `admin@audit.com` antes de cualquier uso real: está p
 ```bash
 sudo mkdir -p /opt/audit-tracer && sudo chown $USER /opt/audit-tracer
 git clone <repositorio> /opt/audit-tracer && cd /opt/audit-tracer
-python3 -m venv venv && venv/bin/pip install -r requirements.txt gunicorn
+python3 -m venv venv && venv/bin/pip install -r requirements.txt   # incluye gunicorn en Linux
 venv/bin/python scratch/seed_admin.py
 sudo chown -R www-data:www-data /opt/audit-tracer     # audit_central.db y merkle_anchors/ se escriben aquí
 ```
@@ -103,11 +102,13 @@ WorkingDirectory=/opt/audit-tracer
 Environment="SECRET_KEY=<cadena aleatoria larga, p. ej. openssl rand -hex 32>"
 Environment="TRUST_PROXY_HEADERS=1"
 Environment="FLASK_DEBUG=0"
+Environment="AUDIT_EXIGIR_FIRMA=1"
+Environment="AUDIT_TSA_URL=https://<autoridad de sellado de tiempo>"
 Environment="AUDIT_DASHBOARD_URL=https://audit.institucion.edu.co"
 Environment="AUDIT_SMTP_HOST=smtp.institucion.edu.co"
 Environment="AUDIT_SMTP_USER=audit-tracer@institucion.edu.co"
 Environment="AUDIT_SMTP_PASSWORD=<secreto>"
-ExecStart=/opt/audit-tracer/venv/bin/gunicorn -w 2 -b 127.0.0.1:5000 --timeout 60 app:app
+ExecStart=/opt/audit-tracer/venv/bin/gunicorn wsgi:app --workers 1 --threads 8 -b 127.0.0.1:5000 --timeout 60
 Restart=on-failure
 
 [Install]
@@ -118,11 +119,7 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload && sudo systemctl enable --now audit-tracer
 ```
 
-**Diferencias con `python app.py` que hay que cubrir bajo Gunicorn** (el bloque `if __name__ == '__main__'` de `app.py` no se ejecuta):
-
-* `SEED_USUARIOS` y `SEED_DEMO_DATA` no tienen efecto: crear las cuentas con `scratch/seed_admin.py` y desde el dashboard.
-* El job horario de Merkle no arranca: programarlo con un temporizador (ver 6.3).
-* `SECRET_KEY` es obligatoria: sin ella cada proceso de Gunicorn genera una clave distinta y las sesiones se pierden entre procesos.
+**Gunicorn con `wsgi.py` (segunda ronda).** `wsgi.py` ejecuta las mismas tareas de arranque que `python app.py` (cuentas de `SEED_USUARIOS` y `SEED_DEMO_DATA`, limpieza de códigos de dispositivo vencidos y publicador horario de Merkle). Se usa **un solo proceso con varios hilos** (`--workers 1 --threads 8`): la base central es SQLite, el publicador de Merkle debe correr una sola vez y el límite de peticiones se cuenta en memoria. `SECRET_KEY` sigue siendo obligatoria: sin ella cada reinicio invalida las sesiones.
 
 `/etc/nginx/sites-available/audit-tracer` (HTTPS obligatorio: la API rechaza peticiones no seguras con 426):
 
@@ -137,7 +134,8 @@ server {
     server_name audit.institucion.edu.co;
     ssl_certificate     /etc/letsencrypt/live/audit.institucion.edu.co/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/audit.institucion.edu.co/privkey.pem;
-    client_max_body_size 2M;          # la app no limita el tamaño de petición (riesgo SRV-D1)
+    client_max_body_size 2M;          # igual que MAX_CONTENT_LENGTH de la app (SRV-D1)
+    limit_req zone=audit burst=20 nodelay;   # límite también en el proxy (definir la zona en http {})
     location / {
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host $host;
@@ -147,25 +145,31 @@ server {
 }
 ```
 
+En `/etc/nginx/nginx.conf`, dentro de `http { }`: `limit_req_zone $binary_remote_addr zone=audit:10m rate=20r/s;`
+
 ```bash
 sudo ln -s /etc/nginx/sites-available/audit-tracer /etc/nginx/sites-enabled/ && sudo nginx -t && sudo systemctl reload nginx
 ```
+
+**Cifrado en reposo (brecha B2).** La aplicación no cifra la base SQLite: se cifra el volumen donde viven `audit_central.db` y `merkle_anchors/` (LUKS en Linux, BitLocker en Windows Server). Es la decisión documentada para la especificación direccionable §164.312(a)(2)(iv); la base se crea además con permisos de solo-dueño para el usuario del servicio.
+
+**Respaldos.** Copiar a diario `audit_central.db` con `sqlite3 audit_central.db ".backup respaldo.db"` (consistente aunque el servidor esté escribiendo) y verificar la copia con `verify_integrity` antes de rotar respaldos viejos.
 
 # 5. Plataformas en la nube
 
 ## 5.1 Render (usado en la validación externa)
 
-`render.yaml` define un servicio web Python: `pip install -r requirements.txt`, arranque `python app.py`, chequeo de salud `/login`, `FLASK_DEBUG=0`, `TRUST_PROXY_HEADERS=1`, `SECRET_KEY` generada por Render y `SEED_DEMO_DATA=1`.
+`render.yaml` define un servicio web Python: `pip install -r requirements.txt`, arranque `gunicorn wsgi:app --workers 1 --threads 8` (segunda ronda; antes `python app.py`), chequeo de salud `/login`, `FLASK_DEBUG=0`, `TRUST_PROXY_HEADERS=1`, `AUDIT_EXIGIR_FIRMA=1`, `SECRET_KEY` generada por Render y `SEED_DEMO_DATA=1` con `SEED_DEMO_PASSWORD` definida en el panel.
 
 1. Render › New › Blueprint › conectar el repositorio (o el espejo de GitHub).
 2. Agregar en Environment las variables de la sección 6 que se necesiten (`SEED_USUARIOS`, SMTP).
 3. Cada push a la rama conectada redespliega.
 
-**Advertencias.** En el plan gratuito el disco es efímero y el servicio se duerme tras unos 15 minutos sin tráfico: al reiniciar se pierden `audit_central.db` y `merkle_anchors/`. Sirve para demostraciones, no para conservar evidencia. `SEED_DEMO_DATA=1` crea cuentas con contraseñas publicadas (brecha B10): quitarla en cualquier despliegue con datos reales.
+**Advertencias.** En el plan gratuito el disco es efímero y el servicio se duerme tras unos 15 minutos sin tráfico: al reiniciar se pierden `audit_central.db` y `merkle_anchors/`. Sirve para demostraciones, no para conservar evidencia. `SEED_DEMO_DATA=1` crea cuentas de demostración: sus contraseñas ya no están en el repositorio (B10); se toman de `SEED_DEMO_PASSWORD` o se generan y se imprimen una vez en el log de Render. Quitarla en cualquier despliegue con datos reales. Las cuentas de `SEED_USUARIOS` deben cumplir la política de contraseñas: las que no la cumplan se omiten y el log lo dice.
 
-## 5.2 Railway
+## 5.2 Otras plataformas con Procfile
 
-El `Procfile` (`web: python app.py`) permite desplegar en Railway con las mismas variables. Railway asigna `PORT`. [PENDIENTE: no verificado; la cuenta de prueba expiró en noviembre de 2026.]
+El `Procfile` arranca `gunicorn wsgi:app --workers 1 --threads 8 --timeout 60 --bind 0.0.0.0:$PORT`, el formato que entienden plataformas como Heroku o Railway, con las mismas variables de la sección 6. No se probó en ellas (la cuenta de Railway expiró antes de la migración a Render): las referencias verificadas son Render (5.1) y el servidor Linux (4).
 
 ## 5.3 Google Colab (científico de datos)
 
@@ -186,11 +190,12 @@ Lista completa de las que lee el código (`os.environ` / `os.getenv` en `app.py`
 | Variable | Valor por defecto | Para qué |
 |---|---|---|
 | `SECRET_KEY` | Aleatoria por proceso | Firma de la cookie de sesión. Obligatoria en producción. |
-| `FLASK_DEBUG` | `1` | `0` en cualquier servidor accesible. |
+| `FLASK_DEBUG` | `0` | `1` solo en desarrollo: muestra trazas y la consola de Werkzeug. |
 | `PORT` | `5000` | Puerto de `python app.py`. |
 | `TRUST_PROXY_HEADERS` | — | `1` detrás de un proxy con TLS (Nginx, Render) para aceptar `X-Forwarded-Proto`. |
-| `SEED_DEMO_DATA` | — | `1` crea cuentas y datos de demostración al arrancar (`python app.py`). |
-| `SEED_USUARIOS` | — | JSON `[{"email","password","rol"}]`: crea esas cuentas al arrancar (`python app.py`). |
+| `SEED_DEMO_DATA` | — | `1` crea cuentas de demostración al arrancar (`python app.py` o `wsgi.py`). |
+| `SEED_DEMO_PASSWORD` | — | Contraseña de las cuentas de demostración; sin ella se generan y se imprimen una vez. |
+| `SEED_USUARIOS` | — | JSON `[{"email","password","rol"}]`: crea esas cuentas al arrancar (deben cumplir la política de contraseñas). |
 | `START_MERKLE_SCHEDULER` | `1` | Intenta iniciar el job horario de Merkle (requiere APScheduler). |
 | `AUDIT_MERKLE_ANCHORS_DIR` | `merkle_anchors/` junto al paquete | Carpeta de las anclas Merkle. |
 | `AUDIT_DASHBOARD_URL` | URL de la primera petición | Base de los enlaces en los correos de alerta. |
@@ -199,14 +204,29 @@ Lista completa de las que lee el código (`os.environ` / `os.getenv` en `app.py`
 | `AUDIT_SMTP_TLS` | — | `implicit` para el comando `flask audit-email` (avisos del espacio de auditoría). |
 | `AUDIT_ALERTAS_OUTBOX` | — | Sin SMTP: guarda cada correo como `.eml` en esa carpeta. |
 | `AUDIT_ALERTAS_DESACTIVADAS` | — | `1` apaga el despachador de alertas (lo usan las pruebas). |
-| `AUDIT_HORARIO_INICIO`, `AUDIT_HORARIO_FIN` | `8`, `18` | Horario laboral (hora Colombia) para marcar CRITICO las cargas fuera de horario. |
+| `AUDIT_HORARIO_INICIO`, `AUDIT_HORARIO_FIN` | `8`, `18` | Horario laboral (hora Colombia) para marcar CRITICO las cargas fuera de horario (también lo aplica el servidor). |
+| `AUDIT_COOKIE_SEGURA` | `1` | `0` solo para desarrollo por `http://` con un cliente que no acepte cookies `Secure`. |
+| `AUDIT_SESION_INACTIVIDAD_MIN` | `15` | Minutos sin actividad tras los que se cierra la sesión del dashboard. |
+| `AUDIT_BLOQUEO_MINUTOS` | `15` | Duración del bloqueo tras 5 intentos fallidos. |
+| `AUDIT_PASSWORD_MIN` | `8` | Longitud mínima de las contraseñas. |
+| `AUDIT_EXIGIR_FIRMA` | — | `1` rechaza todo evento sin firma digital, también de usuarios sin llave registrada. |
+| `AUDIT_DESFASE_MAX_HORAS` | `72` | Un evento recibido más de estas horas después de su timestamp queda en ADVERTENCIA. |
+| `AUDIT_LIMITE_LOGIN_MIN`, `AUDIT_LIMITE_SYNC_MIN`, `AUDIT_LIMITE_SYNC_IP_MIN` | `10`, `1200`, `3000` | Peticiones por minuto: login por IP; sincronización por token y por IP. |
+| `AUDIT_MAX_PETICION_BYTES` | `2097152` | Tamaño máximo de una petición (2 MB). |
+| `AUDIT_TSA_URL` | — | Autoridad de sellado de tiempo RFC 3161 para las raíces de Merkle. |
+| `AUDIT_TSA_CERT_SHA256` | — | Huella del certificado de la TSA en que se confía (opcional). |
+| `AUDIT_RETENCION_ANIOS` | `6` | Plazo mínimo de conservación de los eventos (comandos `flask retencion-*`). |
+| `AUDIT_HORAS_SESION_SIN_CIERRE` | `24` | Horas sin eventos tras las que una sesión de la librería aparece en el panel de sincronización. |
 
 ## 6.2 Variables de la librería
 
 | Variable | Para qué |
 |---|---|
 | `AUDIT_TRACER_API_URL` | URL del servidor si no se pasa `api_url` a `audit_tracer.login()`. |
-| `AUDIT_HORARIO_INICIO`, `AUDIT_HORARIO_FIN` | Las mismas del servidor: la regla de horario se evalúa en el equipo del analista. |
+| `AUDIT_HORARIO_INICIO`, `AUDIT_HORARIO_FIN` | Las mismas del servidor: la regla de horario se evalúa en el equipo del analista (y el servidor la vuelve a aplicar). |
+| `AUDIT_TRACER_KEY_PASSPHRASE` | Frase que cifra la llave de firma local; útil en Colab, donde no hay llavero del sistema. |
+| `AUDIT_TRACER_KEYRING` | `0` desactiva el uso del llavero del sistema operativo. |
+| `AUDIT_TRACER_MODELADO` | `0` desactiva la captura del modelado con scikit-learn. |
 
 ## 6.3 Publicación de anclas Merkle
 

@@ -102,6 +102,9 @@ class ServidorCentral:
         home.mkdir(exist_ok=True)
         env = _entorno_base(home)
         env.update(
+            # Servidor local por http://: la cookie no puede ser Secure (requests,
+            # como el estándar de cookies, no envía cookies Secure por http).
+            AUDIT_COOKIE_SEGURA="0",
             PORT=str(self.puerto), FLASK_DEBUG="0", SECRET_KEY="clave-validacion-mimic",
             SEED_USUARIOS=json.dumps(CUENTAS), START_MERKLE_SCHEDULER="0",
             AUDIT_ALERTAS_OUTBOX=str(self.outbox), AUDIT_SMTP_FROM="audit-tracer@mimic.validacion",
@@ -145,6 +148,13 @@ class ServidorCentral:
 # DASHBOARD (navegador)
 # ──────────────────────────────────────────────────────────────
 
+def _token_csrf(html: str) -> str:
+    m = re.search(r'name="csrf_token" value="([^"]+)"', html)
+    if not m:
+        raise RuntimeError("La página no trae el token CSRF del formulario")
+    return m.group(1)
+
+
 class Navegador:
     """Una sesión de navegador sobre el dashboard."""
 
@@ -152,17 +162,23 @@ class Navegador:
         self.servidor = servidor
         self.cuenta = cuenta(rol)
         self.s = requests.Session()
+        # Como un navegador: el formulario de login trae su token CSRF (DSH-T1).
+        token = _token_csrf(self.s.get(f"{servidor.url}/login", timeout=30).text)
         r = self.s.post(f"{servidor.url}/login",
-                        data={"email": self.cuenta["email"], "password": self.cuenta["password"]},
+                        data={"email": self.cuenta["email"], "password": self.cuenta["password"],
+                              "csrf_token": token},
                         allow_redirects=False, timeout=30)
         if r.status_code not in (302, 303):
             raise RuntimeError(f"No se pudo iniciar sesión como {rol}: HTTP {r.status_code}")
+        # El login renueva la sesión: el token CSRF vigente sale de cualquier formulario.
+        self.csrf = _token_csrf(self.get("/auth/dispositivo").text)
 
     def get(self, ruta: str, **kw) -> requests.Response:
         return self.s.get(f"{self.servidor.url}{ruta}", timeout=60, **kw)
 
     def post(self, ruta: str, **kw) -> requests.Response:
-        return self.s.post(f"{self.servidor.url}{ruta}", timeout=60, **kw)
+        cabeceras = {"X-CSRF-Token": self.csrf, **kw.pop("headers", {})}
+        return self.s.post(f"{self.servidor.url}{ruta}", timeout=60, headers=cabeceras, **kw)
 
     def csv(self, ruta: str, **params) -> tuple[str, List[Dict], List[str]]:
         r = self.get(ruta, params=params)

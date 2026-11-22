@@ -18,7 +18,9 @@ dependencies = [
 [project.optional-dependencies]
 excel = ["openpyxl>=3.1"]
 parquet = ["pyarrow>=14.0"]
-servidor = ["Flask>=2.3", "reportlab>=4.0", "apscheduler>=3.10,<4"]
+servidor = ["Flask>=2.3", "reportlab>=4.0", "apscheduler>=3.10,<4", "gunicorn>=22.0; platform_system != 'Windows'"]
+# LIB-I2: guarda la frase que cifra la llave de firma en el llavero del sistema operativo.
+seguridad = ["keyring>=24"]
 dev = [
     "pytest>=7.0",
     "nbclient>=0.10",

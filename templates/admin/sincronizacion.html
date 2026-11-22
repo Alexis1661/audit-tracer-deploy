@@ -211,6 +211,40 @@
             {% endif %}
         </div>
 
+        {# ── LIB-D2 / CAN-D1: sesiones de la librería que dejaron de reportar ── #}
+        <div class="section-heading" style="margin-top: 32px;">
+            <h2>Sesiones de la librería sin cierre</h2>
+            <span style="font-size: 13px; color: var(--clr-text-muted);">Sin CIERRE_SESION y sin eventos nuevos en las últimas horas</span>
+        </div>
+        <div class="audit-table-container" {% if sesiones_abiertas %}role="region" aria-label="Sesiones sin cierre" tabindex="0"{% endif %}>
+            {% if sesiones_abiertas %}
+            <table class="audit-table">
+                <thead>
+                    <tr><th>Sesión</th><th>Usuario</th><th>Inicio</th><th>Último evento</th><th>Eventos</th></tr>
+                </thead>
+                <tbody>
+                    {% for s in sesiones_abiertas %}
+                    <tr>
+                        <td style="font-family: monospace; font-size: 12px;">{{ s.sesion_id[:12] }}…</td>
+                        <td style="font-weight: 700;">{{ s.usuario_id }}</td>
+                        <td style="color: var(--clr-text-muted);">{{ s.inicio | hora_col }}</td>
+                        <td style="color: var(--clr-text-muted);">{{ s.ultimo | hora_col }}</td>
+                        <td>{{ s.eventos }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p style="font-size: 12px; color: var(--clr-text-muted); margin-top: 8px;">
+                Puede ser un notebook que se cerró sin sincronizar, un equipo sin conexión o una librería modificada para no enviar eventos. Conviene preguntar al usuario.
+            </p>
+            {% else %}
+            <div class="empty-state-card">
+                <h3>Sin sesiones pendientes</h3>
+                <p style="font-size: 13px;">Todas las sesiones de la librería cerraron o siguen reportando.</p>
+            </div>
+            {% endif %}
+        </div>
+
     </main>
 </div>
 {% endblock %}

@@ -229,6 +229,7 @@
                             </td>
                             <td>
                                 <form method="POST" action="{{ url_for('admin_alertas_actualizar_destinatario', destinatario_id=d.destinatario_id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="accion" value="actualizar">
                                     <div class="al-inline">
                                         <select name="severidad_minima" aria-label="Severidad mínima">
@@ -250,10 +251,12 @@
                             <td><span class="est {{ 'est-ENVIADA' if d.activo else '' }}">{{ 'Activo' if d.activo else 'Inactivo' }}</span></td>
                             <td style="text-align: right; white-space: nowrap;">
                                 <form method="POST" action="{{ url_for('admin_alertas_actualizar_destinatario', destinatario_id=d.destinatario_id) }}" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="accion" value="alternar">
                                     <button type="submit" class="btn btn-outline btn-xs">{{ 'Desactivar' if d.activo else 'Activar' }}</button>
                                 </form>
                                 <form method="POST" action="{{ url_for('admin_alertas_actualizar_destinatario', destinatario_id=d.destinatario_id) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar este destinatario?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="accion" value="eliminar">
                                     <button type="submit" class="btn btn-outline btn-xs" style="color:#B91C1C;">Eliminar</button>
                                 </form>
@@ -268,6 +271,7 @@
             </div>
 
             <form method="POST" action="{{ url_for('admin_alertas_crear_destinatario') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="al-form-grid">
                     <div class="al-field">
                         <label for="tipo_destino">Notificar a</label>
@@ -312,6 +316,7 @@
             <div class="al-panel__title">Probar el servicio de correo</div>
             <div class="al-panel__subtitle">Envía un correo de prueba. Enlace usado en las notificaciones: <span class="mono">{{ url_base or '—' }}/eventos/&lt;id&gt;</span></div>
             <form method="POST" action="{{ url_for('admin_alertas_prueba') }}" class="al-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="email" name="destino" required placeholder="correo@dominio.com" aria-label="Correo de prueba"
                        style="padding: 9px 12px; border-radius: 10px; border: 1px solid var(--clr-border); min-width: 260px;">
                 <button type="submit" class="btn btn-outline">Enviar prueba</button>

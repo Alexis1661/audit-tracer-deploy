@@ -1,9 +1,12 @@
+import os
 import sqlite3
-from typing import Dict
-from ..models.usuarios import get_user_by_email, increment_failed_attempts, reset_failed_attempts, block_user
+from typing import Dict, Optional
+from ..models.usuarios import (
+    get_user_by_email, get_user_by_id, increment_failed_attempts, reset_failed_attempts, block_user, unblock_user,
+)
 from ..models.audit_log import insert_event, contar_intentos_fallidos_recientes
 from ..utils.hashing import verify_password
-from ..utils.session import get_hostname, detect_environment
+from ..utils.session import get_hostname, detect_environment, generate_session_id
 from datetime import datetime, timedelta
 
 from .tokens import generar_token
@@ -12,6 +15,46 @@ from .tokens import generar_token
 # menos de VENTANA_INTENTOS_FALLIDOS_MIN minutos se clasifica como CRITICO.
 UMBRAL_INTENTOS_FALLIDOS = 3
 VENTANA_INTENTOS_FALLIDOS_MIN = 5
+
+# B6 / DSH-D1 (21/11/2026): el 5.º intento fallido bloquea la cuenta durante
+# BLOQUEO_MINUTOS, no para siempre. Antes, cualquiera que conociera un correo
+# podía dejar a su dueño por fuera hasta que alguien editara la base.
+INTENTOS_PARA_BLOQUEO = 5
+
+
+def minutos_bloqueo() -> int:
+    try:
+        return max(1, int(os.environ.get("AUDIT_BLOQUEO_MINUTOS", "15")))
+    except ValueError:
+        return 15
+
+
+def _bloqueo_vencido(hasta: Optional[str]) -> bool:
+    try:
+        return bool(hasta) and datetime.utcnow() >= datetime.fromisoformat(hasta)
+    except ValueError:
+        return True
+
+
+def desbloquear_cuenta(conn: sqlite3.Connection, usuario_id: str, actor_id: str,
+                       sesion_id: Optional[str] = None, motivo: str = "Desbloqueo por administrador") -> bool:
+    """
+    B6 — Reactiva una cuenta bloqueada y deja DESBLOQUEO_CUENTA en audit_log.
+    `actor_id` es el ADMIN que la desbloquea, o 'SISTEMA' cuando vence el bloqueo temporal.
+    """
+    usuario = get_user_by_id(conn, usuario_id)
+    if not usuario:
+        return False
+    unblock_user(conn, usuario_id)
+    insert_event(conn, {
+        'usuario_id': actor_id,
+        'sesion_id': sesion_id or generate_session_id(),
+        'timestamp': datetime.utcnow().isoformat(),
+        'tipo_accion': 'DESBLOQUEO_CUENTA',
+        'contexto_ejecucion': f"Usuario: {usuario_id} ({usuario.get('email')}) | Motivo: {motivo}",
+        'nivel_alerta': 'ADVERTENCIA' if actor_id != 'SISTEMA' else 'NORMAL',
+    })
+    return True
 
 def login(
     conn: sqlite3.Connection, email: str, password: str, sesion_id: str,
@@ -48,10 +91,27 @@ def login(
         return invalid_credentials
 
     user_id = user['usuario_id']
-    
+
     # Check if user is active
     if user['activo'] == 0:
-        return {'success': False, 'message': 'Cuenta bloqueada. Contacte al administrador.'}
+        hasta = user.get('bloqueado_hasta')
+        if hasta and _bloqueo_vencido(hasta):
+            desbloquear_cuenta(conn, user_id, 'SISTEMA', sesion_id, motivo='Venció el bloqueo temporal')
+            user = get_user_by_email(conn, email)
+        else:
+            insert_event(conn, {
+                'usuario_id': user_id,
+                'sesion_id': sesion_id,
+                'timestamp': datetime.utcnow().isoformat(),
+                'tipo_accion': 'ACCESO_FALLIDO',
+                'motivo_fallo': 'Intento de acceso a una cuenta bloqueada',
+                'nivel_alerta': 'ADVERTENCIA',
+            })
+            if hasta:
+                return {'success': False, 'message': (
+                    'Cuenta bloqueada temporalmente por intentos fallidos. Intenta de nuevo más tarde '
+                    'o pide a un administrador que la desbloquee.')}
+            return {'success': False, 'message': 'Cuenta bloqueada. Contacte al administrador.'}
 
     # Verify password
     if verify_password(password, user['password_hash']):
@@ -97,11 +157,13 @@ def login(
         nivel_alerta = 'NORMAL'
         motivo_alerta = None
 
-        if attempts >= 5:
+        if attempts >= INTENTOS_PARA_BLOQUEO:
             nivel_alerta = 'CRITICO'
             motivo_alerta = '5 intentos fallidos consecutivos'
-            block_user(conn, user_id)
-            message = 'Cuenta bloqueada por seguridad tras 5 intentos fallidos.'
+            minutos = minutos_bloqueo()
+            block_user(conn, user_id, hasta=(ahora + timedelta(minutes=minutos)).isoformat())
+            message = (f'Cuenta bloqueada por seguridad tras 5 intentos fallidos. Se desbloqueará en '
+                       f'{minutos} minutos, o antes si un administrador la desbloquea.')
         elif intentos_recientes > UMBRAL_INTENTOS_FALLIDOS:
             nivel_alerta = 'CRITICO'
             motivo_alerta = (

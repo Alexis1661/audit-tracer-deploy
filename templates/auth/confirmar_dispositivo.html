@@ -83,7 +83,20 @@
                     </div>
                     {% endif %}
 
+                    {% if origen %}
+                    {# CAN-S2: quién pidió el código, para no confirmar el pedido de otra persona #}
+                    <div style="padding: 12px 16px; border-radius: 12px; margin-bottom: 24px; font-size: 13px; line-height: 1.5; background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A;">
+                        <strong>Este código lo pidió:</strong><br>
+                        {% if origen.host %}Equipo: {{ origen.host }}<br>{% endif %}
+                        {% if origen.ip %}IP: {{ origen.ip }}<br>{% endif %}
+                        Hora: {{ origen.creado }}<br>
+                        {% if origen.agente %}<span style="font-size: 11px;">{{ origen.agente[:120] }}</span><br>{% endif %}
+                        Confírmalo solo si lo acabas de pedir tú desde tu notebook o script.
+                    </div>
+                    {% endif %}
+
                     <form method="POST" action="{{ url_for('confirmar_dispositivo_post') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="form-group">
                             <label class="form-label" style="text-align: center; display: block;">Código de 8 caracteres</label>
                             <input name="codigo" type="text" class="form-input codigo-input" placeholder="XXXX-XXXX" required

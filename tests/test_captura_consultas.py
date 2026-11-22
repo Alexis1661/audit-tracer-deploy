@@ -7,8 +7,8 @@ Captura ampliada de consultas (21/11/2026):
   * df[mascara], df.loc[mascara]           -> TRANSFORMACION [FILTRADO]
   * pd.read_sql / read_sql_query / read_sql_table -> CARGA (solo la tabla, nunca el texto SQL)
 
-Siguen sin interceptarse (y así consta en el Anexo 10): head, tail, filter,
-groupby, describe, sample.
+Desde la segunda ronda del 21/11/2026 también se interceptan head, tail, filter,
+groupby, describe y sample (ver tests/test_captura_ampliada.py).
 """
 
 import os
@@ -151,13 +151,14 @@ class TestFiltrado:
         (e,) = _nuevos(base, antes)
         assert e["tipo_accion"] == "CONSULTA"
 
-    def test_lo_que_sigue_sin_interceptarse(self, df, base):
+    def test_groupby_describe_sample_y_filter_ahora_son_consulta(self, df, base):
         antes = len(_eventos(base))
         df.groupby("sexo")["glucosa"].mean()
         df.describe()
         df.sample(2)
         df.filter(["edad"])
-        assert [e["tipo_accion"] for e in _nuevos(base, antes) if e["tipo_accion"] != "CONSULTA"] == []
+        tipos = [e["tipo_accion"] for e in _nuevos(base, antes)]
+        assert tipos and set(tipos) == {"CONSULTA"}
 
 
 class TestReadSql:

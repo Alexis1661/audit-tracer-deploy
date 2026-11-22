@@ -13,6 +13,7 @@ servidor, firmados o no y clasificados o no como CRITICO por la librería.
   * La regla de exportación masiva de la librería no cambia.
 """
 
+import secrets
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
@@ -30,11 +31,18 @@ from audit_tracer.digital_signatures import (
     add_signature_to_event, generate_keypair, public_key_to_pem, verify_event_signature,
 )
 from audit_tracer.models.audit_log import _HASHED_COLUMNS, get_anomaly_events, insert_event
+from audit_tracer.models.tokens import insert_token
 from audit_tracer.models.usuarios import create_user, set_user_public_key
 from audit_tracer.utils.hashing import hash_event
 
-HOY = datetime.utcnow().date()
-MADRUGADA = datetime(HOY.year, HOY.month, HOY.day, 3, 10)  # 03:10 UTC, fuera de 07-19
+# 03:10 UTC (fuera de 07-19), siempre en el pasado: antes era "hoy a las
+# 03:10", que entre las 19:00 y las 22:10 de Colombia todavía no había llegado,
+# y el servidor (SRV-T3) marca con razón un timestamp en el futuro.
+_AHORA = datetime.utcnow()
+MADRUGADA = _AHORA.replace(hour=3, minute=10, second=0, microsecond=0)
+if MADRUGADA > _AHORA - timedelta(minutes=30):
+    MADRUGADA -= timedelta(days=1)
+HOY = MADRUGADA.date()
 
 
 @pytest.fixture
@@ -56,7 +64,13 @@ def servidor(monkeypatch, tmp_path):
         if con_llave:  # con llave registrada, el servidor exige que todo evento venga firmado (HU-6.5)
             privada, publica = generate_keypair()
             set_user_public_key(conn, usuario, public_key_to_pem(publica))
-        token = generar_token(conn, usuario)["token"]
+        # El token se inserta sin pasar por generar_token(): su evento
+        # GENERACION_TOKEN quedaría a la hora real de la corrida y ensancharía
+        # el horario habitual, así el resultado dependía de cuándo se corría
+        # la suite (fallaba entre las 19:00 y las 09:00 de Colombia).
+        token = secrets.token_urlsafe(32)
+        insert_token(conn, {"usuario_id": usuario, "token": token,
+                            "fecha_expiracion": (datetime.utcnow() + timedelta(days=1)).isoformat()})
         # Línea base: cinco días anteriores, 14:00-15:00 UTC, exportaciones de 100 a 180 filas.
         for dias, filas in zip(range(5, 0, -1), (100, 120, 140, 160, 180)):
             base = datetime(HOY.year, HOY.month, HOY.day, 14, 0) - timedelta(days=dias)

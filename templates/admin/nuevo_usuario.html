@@ -111,6 +111,7 @@
             {% endif %}
 
             <form method="POST" action="{{ url_for('nuevo_usuario_post') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="form-group">
                     <label class="form-label">Correo electrónico institucional</label>
                     <input name="email" type="email" class="form-input" placeholder="nombre@hospital.com" required value="{{ request.form.get('email', '') }}">

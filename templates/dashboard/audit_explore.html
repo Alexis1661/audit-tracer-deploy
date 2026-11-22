@@ -84,6 +84,7 @@
         <summary class="explorer-disclosure">Filtros guardados <span class="audit-muted">({{ saved | length }})</span></summary>
         {% if filters %}
         <form action="{{ url_for('audit.save_filter') }}" method="post" class="audit-actions explorer-save-filter">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             {% for key, value in filters.items() if value %}
             <input type="hidden" name="{{ key }}" value="{{ value }}">
@@ -102,6 +103,7 @@
             <li>
                 <a href="{{ url_for('audit.explore', **item.filtros) }}">{{ item.nombre }}</a>
                 <form method="post" action="{{ url_for('audit.delete_filter', filter_id=item.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button class="btn btn-outline" type="submit" aria-label="Eliminar filtro {{ item.nombre }}">Eliminar</button>
                 </form>

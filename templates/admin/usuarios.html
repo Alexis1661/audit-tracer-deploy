@@ -146,7 +146,7 @@
                         <td>
                             <div class="status-indicator">
                                 <span class="status-dot {% if u.activo %}status-dot--active{% else %}status-dot--inactive{% endif %}"></span>
-                                {{ 'Activo' if u.activo else 'Bloqueado' }}
+                                {{ 'Activo' if u.activo else ('Bloqueo temporal' if u.bloqueado_hasta else 'Bloqueado') }}
                             </div>
                         </td>
                         <td>

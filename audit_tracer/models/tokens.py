@@ -1,12 +1,64 @@
 """
 tokens.py — Modelo de acceso a datos para la gestión de tokens personales de acceso.
 HU-5.5 (PDGTRAZDSA-127, PDGTRAZDSA-128, PDGTRAZDSA-129, PDGTRAZDSA-130).
+
+B3 / SRV-I1 (21/11/2026) — La columna `token` guarda solo el SHA-256 del token
+("sha256:<hex>"), igual que las contraseñas se guardan con bcrypt: quien lea
+la base central ya no puede suplantar a nadie. El valor en claro existe solo
+en la respuesta que lo entrega (login por código, generación por ADMIN) y en
+el caché del cliente. `token_sufijo` conserva los últimos 4 caracteres para
+que el ADMIN distinga los tokens en la interfaz. Como el token es aleatorio
+de 256 bits, un hash rápido sin sal basta (no hay diccionario que probar).
+Las bases anteriores se migran solas: los tokens en claro se reemplazan por
+su hash la primera vez que se abre la tabla.
 """
 
+import hashlib
 import sqlite3
 import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
+
+PREFIJO_HASH = "sha256:"
+
+# Bases ya migradas en este proceso (ruta del archivo). Las bases en memoria
+# no se cachean: la migración es barata y su "ruta" es vacía.
+_tablas_migradas: set = set()
+
+
+def hash_token(token_str: str) -> str:
+    """
+    Valor que se guarda y se compara en la base: 'sha256:' + hexdigest del token.
+    Siempre calcula el hash, también si la entrada ya parece uno: presentar el
+    hash leído de la base no puede servir como credencial.
+    """
+    return PREFIJO_HASH + hashlib.sha256(token_str.encode("utf-8")).hexdigest()
+
+
+def _ruta_base(conn: sqlite3.Connection) -> str:
+    try:
+        fila = conn.execute("PRAGMA database_list").fetchone()
+        return fila[2] if fila else ""
+    except sqlite3.Error:
+        return ""
+
+
+def _migrar_tokens_en_claro(conn: sqlite3.Connection) -> None:
+    """Agrega token_sufijo y reemplaza por su hash cualquier token guardado en claro."""
+    columnas = {fila[1] for fila in conn.execute("PRAGMA table_info(tokens_acceso)")}
+    if "token_sufijo" not in columnas:
+        conn.execute("ALTER TABLE tokens_acceso ADD COLUMN token_sufijo TEXT")
+    # Rango sobre el índice idx_tokens_token: casi gratis cuando no queda nada por migrar.
+    en_claro = conn.execute(
+        "SELECT token_id, token FROM tokens_acceso WHERE token < ? OR token >= ?",
+        (PREFIJO_HASH, PREFIJO_HASH[:-1] + ";"),
+    ).fetchall()
+    for token_id, token in en_claro:
+        conn.execute(
+            "UPDATE tokens_acceso SET token = ?, token_sufijo = COALESCE(token_sufijo, ?) WHERE token_id = ?",
+            (hash_token(token), token[-4:], token_id),
+        )
+    conn.commit()
 
 
 def _ensure_tokens_table(conn: sqlite3.Connection) -> None:
@@ -26,6 +78,11 @@ def _ensure_tokens_table(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_token ON tokens_acceso(token);")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_usuario ON tokens_acceso(usuario_id);")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_estado ON tokens_acceso(estado);")
+    ruta = _ruta_base(conn)
+    if not ruta or ruta not in _tablas_migradas:
+        _migrar_tokens_en_claro(conn)
+        if ruta:
+            _tablas_migradas.add(ruta)
 
 
 def insert_token(conn: sqlite3.Connection, token_data: Dict) -> str:
@@ -36,7 +93,7 @@ def insert_token(conn: sqlite3.Connection, token_data: Dict) -> str:
         conn (sqlite3.Connection): Conexión a la BD.
         token_data (Dict): Diccionario con datos del token.
             Campos esperados:
-              - token (str, obligatorio)
+              - token (str, obligatorio): valor en claro; se guarda solo su SHA-256
               - usuario_id (str, obligatorio)
               - fecha_creacion (str ISO 8601, opcional)
               - fecha_expiracion (str ISO 8601, obligatorio)
@@ -55,15 +112,17 @@ def insert_token(conn: sqlite3.Connection, token_data: Dict) -> str:
     estado = token_data.get("estado", "ACTIVO")
     creado_por = token_data.get("creado_por", "LOGIN")
 
+    sufijo = token[-4:]
+
     _ensure_tokens_table(conn)
     cursor = conn.cursor()
     cursor.execute(
         """
         INSERT INTO tokens_acceso (
-            token_id, usuario_id, token, fecha_creacion, fecha_expiracion, estado, creado_por
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            token_id, usuario_id, token, token_sufijo, fecha_creacion, fecha_expiracion, estado, creado_por
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (token_id, usuario_id, token, fecha_creacion, fecha_expiracion, estado, creado_por)
+        (token_id, usuario_id, hash_token(token), sufijo, fecha_creacion, fecha_expiracion, estado, creado_por)
     )
     conn.commit()
     return token_id
@@ -75,7 +134,7 @@ def get_token_by_value(conn: sqlite3.Connection, token_str: str) -> Optional[Dic
 
     Args:
         conn (sqlite3.Connection): Conexión a la BD.
-        token_str (str): Cadena del token.
+        token_str (str): Cadena del token (en claro); se busca por su hash.
 
     Returns:
         Optional[Dict]: Registro del token o None si no existe.
@@ -83,7 +142,7 @@ def get_token_by_value(conn: sqlite3.Connection, token_str: str) -> Optional[Dic
     _ensure_tokens_table(conn)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tokens_acceso WHERE token = ?", (token_str,))
+    cursor.execute("SELECT * FROM tokens_acceso WHERE token = ?", (hash_token(token_str),))
     row = cursor.fetchone()
     return dict(row) if row else None
 
@@ -172,7 +231,7 @@ def get_all_tokens_with_user_info(
         SELECT 
             t.token_id,
             t.usuario_id,
-            t.token,
+            t.token_sufijo,
             t.fecha_creacion,
             t.fecha_expiracion,
             t.estado,
@@ -253,10 +312,11 @@ def revoke_token_by_value(conn: sqlite3.Connection, token_str: str) -> bool:
     Returns:
         bool: True si fue revocado, False si no se encontró.
     """
+    _ensure_tokens_table(conn)
     cursor = conn.cursor()
     cursor.execute(
         "UPDATE tokens_acceso SET estado = 'REVOCADO' WHERE token = ?",
-        (token_str,)
+        (hash_token(token_str),)
     )
     conn.commit()
     return cursor.rowcount > 0

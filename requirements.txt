@@ -12,3 +12,5 @@ ipykernel>=6.29.0
 reportlab>=4.0
 pypdf>=4.0
 apscheduler>=3.10,<4
+# Servidor WSGI de producción (Linux). En Windows se usa `python app.py` para desarrollo.
+gunicorn>=22.0; platform_system != "Windows"

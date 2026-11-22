@@ -71,6 +71,10 @@ def _execute_insert(conn: sqlite3.Connection, prepared_event: Dict) -> int:
     """Ejecuta el INSERT de un evento ya preparado por _prepare_event() en `conn`."""
     # HU-6.1 CA4: incluye firma_digital si el evento la trae; None si no.
     columns = _HASHED_COLUMNS + ['evento_uuid', 'hash_integridad', 'firma_digital']
+    # SRV-T3: solo el servidor central fija recibido_en; se omite si no viene
+    # para no exigir la columna en bases creadas con esquemas anteriores.
+    if prepared_event.get('recibido_en'):
+        columns = columns + ['recibido_en']
     placeholders = ', '.join(['?'] * len(columns))
     query = f"INSERT INTO audit_log ({', '.join(columns)}) VALUES ({placeholders})"
     values = [prepared_event.get(col) for col in columns]
@@ -384,6 +388,22 @@ CRITICAL_EVENTS_CSV_COLUMNS = [
 ]
 
 
+_INICIOS_DE_FORMULA = ("=", "+", "-", "@", chr(9), chr(13))
+
+
+def celda_csv_segura(valor):
+    """
+    DSH-I2 (21/11/2026) — Neutraliza la inyección de fórmulas en CSV: una
+    celda que empieza con =, +, -, @, tabulación o retorno de carro se
+    antepone con un apóstrofo, así Excel o LibreOffice la muestran como texto
+    en lugar de ejecutarla (p. ej. un dataset_nombre =HYPERLINK(...) enviado
+    por un cliente malicioso). Los números y valores vacíos no se tocan.
+    """
+    if isinstance(valor, str) and valor.startswith(_INICIOS_DE_FORMULA):
+        return "'" + valor
+    return valor
+
+
 def export_critical_events_to_csv(
     conn: sqlite3.Connection,
     dest,
@@ -424,7 +444,7 @@ def export_critical_events_to_csv(
             fila = {col: evento.get(col) for col in CRITICAL_EVENTS_CSV_COLUMNS}
             if formatear_timestamp and fila.get("timestamp"):
                 fila["timestamp"] = formatear_timestamp(fila["timestamp"])
-            writer.writerow(fila)
+            writer.writerow({col: celda_csv_segura(v) for col, v in fila.items()})
 
     if isinstance(dest, (str, os.PathLike)):
         with open(dest, "w", newline="", encoding="utf-8") as f:
@@ -574,7 +594,7 @@ def export_report_to_csv(
         for evento in eventos:
             if formatear_timestamp and evento.get("timestamp"):
                 evento = {**evento, "timestamp": formatear_timestamp(evento["timestamp"])}
-            writer.writerow(evento)
+            writer.writerow({col: celda_csv_segura(v) for col, v in evento.items()})
 
     if isinstance(dest, (str, os.PathLike)):
         with open(dest, "w", newline="", encoding="utf-8") as f:

@@ -72,10 +72,17 @@ def _load_cached_token(cache_dir: Optional[str]) -> Optional[Dict]:
 
 
 def _save_cached_token(cache_dir: Optional[str], data: Dict) -> None:
+    """
+    LIB-S2 (21/11/2026): el archivo se crea con permisos 0600 (solo su dueño
+    lo lee). En una carpeta de Google Drive esos permisos no aplican: quien
+    comparta la carpeta comparte el token, y así se advierte.
+    """
+    from .utils.permisos import escribir_privado
     path = _cache_file_path(cache_dir)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+    escribir_privado(path, json.dumps(data).encode("utf-8"))
+    if path.startswith(_COLAB_DRIVE_PATH):
+        print("[AuditTracer] El token quedó en tu Google Drive (.audit_tracer/token_cache.json). "
+              "No compartas esa carpeta: quien la vea puede usar tu token hasta que venza o lo revoques.")
 
 
 def _clear_cached_token(cache_dir: Optional[str]) -> None:
@@ -155,17 +162,24 @@ def _validar_token_remoto(api_url: str, token: str) -> Optional[Dict]:
 
 
 def _iniciar_codigo(api_url: str) -> Dict:
-    resp = requests.post(f"{api_url}/api/auth/dispositivo/iniciar", timeout=10)
+    # CAN-S2: el nombre del equipo se muestra en la página de confirmación,
+    # para que el usuario reconozca su propio pedido.
+    from .utils.session import get_hostname
+    resp = requests.post(f"{api_url}/api/auth/dispositivo/iniciar", json={"host": get_hostname()}, timeout=10)
     resp.raise_for_status()
     return resp.json()
 
 
 def _consultar_estado(api_url: str, device_code: str) -> Dict:
-    resp = requests.get(
-        f"{api_url}/api/auth/dispositivo/estado",
-        params={"device_code": device_code},
-        timeout=10,
-    )
+    """
+    CAN-I2 (21/11/2026): el device_code viaja en el cuerpo de un POST, no en
+    la URL, para que no quede en logs de acceso ni en el historial de proxies.
+    Un servidor anterior que solo acepta GET responde 405 y se usa GET.
+    """
+    url = f"{api_url}/api/auth/dispositivo/estado"
+    resp = requests.post(url, json={"device_code": device_code}, timeout=10)
+    if getattr(resp, "status_code", None) == 405:
+        resp = requests.get(url, params={"device_code": device_code}, timeout=10)
     try:
         return resp.json()
     except ValueError:

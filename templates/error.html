@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Error {{ codigo }}{% endblock %}
+{% block meta_description %}{{ mensaje }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .error-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+    font-family: 'Inter', sans-serif;
+    padding: 2rem;
+  }
+  .error-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 20px;
+    padding: 3rem 3.5rem;
+    max-width: 520px;
+    width: 100%;
+    text-align: center;
+    color: #e2e8f0;
+  }
+  .error-card .codigo { font-size: 3rem; font-weight: 800; color: #a5b4fc; margin: 0 0 0.5rem; }
+  .error-card p { color: #cbd5e1; line-height: 1.6; margin: 0 0 1.75rem; }
+  .error-card a {
+    display: inline-block; padding: 0.7rem 1.4rem; border-radius: 10px;
+    background: #6366f1; color: #fff; text-decoration: none; font-weight: 600;
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<main class="error-page">
+  <section class="error-card" role="alert">
+    <div class="codigo">{{ codigo }}</div>
+    <p>{{ mensaje }}</p>
+    <a href="{{ url_for('dashboard') if session.get('usuario_id') else url_for('login') }}">Volver</a>
+  </section>
+</main>
+{% endblock %}

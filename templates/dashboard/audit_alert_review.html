@@ -15,6 +15,7 @@
     <h2>Seguimiento <span class="badge badge-{{ event.nivel_alerta | lower }}">{{ event.nivel_alerta }}</span></h2>
     {% if event.motivo_alerta %}<p>{{ event.motivo_alerta }}</p>{% endif %}
     <form class="audit-stack" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="version" value="{{ event.version }}">
         <div class="audit-grid">

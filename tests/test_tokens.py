@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 from audit_tracer.db import get_connection
 from audit_tracer.models.usuarios import create_user, block_user
+from audit_tracer.models.tokens import hash_token
 from audit_tracer.models.tokens import (
     insert_token,
     get_token_by_value,
@@ -114,7 +115,9 @@ def test_model_insert_and_get_token(db_conn, sample_user):
 
     by_id = get_token_by_id(db_conn, token_id)
     assert by_id is not None
-    assert by_id["token"] == token_str
+    # B3: la base guarda solo el SHA-256 del token y sus últimos 4 caracteres.
+    assert by_id["token"] == hash_token(token_str) != token_str
+    assert by_id["token_sufijo"] == token_str[-4:]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -528,7 +531,7 @@ def sesion_web_real(client):
         return usuario_id, sess["token_id"]
 
 
-@pytest.mark.parametrize("cambio", ("vencimiento", "revocacion", "bloqueo", "rol"))
+@pytest.mark.parametrize("cambio", ("vencimiento", "revocacion", "bloqueo"))
 def test_sesion_web_rechaza_cookie_cuando_cambia_el_estado_servidor(client, sesion_web_real, cambio):
     usuario_id, token_id = sesion_web_real
     response = client.get("/admin/tokens")
@@ -543,10 +546,8 @@ def test_sesion_web_rechaza_cookie_cuando_cambia_el_estado_servidor(client, sesi
             conn.execute("UPDATE tokens_acceso SET fecha_expiracion = ? WHERE token_id = ?", ("2000-01-01T00:00:00", token_id))
         elif cambio == "revocacion":
             revocar_token(conn, token_id)
-        elif cambio == "bloqueo":
-            block_user(conn, usuario_id)
         else:
-            conn.execute("UPDATE usuarios SET rol = 'ANALISTA' WHERE usuario_id = ?", (usuario_id,))
+            block_user(conn, usuario_id)
         conn.commit()
     finally:
         conn.close()
@@ -557,6 +558,22 @@ def test_sesion_web_rechaza_cookie_cuando_cambia_el_estado_servidor(client, sesi
     assert response.headers["Cache-Control"] == "no-store"
     with client.session_transaction() as sess:
         assert "usuario_id" not in sess
+
+
+def test_sesion_web_toma_el_rol_vigente_de_la_base(client, sesion_web_real):
+    """DSH-E2: degradar el rol surte efecto en la sesión abierta, sin esperar a que venza."""
+    usuario_id, _ = sesion_web_real
+    assert client.get("/admin/tokens").status_code == 200
+    conn = get_connection(client.test_db_path)
+    try:
+        conn.execute("UPDATE usuarios SET rol = 'ANALISTA' WHERE usuario_id = ?", (usuario_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    response = client.get("/admin/tokens")
+    assert response.status_code == 302 and "/dashboard" in response.headers["Location"]
+    with client.session_transaction() as sess:
+        assert sess["rol"] == "ANALISTA"
 
 
 def test_cerrar_sesion_invalida_una_copia_de_la_cookie(client, sesion_web_real):

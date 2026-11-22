@@ -6,8 +6,10 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    # app.py lee PORT (Render lo define) y escucha en 0.0.0.0.
-    startCommand: python app.py
+    # SRV-I2 / SRV-D2: servidor WSGI (Gunicorn), no el servidor de desarrollo.
+    # Un proceso con varios hilos: la base es SQLite y el publicador de Merkle
+    # debe correr una sola vez (ver wsgi.py).
+    startCommand: gunicorn wsgi:app --workers 1 --threads 8 --timeout 60 --bind 0.0.0.0:$PORT
     healthCheckPath: /login
     autoDeploy: true
     envVars:
@@ -17,8 +19,15 @@ services:
       - key: FLASK_DEBUG
         value: "0"
       # Crea las cuentas de demo al arrancar (el disco del plan free es
-      # efímero: la base se recrea en cada reinicio).
+      # efímero: la base se recrea en cada reinicio). B10: las contraseñas ya
+      # no están en el código; se toman de SEED_DEMO_PASSWORD (definirla en el
+      # panel de Render) o se generan y se imprimen una vez en el log.
       - key: SEED_DEMO_DATA
+        value: "1"
+      - key: SEED_DEMO_PASSWORD
+        sync: false
+      # CAN-T2: todo evento sincronizado debe venir firmado.
+      - key: AUDIT_EXIGIR_FIRMA
         value: "1"
       # Render termina HTTPS en su proxy: confiar en X-Forwarded-Proto para
       # que /api/eventos/sincronizar no rechace tráfico HTTPS legítimo (HU-5.6).

@@ -113,13 +113,12 @@ El sistema utiliza SQLite en modo WAL. Para crear la base de datos central e ins
 ```bash
 python scratch/seed_admin.py
 ```
+La contraseña se toma de `AUDIT_ADMIN_PASSWORD` o se pide por teclado (21/11/2026: ya no está escrita en el script) y debe cumplir la política: al menos 8 caracteres y tres de minúsculas, mayúsculas, números y símbolos, sin ser una contraseña común.
+
 *Salida esperada:*
 ```text
 Intentando crear usuario admin: admin@audit.com...
 ¡Éxito! Usuario admin creado con ID: usr_...
-Credenciales:
-  Email: admin@audit.com
-  Password: Admin123*
 ```
 
 *(Opcional)* Si requieres poblar el dashboard con datos clínicos y analistas de demostración:
@@ -131,9 +130,7 @@ python scratch/seed_demo_data.py
 ```bash
 python app.py
 ```
-El servidor quedará disponible en `http://localhost:5000`. Puedes ingresar al dashboard con las credenciales creadas:
-* **Usuario:** `admin@audit.com`
-* **Contraseña:** `Admin123*`
+El servidor quedará disponible en `http://localhost:5000`. Ingresa con `admin@audit.com` y la contraseña que definiste en el paso anterior. La cookie de sesión es `Secure`: si tu navegador no la guarda por `http://`, arranca con `AUDIT_COOKIE_SEGURA=0` (solo en desarrollo).
 
 ---
 
@@ -147,7 +144,7 @@ El proyecto incluye el manifiesto de infraestructura como código [`render.yaml`
    * En el panel de Render, selecciona **New > Blueprint**.
    * Conecta tu repositorio de GitHub o Bitbucket.
 2. **Configuración automática vía `render.yaml`:**
-   El archivo configura el runtime Python 3.12, instala `requirements.txt` y arranca con `python app.py`.
+   El archivo configura el runtime Python 3.12, instala `requirements.txt` y arranca con `gunicorn wsgi:app --workers 1 --threads 8` (21/11/2026).
 3. **Variables de entorno indispensables en la nube:**
    * `FLASK_DEBUG=0`
    * `SECRET_KEY`: Llave criptográfica secreta generada automáticamente por Render.
@@ -158,9 +155,9 @@ El proyecto incluye el manifiesto de infraestructura como código [`render.yaml`
 
 Para servidores de producción dedicados (Ubuntu/Debian):
 
-#### 1. Instalar Gunicorn en el entorno virtual:
+#### 1. Instalar las dependencias (incluyen Gunicorn en Linux):
 ```bash
-pip install gunicorn
+pip install -r requirements.txt
 ```
 
 #### 2. Configurar el servicio Systemd (`/etc/systemd/system/audit-tracer.service`):
@@ -177,7 +174,7 @@ Environment="PATH=/opt/audit-tracer/venv/bin"
 Environment="SECRET_KEY=clave_secreta_fuerte_de_produccion_generada_con_openssl"
 Environment="TRUST_PROXY_HEADERS=1"
 Environment="FLASK_DEBUG=0"
-ExecStart=/opt/audit-tracer/venv/bin/gunicorn -w 4 -b 127.0.0.1:5000 --timeout 60 app:app
+ExecStart=/opt/audit-tracer/venv/bin/gunicorn wsgi:app --workers 1 --threads 8 -b 127.0.0.1:5000 --timeout 60
 
 [Install]
 WantedBy=multi-user.target
@@ -248,7 +245,7 @@ El token de autenticación se almacena automáticamente en `/content/drive/MyDri
 | **`SECRET_KEY`** | String seguro | Producción | Clave de firma para sesiones y cookies de Flask. Si no se provee, el servidor genera una llave aleatoria por proceso al iniciar (HU-6.5). |
 | **`TRUST_PROXY_HEADERS`** | `1` o `0` | Producción Cloud | Habilita `ProxyFix` para interpretar cabeceras `X-Forwarded-*`. Obligatorio detrás de proxies inversos con terminación TLS. |
 | **`PORT`** | Entero (`5000`) | Opcional | Puerto de enlace del servidor Flask. Determinado automáticamente por PaaS como Render o Railway. |
-| **`FLASK_DEBUG`** | `0` o `1` | Opcional | `1` en desarrollo para auto-recarga; `0` en servidores públicos o producción. |
+| **`FLASK_DEBUG`** | `0` o `1` | Opcional | `0` por defecto desde el 21/11/2026; `1` solo en desarrollo (trazas y consola de Werkzeug). |
 | **`SEED_DEMO_DATA`** | `1` o `0` | Opcional | Si es `1`, ejecuta automáticamente el sembrado de analistas, datasets y registros clínicos de prueba al arrancar el servidor. |
 | **`AUDIT_TRACER_API_URL`** | URL HTTPS | Clientes | URL base del servidor central hacia donde la librería cliente sincroniza los eventos auditados. |
 

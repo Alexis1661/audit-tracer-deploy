@@ -13,7 +13,11 @@ CREATE TABLE IF NOT EXISTS tokens_acceso (
     -- ID del usuario propietario del token.
     
     token             TEXT     NOT NULL UNIQUE,
-    -- Token criptográficamente seguro (ej. tk_...).
+    -- B3 / SRV-I1: SHA-256 del token ('sha256:<hex>'), nunca el valor en
+    -- claro (tk_...). El valor solo se entrega una vez al generarlo.
+
+    token_sufijo      TEXT,
+    -- Últimos 4 caracteres del token, para identificarlo en la interfaz.
 
     fecha_creacion    TEXT     NOT NULL,
     -- Fecha y hora de creación en formato ISO 8601 UTC.

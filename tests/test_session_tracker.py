@@ -58,9 +58,9 @@ class TestSessionTrackerLogin:
 
     def test_login_exitoso_actualiza_usuario_id(self, tracker_env):
         tracker, conn = tracker_env
-        user_id = register_user(conn, "cientifico@test.com", "pwd12345", "CIENTIFICO_DATOS", "admin")
+        user_id = register_user(conn, "cientifico@test.com", "Clave-Prueba-2026", "CIENTIFICO_DATOS", "admin")
 
-        result = tracker.login("cientifico@test.com", "pwd12345")
+        result = tracker.login("cientifico@test.com", "Clave-Prueba-2026")
 
         assert result["success"] is True
         assert tracker.usuario_id == user_id
@@ -68,10 +68,10 @@ class TestSessionTrackerLogin:
     def test_login_reutiliza_la_misma_sesion_id(self, tracker_env):
         """CA3: login() no genera una sesion_id nueva; conserva la de la sesión activa."""
         tracker, conn = tracker_env
-        register_user(conn, "cientifico2@test.com", "pwd12345", "CIENTIFICO_DATOS", "admin")
+        register_user(conn, "cientifico2@test.com", "Clave-Prueba-2026", "CIENTIFICO_DATOS", "admin")
         sesion_id_previa = tracker.sesion_id
 
-        result = tracker.login("cientifico2@test.com", "pwd12345")
+        result = tracker.login("cientifico2@test.com", "Clave-Prueba-2026")
 
         assert result["sesion_id"] == sesion_id_previa
         assert tracker.sesion_id == sesion_id_previa
@@ -83,7 +83,7 @@ class TestSessionTrackerLogin:
     def test_login_fallido_no_cambia_la_identidad(self, tracker_env):
         """Credenciales inválidas -> el tracker sigue DESCONOCIDO, no queda suplantado."""
         tracker, conn = tracker_env
-        register_user(conn, "cientifico3@test.com", "pwd_correcta", "CIENTIFICO_DATOS", "admin")
+        register_user(conn, "cientifico3@test.com", "Clave-Correcta-2026", "CIENTIFICO_DATOS", "admin")
 
         result = tracker.login("cientifico3@test.com", "pwd_incorrecta")
 
@@ -112,8 +112,8 @@ class TestSessionTrackerLogout:
 
     def test_logout_vuelve_a_desconocido(self, tracker_env):
         tracker, conn = tracker_env
-        register_user(conn, "cientifico4@test.com", "pwd12345", "CIENTIFICO_DATOS", "admin")
-        tracker.login("cientifico4@test.com", "pwd12345")
+        register_user(conn, "cientifico4@test.com", "Clave-Prueba-2026", "CIENTIFICO_DATOS", "admin")
+        tracker.login("cientifico4@test.com", "Clave-Prueba-2026")
         assert tracker.usuario_id != "DESCONOCIDO"
 
         tracker.logout()
@@ -219,7 +219,7 @@ class TestSessionTrackerLoginPorCodigo:
         """No debe tocar device_login() cuando se pasan credenciales (HU-2.5 intacto)."""
         import audit_tracer.device_login as device_login_module
         tracker, conn = tracker_env
-        register_user(conn, "directo@test.com", "pwd12345", "CIENTIFICO_DATOS", "admin")
+        register_user(conn, "directo@test.com", "Clave-Prueba-2026", "CIENTIFICO_DATOS", "admin")
 
         llamado = []
         monkeypatch.setattr(
@@ -227,7 +227,7 @@ class TestSessionTrackerLoginPorCodigo:
             lambda *a, **k: llamado.append(1),
         )
 
-        resultado = tracker.login("directo@test.com", "pwd12345")
+        resultado = tracker.login("directo@test.com", "Clave-Prueba-2026")
 
         assert resultado["success"] is True
         assert llamado == []

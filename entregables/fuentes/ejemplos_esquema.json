@@ -30,7 +30,7 @@
  "tokens_acceso": {
   "token_id": "84f08f3c-cd30-403c-9056-463741f6aa61",
   "usuario_id": "d6e3a74b-a010-4feb-a4f3-ec8b1a5d4523",
-  "token": "tk_IuXMM5yE7… (46 caracteres, enmascarado)",
+  "token": "sha256:9c1e… (71 caracteres, enmascarado)",
   "fecha_creacion": "2026-11-21T18:23:30.289738",
   "fecha_expiracion": "2026-11-21T19:23:30.288373",
   "estado": "ACTIVO",
@@ -64,7 +64,7 @@
  },
  "codigos_dispositivo": {
   "codigo": "CTE5-HDNZ",
-  "device_code": "59s8HMP8C0q9… (43 caracteres, enmascarado)",
+  "device_code": "sha256:4b7d… (71 caracteres, enmascarado)",
   "estado": "CONSUMIDO",
   "usuario_id": "2ef29d4b-40d6-49a0-a9d2-84a0b4253f78",
   "token": null,

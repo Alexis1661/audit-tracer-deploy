@@ -134,7 +134,11 @@ class ValidacionMIMIC:
         self.base = Path(base) if base else Path(tempfile.mkdtemp(prefix="validacion_mimic_"))
         self.verificaciones: List[Verificacion] = []
         self.servidor: Optional[ServidorCentral] = None
-        hoy = datetime.now(COLOMBIA).date()
+        ahora = datetime.now(COLOMBIA)
+        # Los casos fijan las 03:10 y las 10:00 de este día. Antes de las 11:00 esas
+        # horas todavía no llegaron y el servidor marca, con razón, un timestamp en el
+        # futuro (SRV-T3); en ese caso se usa el día anterior.
+        hoy = ahora.date() if ahora.hour >= 11 else ahora.date() - timedelta(days=1)
         self.fecha: date = hoy
         self.usuario_cientifica: Optional[str] = None
         self.usuario_auditor: Optional[str] = None
@@ -577,6 +581,12 @@ class ValidacionMIMIC:
             "sin_resultados": dict(reporte_usuario_id=self.usuario_auditor, reporte_tipo_accion="EXPORTACION",
                                    reporte_fecha_inicio=hace5, reporte_fecha_fin=hoy),
         }
+        def descargas_reporte():
+            return self.servidor.consultar(
+                "SELECT contexto_ejecucion FROM audit_log WHERE tipo_accion = 'DESCARGA_REPORTE' AND usuario_id = ? "
+                "AND contexto_ejecucion LIKE 'Vista: /reportes/exportar |%' ORDER BY event_id", (self.usuario_auditor,))
+
+        previas = len(descargas_reporte())
         resultados, evid = {}, []
         for nombre, params in consultas.items():
             texto, filas, cabecera = auditor.csv("/reportes/exportar", **params)
@@ -588,12 +598,20 @@ class ValidacionMIMIC:
             inicio = datetime(*(self.fecha - timedelta(days=5)).timetuple()[:3], tzinfo=COLOMBIA)
             fin = datetime(*self.fecha.timetuple()[:3], 23, 59, 59, 999999, tzinfo=COLOMBIA)
             a_utc = lambda d: d.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
+            # Desde el 21/11/2026 cada consulta y descarga del auditor queda en la bitácora
+            # (DSH-R1): esos registros los agregan las propias descargas de este caso, así
+            # que se comparan aparte y no forman parte del conjunto esperado.
             return {str(f["event_id"]) for f in self.servidor.consultar(
-                f"SELECT event_id FROM audit_log WHERE timestamp >= ? AND timestamp <= ? {sql_extra}",
+                f"SELECT event_id FROM audit_log WHERE timestamp >= ? AND timestamp <= ? "
+                f"AND tipo_accion NOT IN ('DESCARGA_REPORTE', 'CONSULTA_BITACORA') {sql_extra}",
                 (a_utc(inicio), a_utc(fin), *params))}
 
         def ids(nombre):
-            return {f["event_id"] for f in resultados[nombre][1]}
+            return {f["event_id"] for f in resultados[nombre][1]
+                    if f["tipo_accion"] not in ("DESCARGA_REPORTE", "CONSULTA_BITACORA")}
+
+        descargas = descargas_reporte()[previas:]
+        ok_descargas = len(descargas) == len(consultas) and all("SHA-256:" in d["contexto_ejecucion"] for d in descargas)
 
         dias_ayer = {f["timestamp"][:10] for f in resultados["solo_ayer"][1]}
         ok_fecha = ids("periodo_completo") == esperado() and dias_ayer == {ayer} and resultados["solo_ayer"][1]
@@ -604,12 +622,14 @@ class ValidacionMIMIC:
                       for n, t in (("accesos_carga_usuario_periodo", "CARGA"),
                                    ("exportaciones_usuario_periodo", "EXPORTACION")))
         self._v("3.1", C, "Funcionan los filtros por fecha, usuario y tipo de operación (solos y combinados).",
-                ok_fecha and ok_usuario and ok_tipo,
+                ok_fecha and ok_usuario and ok_tipo and ok_descargas,
                 f"Período {hace5}–{hoy}: {len(ids('periodo_completo'))} eventos; solo {ayer}: "
                 f"{len(ids('solo_ayer'))} (todos con fecha {', '.join(sorted(dias_ayer))}); usuario: "
                 f"{len(ids('usuario_en_periodo'))}; usuario+CARGA: {len(ids('accesos_carga_usuario_periodo'))}; "
                 f"usuario+EXPORTACION: {len(ids('exportaciones_usuario_periodo'))}. Cada conjunto es idéntico al "
-                f"que devuelve una consulta SQL directa a la base central con los mismos criterios.", evid)
+                f"que devuelve una consulta SQL directa a la base central con los mismos criterios. Cada una de "
+                f"las {len(consultas)} descargas quedó registrada como DESCARGA_REPORTE del auditor con el SHA-256 "
+                f"del archivo ({len(descargas)} registros).", evid)
 
         cabecera = resultados["periodo_completo"][2]
         minimos = ["event_id", "usuario_id", "timestamp", "tipo_accion", "dataset_nombre", "referencia_normativa"]

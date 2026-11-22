@@ -74,7 +74,7 @@
     "disparadores": []
    },
    "audit_log": {
-    "sql": "CREATE TABLE audit_log (\n\n    -- IDENTIFICADOR ÚNICO DEL EVENTO (en esta base)\n    event_id          INTEGER  PRIMARY KEY AUTOINCREMENT,\n    -- Clave primaria autogenerada. Nunca puede repetirse ni ser nula.\n    -- Única solo dentro de ESTA base; para deduplicar entre esta base\n    -- local y la central (HU-5.4) se usa evento_uuid, no este campo.\n\n    -- IDENTIFICADOR ÚNICO GLOBAL DEL EVENTO (HU-5.4 CA1)\n    evento_uuid       TEXT     UNIQUE NOT NULL,\n    -- UUID4 generado en Python al construir el evento (ver\n    -- audit_tracer/models/audit_log.py::_prepare_event()). No participa\n    -- del cálculo de hash_integridad. Permite que la futura sincronización\n    -- HU-5.8 reintente sin duplicar eventos en la base central.\n\n    -- IDENTIFICACIÓN DEL ACTOR\n    usuario_id        TEXT     NOT NULL,\n    -- ID único del usuario que ejecutó la acción.\n    -- Si no es identificable: 'DESCONOCIDO'\n    -- Exigido por HIPAA §164.312(b)\n\n    sesion_id         TEXT     NOT NULL,\n    -- UUID único por sesión de trabajo.\n    -- Vincula todos los eventos de una misma ejecución.\n\n    -- TEMPORALIDAD\n    timestamp         TEXT     NOT NULL,\n    -- Fecha y hora en formato ISO 8601: 'YYYY-MM-DDTHH:MM:SS.ffffff'\n    -- Ejemplo: '2026-04-14T10:32:15.123456'\n    -- Exigido por HIPAA §164.312(b)\n\n    -- TIPO DE EVENTO\n    tipo_accion       TEXT     NOT NULL,\n    -- Valores permitidos:\n    -- CARGA              → pd.read_csv(), pd.read_excel()\n    -- CONSULTA           → df[], df.query()\n    -- TRANSFORMACION     → dropna(), fillna(), drop(), rename(), apply(), merge()\n    -- EXPORTACION        → to_csv(), to_excel(), to_json(), to_parquet()\n    -- MODELADO           → model.fit()\n    -- MODELADO_FALLIDO   → error durante entrenamiento\n    -- ACCESO_FALLIDO     → PermissionError, FileNotFoundError\n    -- INICIO_SESION      → import audit_tracer\n    -- CIERRE_SESION      → fin normal de script/kernel\n    -- SESION_INTERRUMPIDA → cierre abrupto del kernel\n    -- CAMBIO_ROL         → asignación/modificación de rol\n    -- CREACION_USUARIO   → registro de nuevo usuario\n    -- ACCESO_DENEGADO    → intento sin permisos\n\n    -- CONTEXTO DEL DATO AFECTADO\n    dataset_nombre    TEXT,\n    -- Nombre del archivo o dataset sobre el que se operó.\n    -- Ejemplo: 'PATIENTS.csv', 'admissions_clean.csv'\n\n    columnas_afectadas TEXT,\n    -- Lista de columnas involucradas (JSON array o string separado por comas).\n    -- Ejemplo: '[\"subject_id\", \"diagnosis\", \"age\"]'\n\n    ruta_destino      TEXT,\n    -- Ruta del archivo de destino en operaciones de exportación.\n    -- Ejemplo: '/outputs/resultados_modelo.csv'\n\n    filas_exportadas  INTEGER,\n    -- Número de filas incluidas en una exportación (tipo_accion = EXPORTACION).\n    -- Exigido por HU-2.3 CA2.\n\n    sobrescritura     INTEGER,\n    -- Indicador de sobrescritura de archivo en exportaciones (0/1).\n    -- 1 = el archivo de destino ya existía y fue sobreescrito.\n    -- Exigido por HU-2.3 CA3.\n\n    -- CONTEXTO DE EJECUCIÓN\n    contexto_ejecucion TEXT,\n    -- Nombre del script o notebook desde el cual se ejecutó la operación.\n    -- Ejemplo: 'analisis_readmision.ipynb', 'preprocesamiento.py'\n\n    -- INFORMACIÓN DE FALLOS Y ALERTAS\n    motivo_fallo      TEXT,\n    -- Causa del fallo en eventos ACCESO_FALLIDO o MODELADO_FALLIDO.\n    -- Ejemplo: 'PermissionError', 'FileNotFoundError', 'usuario no autorizado'\n\n    nivel_alerta      TEXT     DEFAULT 'NORMAL',\n    -- Clasificación de severidad del evento.\n    -- Valores: 'NORMAL', 'ADVERTENCIA', 'CRITICO'\n    -- CRITICO: >3 intentos fallidos en <5 min, exportaciones masivas >1000 filas\n\n    motivo_alerta     TEXT,\n    -- Descripción de la causa de clasificación crítica.\n    -- Ejemplo: '3 intentos fallidos en 4 minutos'\n\n    -- INTEGRIDAD DEL REGISTRO\n    hash_integridad   TEXT     NOT NULL,\n    -- Hash SHA-256 calculado sobre los campos del evento.\n    -- Permite detectar alteraciones posteriores al registro.\n    -- Exigido por HIPAA §164.312(c)(1)\n\n    firma_digital     TEXT\n    -- HU-6.1 CA4: Firma digital Ed25519 generada por la llave privada del usuario.\n    -- Base64url sin padding, ~86 caracteres. Almacenada para verificación forense.\n)",
+    "sql": "CREATE TABLE audit_log (\n\n    -- IDENTIFICADOR ÚNICO DEL EVENTO (en esta base)\n    event_id          INTEGER  PRIMARY KEY AUTOINCREMENT,\n    -- Clave primaria autogenerada. Nunca puede repetirse ni ser nula.\n    -- Única solo dentro de ESTA base; para deduplicar entre esta base\n    -- local y la central (HU-5.4) se usa evento_uuid, no este campo.\n\n    -- IDENTIFICADOR ÚNICO GLOBAL DEL EVENTO (HU-5.4 CA1)\n    evento_uuid       TEXT     UNIQUE NOT NULL,\n    -- UUID4 generado en Python al construir el evento (ver\n    -- audit_tracer/models/audit_log.py::_prepare_event()). No participa\n    -- del cálculo de hash_integridad. Permite que la futura sincronización\n    -- HU-5.8 reintente sin duplicar eventos en la base central.\n\n    -- IDENTIFICACIÓN DEL ACTOR\n    usuario_id        TEXT     NOT NULL,\n    -- ID único del usuario que ejecutó la acción.\n    -- Si no es identificable: 'DESCONOCIDO'\n    -- Exigido por HIPAA §164.312(b)\n\n    sesion_id         TEXT     NOT NULL,\n    -- UUID único por sesión de trabajo.\n    -- Vincula todos los eventos de una misma ejecución.\n\n    -- TEMPORALIDAD\n    timestamp         TEXT     NOT NULL,\n    -- Fecha y hora en formato ISO 8601: 'YYYY-MM-DDTHH:MM:SS.ffffff'\n    -- Ejemplo: '2026-04-14T10:32:15.123456'\n    -- Exigido por HIPAA §164.312(b)\n\n    -- TIPO DE EVENTO\n    tipo_accion       TEXT     NOT NULL,\n    -- Valores permitidos:\n    -- CARGA              → pd.read_csv(), pd.read_excel()\n    -- CONSULTA           → df[], df.query()\n    -- TRANSFORMACION     → dropna(), fillna(), drop(), rename(), apply(), merge()\n    -- EXPORTACION        → to_csv(), to_excel(), to_json(), to_parquet()\n    -- MODELADO           → model.fit()\n    -- MODELADO_FALLIDO   → error durante entrenamiento\n    -- ACCESO_FALLIDO     → PermissionError, FileNotFoundError\n    -- INICIO_SESION      → import audit_tracer\n    -- CIERRE_SESION      → fin normal de script/kernel\n    -- SESION_INTERRUMPIDA → cierre abrupto del kernel\n    -- CAMBIO_ROL         → asignación/modificación de rol\n    -- CREACION_USUARIO   → registro de nuevo usuario\n    -- ACCESO_DENEGADO    → intento sin permisos\n\n    -- CONTEXTO DEL DATO AFECTADO\n    dataset_nombre    TEXT,\n    -- Nombre del archivo o dataset sobre el que se operó.\n    -- Ejemplo: 'PATIENTS.csv', 'admissions_clean.csv'\n\n    columnas_afectadas TEXT,\n    -- Lista de columnas involucradas (JSON array o string separado por comas).\n    -- Ejemplo: '[\"subject_id\", \"diagnosis\", \"age\"]'\n\n    ruta_destino      TEXT,\n    -- Ruta del archivo de destino en operaciones de exportación.\n    -- Ejemplo: '/outputs/resultados_modelo.csv'\n\n    filas_exportadas  INTEGER,\n    -- Número de filas incluidas en una exportación (tipo_accion = EXPORTACION).\n    -- Exigido por HU-2.3 CA2.\n\n    sobrescritura     INTEGER,\n    -- Indicador de sobrescritura de archivo en exportaciones (0/1).\n    -- 1 = el archivo de destino ya existía y fue sobreescrito.\n    -- Exigido por HU-2.3 CA3.\n\n    -- CONTEXTO DE EJECUCIÓN\n    contexto_ejecucion TEXT,\n    -- Nombre del script o notebook desde el cual se ejecutó la operación.\n    -- Ejemplo: 'analisis_readmision.ipynb', 'preprocesamiento.py'\n\n    -- INFORMACIÓN DE FALLOS Y ALERTAS\n    motivo_fallo      TEXT,\n    -- Causa del fallo en eventos ACCESO_FALLIDO o MODELADO_FALLIDO.\n    -- Ejemplo: 'PermissionError', 'FileNotFoundError', 'usuario no autorizado'\n\n    nivel_alerta      TEXT     DEFAULT 'NORMAL',\n    -- Clasificación de severidad del evento.\n    -- Valores: 'NORMAL', 'ADVERTENCIA', 'CRITICO'\n    -- CRITICO: >3 intentos fallidos en <5 min, exportaciones masivas >1000 filas\n\n    motivo_alerta     TEXT,\n    -- Descripción de la causa de clasificación crítica.\n    -- Ejemplo: '3 intentos fallidos en 4 minutos'\n\n    -- INTEGRIDAD DEL REGISTRO\n    hash_integridad   TEXT     NOT NULL,\n    -- Hash SHA-256 calculado sobre los campos del evento.\n    -- Permite detectar alteraciones posteriores al registro.\n    -- Exigido por HIPAA §164.312(c)(1)\n\n    firma_digital     TEXT,\n    -- HU-6.1 CA4: Firma digital Ed25519 generada por la llave privada del usuario.\n    -- Base64url sin padding, ~86 caracteres. Almacenada para verificación forense.\n\n    recibido_en       TEXT\n    -- SRV-T3: fecha UTC (ISO 8601) en que el servidor central recibió el\n    -- evento, tomada de su propio reloj. NULL en la base local y en los\n    -- eventos que el servidor genera. No participa del hash ni de la firma:\n    -- el cliente no la controla.\n)",
     "columnas": [
      {
       "cid": 0,
@@ -211,6 +211,14 @@
       "notnull": 0,
       "default": null,
       "pk": 0
+     },
+     {
+      "cid": 17,
+      "nombre": "recibido_en",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
      }
     ],
     "llaves_foraneas": [],
@@ -338,8 +346,97 @@
     ],
     "disparadores": []
    },
+   "llaves_publicas": {
+    "sql": "CREATE TABLE llaves_publicas (\n    llave_id          INTEGER  PRIMARY KEY AUTOINCREMENT,\n    usuario_id        TEXT     NOT NULL REFERENCES usuarios(usuario_id),\n    llave_publica     TEXT     NOT NULL,\n    huella            TEXT     NOT NULL,\n    -- SHA-256 de la llave (primeros 16 hex) para mostrarla en el dashboard.\n    token_id          TEXT,\n    -- Token con el que se registró (sin el valor del token).\n    registrada_en     TEXT     NOT NULL,\n    revocada_en       TEXT,\n    revocada_por      TEXT,\n    UNIQUE (usuario_id, huella)\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "llave_id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "llave_publica",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "huella",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "token_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "registrada_en",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "revocada_en",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 7,
+      "nombre": "revocada_por",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [
+     {
+      "id": 0,
+      "seq": 0,
+      "tabla": "usuarios",
+      "desde": "usuario_id",
+      "hacia": "usuario_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     }
+    ],
+    "indices": [
+     {
+      "nombre": "idx_llaves_usuario",
+      "sql": "CREATE INDEX idx_llaves_usuario ON llaves_publicas(usuario_id)",
+      "unico": false
+     }
+    ],
+    "disparadores": []
+   },
    "tokens_acceso": {
-    "sql": "CREATE TABLE tokens_acceso (\n\n    token_id          TEXT     PRIMARY KEY,\n    -- Identificador único del token (UUID).\n\n    usuario_id        TEXT     NOT NULL,\n    -- ID del usuario propietario del token.\n    \n    token             TEXT     NOT NULL UNIQUE,\n    -- Token criptográficamente seguro (ej. tk_...).\n\n    fecha_creacion    TEXT     NOT NULL,\n    -- Fecha y hora de creación en formato ISO 8601 UTC.\n\n    fecha_expiracion  TEXT     NOT NULL,\n    -- Fecha y hora de expiración en formato ISO 8601 UTC (por defecto +30 días).\n\n    estado            TEXT     NOT NULL DEFAULT 'ACTIVO',\n    -- Estado del token: 'ACTIVO', 'REVOCADO', 'EXPIRADO'.\n\n    creado_por        TEXT     NOT NULL DEFAULT 'LOGIN',\n    -- Origen o actor de generación: 'LOGIN', 'ADMIN', 'SISTEMA', etc.\n\n    FOREIGN KEY (usuario_id) REFERENCES usuarios(usuario_id)\n)",
+    "sql": "CREATE TABLE tokens_acceso (\n\n    token_id          TEXT     PRIMARY KEY,\n    -- Identificador único del token (UUID).\n\n    usuario_id        TEXT     NOT NULL,\n    -- ID del usuario propietario del token.\n    \n    token             TEXT     NOT NULL UNIQUE,\n    -- B3 / SRV-I1: SHA-256 del token ('sha256:<hex>'), nunca el valor en\n    -- claro (tk_...). El valor solo se entrega una vez al generarlo.\n\n    token_sufijo      TEXT,\n    -- Últimos 4 caracteres del token, para identificarlo en la interfaz.\n\n    fecha_creacion    TEXT     NOT NULL,\n    -- Fecha y hora de creación en formato ISO 8601 UTC.\n\n    fecha_expiracion  TEXT     NOT NULL,\n    -- Fecha y hora de expiración en formato ISO 8601 UTC (por defecto +30 días).\n\n    estado            TEXT     NOT NULL DEFAULT 'ACTIVO',\n    -- Estado del token: 'ACTIVO', 'REVOCADO', 'EXPIRADO'.\n\n    creado_por        TEXT     NOT NULL DEFAULT 'LOGIN',\n    -- Origen o actor de generación: 'LOGIN', 'ADMIN', 'SISTEMA', etc.\n\n    FOREIGN KEY (usuario_id) REFERENCES usuarios(usuario_id)\n)",
     "columnas": [
      {
       "cid": 0,
@@ -367,6 +464,14 @@
      },
      {
       "cid": 3,
+      "nombre": "token_sufijo",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
       "nombre": "fecha_creacion",
       "tipo": "TEXT",
       "notnull": 1,
@@ -374,7 +479,7 @@
       "pk": 0
      },
      {
-      "cid": 4,
+      "cid": 5,
       "nombre": "fecha_expiracion",
       "tipo": "TEXT",
       "notnull": 1,
@@ -382,7 +487,7 @@
       "pk": 0
      },
      {
-      "cid": 5,
+      "cid": 6,
       "nombre": "estado",
       "tipo": "TEXT",
       "notnull": 1,
@@ -390,7 +495,7 @@
       "pk": 0
      },
      {
-      "cid": 6,
+      "cid": 7,
       "nombre": "creado_por",
       "tipo": "TEXT",
       "notnull": 1,
@@ -430,7 +535,7 @@
     "disparadores": []
    },
    "usuarios": {
-    "sql": "CREATE TABLE usuarios (\n\n    usuario_id        TEXT     PRIMARY KEY,\n    -- ID único del usuario. Generado con UUID.\n\n    email             TEXT     NOT NULL UNIQUE,\n    -- Correo electrónico del usuario. No puede repetirse.\n\n    password_hash     TEXT     NOT NULL,\n    -- Contraseña almacenada con hash bcrypt. Nunca en texto plano.\n\n    rol               TEXT     NOT NULL,\n    -- Roles válidos: 'ADMIN', 'ANALISTA', 'AUDITOR', 'CIENTIFICO_DATOS'\n\n    activo            INTEGER  NOT NULL DEFAULT 1,\n    -- 1 = activo, 0 = inactivo/bloqueado\n\n    intentos_fallidos INTEGER  NOT NULL DEFAULT 0,\n    -- Contador de intentos fallidos consecutivos.\n    -- Al llegar a 5 se bloquea la cuenta 15 minutos.\n\n    llave_publica     TEXT\n    -- HU-6.1 CA1/CA3: PEM Ed25519 SubjectPublicKeyInfo del usuario.\n    -- Null hasta que el usuario se autentique con la libreria actualizada.\n\n)",
+    "sql": "CREATE TABLE usuarios (\n\n    usuario_id        TEXT     PRIMARY KEY,\n    -- ID único del usuario. Generado con UUID.\n\n    email             TEXT     NOT NULL UNIQUE,\n    -- Correo electrónico del usuario. No puede repetirse.\n\n    password_hash     TEXT     NOT NULL,\n    -- Contraseña almacenada con hash bcrypt. Nunca en texto plano.\n\n    rol               TEXT     NOT NULL,\n    -- Roles válidos: 'ADMIN', 'ANALISTA', 'AUDITOR', 'CIENTIFICO_DATOS'\n\n    activo            INTEGER  NOT NULL DEFAULT 1,\n    -- 1 = activo, 0 = inactivo/bloqueado\n\n    intentos_fallidos INTEGER  NOT NULL DEFAULT 0,\n    -- Contador de intentos fallidos consecutivos.\n    -- Al llegar a 5 se bloquea la cuenta 15 minutos (bloqueado_hasta).\n\n    llave_publica     TEXT,\n    -- HU-6.1 CA1/CA3: PEM Ed25519 SubjectPublicKeyInfo de la última llave\n    -- registrada. El historial completo, con su vigencia, vive en\n    -- llaves_publicas (SRV-R2).\n\n    bloqueado_hasta   TEXT\n    -- B6 / DSH-D1: fin (UTC ISO 8601) del bloqueo temporal por intentos\n    -- fallidos. NULL con activo = 0 significa cuenta deshabilitada por un\n    -- ADMIN (no se reactiva sola).\n\n)",
     "columnas": [
      {
       "cid": 0,
@@ -483,6 +588,14 @@
      {
       "cid": 6,
       "nombre": "llave_publica",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 7,
+      "nombre": "bloqueado_hasta",
       "tipo": "TEXT",
       "notnull": 0,
       "default": null,
@@ -931,7 +1044,7 @@
     "disparadores": []
    },
    "audit_log": {
-    "sql": "CREATE TABLE audit_log (\n\n    -- IDENTIFICADOR ÚNICO DEL EVENTO (en esta base)\n    event_id          INTEGER  PRIMARY KEY AUTOINCREMENT,\n    -- Autoincremental y único solo dentro de ESTA base. No sirve como\n    -- clave de deduplicación entre orígenes distintos — para eso existe\n    -- evento_uuid.\n\n    -- IDENTIFICADOR ÚNICO GLOBAL DEL EVENTO (HU-5.4 CA1)\n    evento_uuid       TEXT     UNIQUE NOT NULL,\n    -- UUID4 generado en Python al construir el evento (mismo valor si el\n    -- evento también se escribió en la base local — ver insert_event_dual()).\n    -- Permite que HU-5.8 reintente una sincronización fallida sin crear\n    -- eventos duplicados en la central (idempotencia).\n\n    -- IDENTIFICACIÓN DEL ACTOR\n    usuario_id        TEXT     NOT NULL,\n    -- ID único del usuario que ejecutó la acción.\n    -- Si no es identificable: 'DESCONOCIDO'.\n    -- Con múltiples orígenes consolidados en una sola tabla, este campo\n    -- es lo que permite trazar el usuario emisor de cada evento (HU-5.4 CA1).\n    -- Exigido por HIPAA §164.312(b)\n\n    sesion_id         TEXT     NOT NULL,\n    -- UUID único por sesión de trabajo.\n    -- Vincula todos los eventos de una misma ejecución.\n\n    -- TEMPORALIDAD\n    timestamp         TEXT     NOT NULL,\n    -- Fecha y hora en formato ISO 8601: 'YYYY-MM-DDTHH:MM:SS.ffffff'\n    -- Exigido por HIPAA §164.312(b)\n\n    -- TIPO DE EVENTO\n    tipo_accion       TEXT     NOT NULL,\n    -- Mismos valores que en el audit_log local: CARGA, CONSULTA,\n    -- TRANSFORMACION, EXPORTACION, MODELADO, MODELADO_FALLIDO,\n    -- ACCESO_FALLIDO, INICIO_SESION, CIERRE_SESION, SESION_INTERRUMPIDA,\n    -- CAMBIO_ROL/MODIFICACION_ROL, CREACION_USUARIO, ACCESO_DENEGADO,\n    -- INTENTO_MODIFICACION, INTENTO_ELIMINACION.\n\n    -- CONTEXTO DEL DATO AFECTADO\n    dataset_nombre    TEXT,\n    columnas_afectadas TEXT,\n    ruta_destino      TEXT,\n\n    filas_exportadas  INTEGER,\n    -- Número de filas incluidas en una exportación (HU-2.3 CA2).\n\n    sobrescritura     INTEGER,\n    -- Indicador de sobrescritura de archivo en exportaciones (0/1) (HU-2.3 CA3).\n\n    -- CONTEXTO DE EJECUCIÓN\n    contexto_ejecucion TEXT,\n\n    -- INFORMACIÓN DE FALLOS Y ALERTAS\n    motivo_fallo      TEXT,\n\n    nivel_alerta      TEXT     DEFAULT 'NORMAL',\n    -- Valores: 'NORMAL', 'ADVERTENCIA', 'CRITICO'\n\n    motivo_alerta     TEXT,\n\n    -- INTEGRIDAD DEL REGISTRO (HU-5.4 CA3 — mismo mecanismo que el local)\n    hash_integridad   TEXT     NOT NULL,\n    -- SHA-256 calculado en Python (hash_event()) sobre los 13 campos\n    -- funcionales. evento_uuid y event_id quedan fuera del cálculo,\n    -- igual que en el audit_log local — así el hash de un evento es\n    -- idéntico sin importar en qué base se calculó o insertó.\n\n    firma_digital     TEXT\n    -- HU-6.1 CA4: Firma digital Ed25519 generada por la llave privada del usuario.\n    -- Base64url sin padding, ~86 caracteres. Almacenada para verificación forense.\n)",
+    "sql": "CREATE TABLE audit_log (\n\n    -- IDENTIFICADOR ÚNICO DEL EVENTO (en esta base)\n    event_id          INTEGER  PRIMARY KEY AUTOINCREMENT,\n    -- Autoincremental y único solo dentro de ESTA base. No sirve como\n    -- clave de deduplicación entre orígenes distintos — para eso existe\n    -- evento_uuid.\n\n    -- IDENTIFICADOR ÚNICO GLOBAL DEL EVENTO (HU-5.4 CA1)\n    evento_uuid       TEXT     UNIQUE NOT NULL,\n    -- UUID4 generado en Python al construir el evento (mismo valor si el\n    -- evento también se escribió en la base local — ver insert_event_dual()).\n    -- Permite que HU-5.8 reintente una sincronización fallida sin crear\n    -- eventos duplicados en la central (idempotencia).\n\n    -- IDENTIFICACIÓN DEL ACTOR\n    usuario_id        TEXT     NOT NULL,\n    -- ID único del usuario que ejecutó la acción.\n    -- Si no es identificable: 'DESCONOCIDO'.\n    -- Con múltiples orígenes consolidados en una sola tabla, este campo\n    -- es lo que permite trazar el usuario emisor de cada evento (HU-5.4 CA1).\n    -- Exigido por HIPAA §164.312(b)\n\n    sesion_id         TEXT     NOT NULL,\n    -- UUID único por sesión de trabajo.\n    -- Vincula todos los eventos de una misma ejecución.\n\n    -- TEMPORALIDAD\n    timestamp         TEXT     NOT NULL,\n    -- Fecha y hora en formato ISO 8601: 'YYYY-MM-DDTHH:MM:SS.ffffff'\n    -- Exigido por HIPAA §164.312(b)\n\n    -- TIPO DE EVENTO\n    tipo_accion       TEXT     NOT NULL,\n    -- Mismos valores que en el audit_log local: CARGA, CONSULTA,\n    -- TRANSFORMACION, EXPORTACION, MODELADO, MODELADO_FALLIDO,\n    -- ACCESO_FALLIDO, INICIO_SESION, CIERRE_SESION, SESION_INTERRUMPIDA,\n    -- CAMBIO_ROL/MODIFICACION_ROL, CREACION_USUARIO, ACCESO_DENEGADO,\n    -- INTENTO_MODIFICACION, INTENTO_ELIMINACION.\n\n    -- CONTEXTO DEL DATO AFECTADO\n    dataset_nombre    TEXT,\n    columnas_afectadas TEXT,\n    ruta_destino      TEXT,\n\n    filas_exportadas  INTEGER,\n    -- Número de filas incluidas en una exportación (HU-2.3 CA2).\n\n    sobrescritura     INTEGER,\n    -- Indicador de sobrescritura de archivo en exportaciones (0/1) (HU-2.3 CA3).\n\n    -- CONTEXTO DE EJECUCIÓN\n    contexto_ejecucion TEXT,\n\n    -- INFORMACIÓN DE FALLOS Y ALERTAS\n    motivo_fallo      TEXT,\n\n    nivel_alerta      TEXT     DEFAULT 'NORMAL',\n    -- Valores: 'NORMAL', 'ADVERTENCIA', 'CRITICO'\n\n    motivo_alerta     TEXT,\n\n    -- INTEGRIDAD DEL REGISTRO (HU-5.4 CA3 — mismo mecanismo que el local)\n    hash_integridad   TEXT     NOT NULL,\n    -- SHA-256 calculado en Python (hash_event()) sobre los 13 campos\n    -- funcionales. evento_uuid y event_id quedan fuera del cálculo,\n    -- igual que en el audit_log local — así el hash de un evento es\n    -- idéntico sin importar en qué base se calculó o insertó.\n\n    firma_digital     TEXT,\n    -- HU-6.1 CA4: Firma digital Ed25519 generada por la llave privada del usuario.\n    -- Base64url sin padding, ~86 caracteres. Almacenada para verificación forense.\n\n    recibido_en       TEXT\n    -- SRV-T3: fecha UTC (ISO 8601) en que el servidor central recibió el\n    -- evento, tomada de su propio reloj. NULL en la base local y en los\n    -- eventos que el servidor genera. No participa del hash ni de la firma:\n    -- el cliente no la controla.\n)",
     "columnas": [
      {
       "cid": 0,
@@ -1064,6 +1177,14 @@
      {
       "cid": 16,
       "nombre": "firma_digital",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 17,
+      "nombre": "recibido_en",
       "tipo": "TEXT",
       "notnull": 0,
       "default": null,
@@ -1241,7 +1362,7 @@
     "disparadores": []
    },
    "codigos_dispositivo": {
-    "sql": "CREATE TABLE codigos_dispositivo (\n            codigo            TEXT     PRIMARY KEY,\n            device_code       TEXT     NOT NULL UNIQUE,\n            estado            TEXT     NOT NULL DEFAULT 'PENDIENTE',\n            usuario_id        TEXT,\n            token             TEXT,\n            fecha_creacion    TEXT     NOT NULL,\n            fecha_expiracion  TEXT     NOT NULL\n        )",
+    "sql": "CREATE TABLE codigos_dispositivo (\n            codigo            TEXT     PRIMARY KEY,\n            device_code       TEXT     NOT NULL UNIQUE,\n            estado            TEXT     NOT NULL DEFAULT 'PENDIENTE',\n            usuario_id        TEXT,\n            token             TEXT,\n            fecha_creacion    TEXT     NOT NULL,\n            fecha_expiracion  TEXT     NOT NULL\n        , ip_origen TEXT, agente_origen TEXT, host_origen TEXT, sesion_confirmacion TEXT)",
     "columnas": [
      {
       "cid": 0,
@@ -1298,6 +1419,38 @@
       "notnull": 1,
       "default": null,
       "pk": 0
+     },
+     {
+      "cid": 7,
+      "nombre": "ip_origen",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 8,
+      "nombre": "agente_origen",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 9,
+      "nombre": "host_origen",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 10,
+      "nombre": "sesion_confirmacion",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
      }
     ],
     "llaves_foraneas": [],
@@ -1315,8 +1468,97 @@
     ],
     "disparadores": []
    },
+   "llaves_publicas": {
+    "sql": "CREATE TABLE llaves_publicas (\n    llave_id          INTEGER  PRIMARY KEY AUTOINCREMENT,\n    usuario_id        TEXT     NOT NULL REFERENCES usuarios(usuario_id),\n    llave_publica     TEXT     NOT NULL,\n    huella            TEXT     NOT NULL,\n    -- SHA-256 de la llave (primeros 16 hex) para mostrarla en el dashboard.\n    token_id          TEXT,\n    -- Token con el que se registró (sin el valor del token).\n    registrada_en     TEXT     NOT NULL,\n    revocada_en       TEXT,\n    revocada_por      TEXT,\n    UNIQUE (usuario_id, huella)\n)",
+    "columnas": [
+     {
+      "cid": 0,
+      "nombre": "llave_id",
+      "tipo": "INTEGER",
+      "notnull": 0,
+      "default": null,
+      "pk": 1
+     },
+     {
+      "cid": 1,
+      "nombre": "usuario_id",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 2,
+      "nombre": "llave_publica",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 3,
+      "nombre": "huella",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
+      "nombre": "token_id",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 5,
+      "nombre": "registrada_en",
+      "tipo": "TEXT",
+      "notnull": 1,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 6,
+      "nombre": "revocada_en",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 7,
+      "nombre": "revocada_por",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     }
+    ],
+    "llaves_foraneas": [
+     {
+      "id": 0,
+      "seq": 0,
+      "tabla": "usuarios",
+      "desde": "usuario_id",
+      "hacia": "usuario_id",
+      "on_update": "NO ACTION",
+      "on_delete": "NO ACTION",
+      "match": "NONE"
+     }
+    ],
+    "indices": [
+     {
+      "nombre": "idx_llaves_usuario",
+      "sql": "CREATE INDEX idx_llaves_usuario ON llaves_publicas(usuario_id)",
+      "unico": false
+     }
+    ],
+    "disparadores": []
+   },
    "tokens_acceso": {
-    "sql": "CREATE TABLE tokens_acceso (\n\n    token_id          TEXT     PRIMARY KEY,\n    -- Identificador único del token (UUID).\n\n    usuario_id        TEXT     NOT NULL,\n    -- ID del usuario propietario del token.\n    \n    token             TEXT     NOT NULL UNIQUE,\n    -- Token criptográficamente seguro (ej. tk_...).\n\n    fecha_creacion    TEXT     NOT NULL,\n    -- Fecha y hora de creación en formato ISO 8601 UTC.\n\n    fecha_expiracion  TEXT     NOT NULL,\n    -- Fecha y hora de expiración en formato ISO 8601 UTC (por defecto +30 días).\n\n    estado            TEXT     NOT NULL DEFAULT 'ACTIVO',\n    -- Estado del token: 'ACTIVO', 'REVOCADO', 'EXPIRADO'.\n\n    creado_por        TEXT     NOT NULL DEFAULT 'LOGIN',\n    -- Origen o actor de generación: 'LOGIN', 'ADMIN', 'SISTEMA', etc.\n\n    FOREIGN KEY (usuario_id) REFERENCES usuarios(usuario_id)\n)",
+    "sql": "CREATE TABLE tokens_acceso (\n\n    token_id          TEXT     PRIMARY KEY,\n    -- Identificador único del token (UUID).\n\n    usuario_id        TEXT     NOT NULL,\n    -- ID del usuario propietario del token.\n    \n    token             TEXT     NOT NULL UNIQUE,\n    -- B3 / SRV-I1: SHA-256 del token ('sha256:<hex>'), nunca el valor en\n    -- claro (tk_...). El valor solo se entrega una vez al generarlo.\n\n    token_sufijo      TEXT,\n    -- Últimos 4 caracteres del token, para identificarlo en la interfaz.\n\n    fecha_creacion    TEXT     NOT NULL,\n    -- Fecha y hora de creación en formato ISO 8601 UTC.\n\n    fecha_expiracion  TEXT     NOT NULL,\n    -- Fecha y hora de expiración en formato ISO 8601 UTC (por defecto +30 días).\n\n    estado            TEXT     NOT NULL DEFAULT 'ACTIVO',\n    -- Estado del token: 'ACTIVO', 'REVOCADO', 'EXPIRADO'.\n\n    creado_por        TEXT     NOT NULL DEFAULT 'LOGIN',\n    -- Origen o actor de generación: 'LOGIN', 'ADMIN', 'SISTEMA', etc.\n\n    FOREIGN KEY (usuario_id) REFERENCES usuarios(usuario_id)\n)",
     "columnas": [
      {
       "cid": 0,
@@ -1344,6 +1586,14 @@
      },
      {
       "cid": 3,
+      "nombre": "token_sufijo",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 4,
       "nombre": "fecha_creacion",
       "tipo": "TEXT",
       "notnull": 1,
@@ -1351,7 +1601,7 @@
       "pk": 0
      },
      {
-      "cid": 4,
+      "cid": 5,
       "nombre": "fecha_expiracion",
       "tipo": "TEXT",
       "notnull": 1,
@@ -1359,7 +1609,7 @@
       "pk": 0
      },
      {
-      "cid": 5,
+      "cid": 6,
       "nombre": "estado",
       "tipo": "TEXT",
       "notnull": 1,
@@ -1367,7 +1617,7 @@
       "pk": 0
      },
      {
-      "cid": 6,
+      "cid": 7,
       "nombre": "creado_por",
       "tipo": "TEXT",
       "notnull": 1,
@@ -1407,7 +1657,7 @@
     "disparadores": []
    },
    "usuarios": {
-    "sql": "CREATE TABLE usuarios (\n\n    usuario_id        TEXT     PRIMARY KEY,\n    -- ID único del usuario. Generado con UUID.\n\n    email             TEXT     NOT NULL UNIQUE,\n    -- Correo electrónico del usuario. No puede repetirse.\n\n    password_hash     TEXT     NOT NULL,\n    -- Contraseña almacenada con hash bcrypt. Nunca en texto plano.\n\n    rol               TEXT     NOT NULL,\n    -- Roles válidos: 'ADMIN', 'ANALISTA', 'AUDITOR', 'CIENTIFICO_DATOS'\n\n    activo            INTEGER  NOT NULL DEFAULT 1,\n    -- 1 = activo, 0 = inactivo/bloqueado\n\n    intentos_fallidos INTEGER  NOT NULL DEFAULT 0,\n    -- Contador de intentos fallidos consecutivos.\n    -- Al llegar a 5 se bloquea la cuenta 15 minutos.\n\n    llave_publica     TEXT\n    -- HU-6.1 CA1/CA3: PEM Ed25519 SubjectPublicKeyInfo del usuario.\n    -- Null hasta que el usuario se autentique con la libreria actualizada.\n\n)",
+    "sql": "CREATE TABLE usuarios (\n\n    usuario_id        TEXT     PRIMARY KEY,\n    -- ID único del usuario. Generado con UUID.\n\n    email             TEXT     NOT NULL UNIQUE,\n    -- Correo electrónico del usuario. No puede repetirse.\n\n    password_hash     TEXT     NOT NULL,\n    -- Contraseña almacenada con hash bcrypt. Nunca en texto plano.\n\n    rol               TEXT     NOT NULL,\n    -- Roles válidos: 'ADMIN', 'ANALISTA', 'AUDITOR', 'CIENTIFICO_DATOS'\n\n    activo            INTEGER  NOT NULL DEFAULT 1,\n    -- 1 = activo, 0 = inactivo/bloqueado\n\n    intentos_fallidos INTEGER  NOT NULL DEFAULT 0,\n    -- Contador de intentos fallidos consecutivos.\n    -- Al llegar a 5 se bloquea la cuenta 15 minutos (bloqueado_hasta).\n\n    llave_publica     TEXT,\n    -- HU-6.1 CA1/CA3: PEM Ed25519 SubjectPublicKeyInfo de la última llave\n    -- registrada. El historial completo, con su vigencia, vive en\n    -- llaves_publicas (SRV-R2).\n\n    bloqueado_hasta   TEXT\n    -- B6 / DSH-D1: fin (UTC ISO 8601) del bloqueo temporal por intentos\n    -- fallidos. NULL con activo = 0 significa cuenta deshabilitada por un\n    -- ADMIN (no se reactiva sola).\n\n)",
     "columnas": [
      {
       "cid": 0,
@@ -1460,6 +1710,14 @@
      {
       "cid": 6,
       "nombre": "llave_publica",
+      "tipo": "TEXT",
+      "notnull": 0,
+      "default": null,
+      "pk": 0
+     },
+     {
+      "cid": 7,
+      "nombre": "bloqueado_hasta",
       "tipo": "TEXT",
       "notnull": 0,
       "default": null,

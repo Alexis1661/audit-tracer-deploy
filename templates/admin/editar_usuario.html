@@ -137,6 +137,7 @@
             {% endwith %}
 
             <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="form-group">
                     <label class="form-label">Asignar Nuevo Rol</label>
                     <select name="rol" class="form-select" required>
@@ -155,6 +156,56 @@
                     </p>
                 </div>
             </form>
+
+            {# B6 / DSH-D1: desbloqueo por ADMIN, registrado como DESBLOQUEO_CUENTA #}
+            <section style="margin-top: 36px;">
+                <h2 style="font-size: 15px; font-weight: 800; margin-bottom: 10px;">Estado de la cuenta</h2>
+                {% if usuario.activo %}
+                    <p style="font-size: 13px; color: var(--clr-text-muted);">Activa. Intentos fallidos acumulados: {{ usuario.intentos_fallidos or 0 }}.</p>
+                {% else %}
+                    <p style="font-size: 13px;">
+                        {% if usuario.bloqueado_hasta %}
+                            Bloqueada temporalmente por intentos fallidos hasta las {{ usuario.bloqueado_hasta | hora_col }}.
+                        {% else %}
+                            Bloqueada.
+                        {% endif %}
+                    </p>
+                    <form method="POST" action="{{ url_for('desbloquear_usuario_post', usuario_id=usuario.usuario_id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline" style="margin-top: 8px;">Desbloquear cuenta</button>
+                    </form>
+                {% endif %}
+            </section>
+
+            {# SRV-S2 / SRV-R2: llaves Ed25519 registradas por la librería, una por equipo #}
+            <section style="margin-top: 36px;">
+                <h2 style="font-size: 15px; font-weight: 800; margin-bottom: 10px;">Llaves de firma registradas</h2>
+                {% if llaves %}
+                <table class="audit-table" style="width: 100%; font-size: 12px;">
+                    <thead><tr><th>Huella</th><th>Registrada</th><th>Estado</th><th></th></tr></thead>
+                    <tbody>
+                    {% for ll in llaves %}
+                        <tr>
+                            <td style="font-family: monospace;">{{ ll.huella }}</td>
+                            <td>{{ ll.registrada_en | hora_col }}</td>
+                            <td>{% if ll.revocada_en %}Revocada {{ ll.revocada_en | hora_col }}{% else %}Activa{% endif %}</td>
+                            <td>
+                                {% if not ll.revocada_en %}
+                                <form method="POST" action="{{ url_for('revocar_llave_post', usuario_id=usuario.usuario_id, llave_id=ll.llave_id) }}"
+                                      onsubmit="return confirm('¿Revocar esta llave? Los eventos nuevos firmados con ella serán rechazados.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-outline" style="padding: 4px 10px; font-size: 11px;">Revocar</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                    <p style="font-size: 13px; color: var(--clr-text-muted);">Este usuario todavía no registró ninguna llave desde la librería.</p>
+                {% endif %}
+            </section>
         </div>
     </main>
 </div>

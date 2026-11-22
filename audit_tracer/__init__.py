@@ -25,8 +25,13 @@ _guard(_activate_data_capture, _contexto="Activación de data_capture")
 # HU-2.2: transformaciones (fillna, dropna, drop, rename, apply, merge).
 _guard(_activate_transform_capture, _contexto="Activación de transform_capture")
 
-# HU-2.3: exportación (to_csv, to_excel, to_json, to_parquet).
+# HU-2.3: exportación (to_csv, to_excel, to_json, to_parquet y, desde el
+# 21/11/2026, to_sql, to_pickle, to_feather, portapapeles, np.save, ...).
 _guard(_activate_export_capture, _contexto="Activación de export_capture")
+
+# HU-03 (21/11/2026): modelado con scikit-learn (fit, predict, validación cruzada).
+from .model_capture import activate as _activate_model_capture
+_guard(_activate_model_capture, _contexto="Activación de model_capture")
 
 # Inicializar rastreo de sesión automático para scripts y Jupyter
 _guard(init_tracker, _contexto="Inicialización de la sesión de auditoría")

@@ -89,23 +89,51 @@ def reset_failed_attempts(conn: sqlite3.Connection, usuario_id: str):
     cursor.execute("UPDATE usuarios SET intentos_fallidos = 0 WHERE usuario_id = ?", (usuario_id,))
     conn.commit()
 
-def block_user(conn: sqlite3.Connection, usuario_id: str):
+def _columnas_usuarios(conn: sqlite3.Connection) -> set:
+    return {fila[1] for fila in conn.execute("PRAGMA table_info(usuarios)")}
+
+
+def block_user(conn: sqlite3.Connection, usuario_id: str, hasta: Optional[str] = None):
     """
     Blocks a user by setting activo = 0.
+
+    B6 / DSH-D1: con `hasta` (UTC ISO 8601) el bloqueo es temporal y se
+    levanta solo al vencer (lo comprueba el login). Sin `hasta`, la cuenta
+    queda deshabilitada hasta que un ADMIN la desbloquee.
 
     Args:
         conn (sqlite3.Connection): Database connection.
         usuario_id (str): User ID.
+        hasta: fin del bloqueo temporal, o None para un bloqueo indefinido.
     """
     cursor = conn.cursor()
-    cursor.execute("UPDATE usuarios SET activo = 0 WHERE usuario_id = ?", (usuario_id,))
+    if "bloqueado_hasta" in _columnas_usuarios(conn):
+        cursor.execute("UPDATE usuarios SET activo = 0, bloqueado_hasta = ? WHERE usuario_id = ?",
+                       (hasta, usuario_id))
+    else:
+        cursor.execute("UPDATE usuarios SET activo = 0 WHERE usuario_id = ?", (usuario_id,))
     conn.commit()
 
+
+def unblock_user(conn: sqlite3.Connection, usuario_id: str) -> bool:
+    """B6 — Reactiva la cuenta, reinicia el contador de intentos y borra el bloqueo temporal."""
+    cursor = conn.cursor()
+    if "bloqueado_hasta" in _columnas_usuarios(conn):
+        cursor.execute(
+            "UPDATE usuarios SET activo = 1, intentos_fallidos = 0, bloqueado_hasta = NULL WHERE usuario_id = ?",
+            (usuario_id,))
+    else:
+        cursor.execute("UPDATE usuarios SET activo = 1, intentos_fallidos = 0 WHERE usuario_id = ?", (usuario_id,))
+    conn.commit()
+    return cursor.rowcount > 0
+
+
 def get_all_users(conn: sqlite3.Connection) -> list:
-    """Retrieves all users from the database."""
+    """Retrieves all users from the database (con el estado de bloqueo, si la columna existe)."""
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT usuario_id, email, rol, activo FROM usuarios")
+    extra = ", intentos_fallidos, bloqueado_hasta" if "bloqueado_hasta" in _columnas_usuarios(conn) else ""
+    cursor.execute(f"SELECT usuario_id, email, rol, activo{extra} FROM usuarios")
     rows = cursor.fetchall()
     return [dict(row) for row in rows]
 

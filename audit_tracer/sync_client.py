@@ -213,6 +213,26 @@ def _intentar_envio(
                 "event_id_central": data.get("event_id"),
             }
 
+        if resp.status_code == 429:
+            # SRV-D1: el servidor pide esperar. No es un fallo del evento: no
+            # se cuenta como intento y el barrido se retoma en el próximo ciclo.
+            return {
+                "ok": False,
+                "motivo": "LIMITE",
+                "mensaje": "El servidor central pidió esperar antes de enviar más eventos (HTTP 429)",
+                "event_id_central": None,
+            }
+
+        if resp.status_code == 403 and _motivo_servidor(resp) == "USUARIO_NO_COINCIDE":
+            # SRV-S1: el evento es de otro usuario que usó este equipo; se
+            # enviará cuando ese usuario vuelva a iniciar sesión aquí.
+            return {
+                "ok": False,
+                "motivo": "USUARIO_NO_COINCIDE",
+                "mensaje": "El evento pertenece a otro usuario; queda pendiente hasta que ese usuario inicie sesión",
+                "event_id_central": None,
+            }
+
         if resp.status_code in (401, 403):
             # CA4: token inválido/expirado/revocado — no tiene sentido reintentar
             # con el mismo token, así que no se reintenta (evita retry infinito).
@@ -236,6 +256,24 @@ def _intentar_envio(
         }
 
     return {"ok": False, "motivo": "SIN_CONEXION", "mensaje": ultimo_error, "event_id_central": None}
+
+
+def _motivo_servidor(resp) -> Optional[str]:
+    try:
+        datos = resp.json()
+    except Exception:
+        return None
+    return datos.get("motivo") if isinstance(datos, dict) else None
+
+
+def _usuario_actual() -> Optional[str]:
+    """Usuario identificado en esta sesión de la librería, o None si todavía es DESCONOCIDO."""
+    try:
+        from .session_tracker import SessionTracker
+        usuario = SessionTracker.get_instance().usuario_id
+    except Exception:
+        return None
+    return usuario if usuario and usuario != "DESCONOCIDO" else None
 
 
 def _aplicar_resultado(conn, event_id: int, resultado: Dict) -> None:
@@ -297,6 +335,12 @@ def sync_pending_events(conn=None, deadline: Optional[float] = None) -> Dict:
     conn_local = conn or get_connection()
     try:
         pendientes = get_pending_sync_events(conn_local)
+        # SRV-S1: con un usuario identificado, los eventos que otro usuario dejó
+        # pendientes en este equipo esperan a que ese usuario inicie sesión
+        # (el servidor los rechazaría por no coincidir con el dueño del token).
+        usuario = _usuario_actual()
+        if usuario:
+            pendientes = [f for f in pendientes if f.get("usuario_id") in (usuario, "DESCONOCIDO")]
         resumen = {"total": len(pendientes), "sincronizados": 0, "fallidos": 0}
 
         for fila in pendientes:
@@ -310,6 +354,8 @@ def sync_pending_events(conn=None, deadline: Optional[float] = None) -> Dict:
                     _payload_from_row(fila), max_intentos=1,
                     timeout=min(REQUEST_TIMEOUT_SECONDS, restante),
                 )
+            if resultado["motivo"] == "LIMITE":
+                break   # el evento sigue PENDIENTE, sin gastar un intento
             _aplicar_resultado(conn_local, fila["event_id"], resultado)
 
             if resultado["ok"]:

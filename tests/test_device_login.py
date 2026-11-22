@@ -121,7 +121,17 @@ class TestConfirmacion:
         registro = get_by_codigo(conn, datos["codigo"])
         assert registro["estado"] == "CONFIRMADO"
         assert registro["usuario_id"] == usuario
-        assert registro["token"]  # el token queda listo para que el polling lo recoja
+        # SRV-I1: el token no se guarda en la tabla; se genera en el polling que lo entrega.
+        assert registro["token"] is None
+        assert consultar_estado(conn, datos["device_code"])["token"].startswith("tk_")
+
+    def test_el_device_code_se_guarda_como_hash(self, conn):
+        """SRV-I1: quien lea la base no obtiene un device_code usable para el polling."""
+        datos = iniciar_login_dispositivo(conn)
+        guardado = conn.execute("SELECT device_code FROM codigos_dispositivo WHERE codigo = ?",
+                                (datos["codigo"],)).fetchone()[0]
+        assert guardado.startswith("sha256:") and datos["device_code"] not in guardado
+        assert consultar_estado(conn, guardado)["estado"] == "INVALIDO"
 
     def test_confirmar_codigo_inexistente_falla(self, conn, usuario):
         exito, mensaje = confirmar_codigo(conn, "ZZZZ-9999", usuario)
@@ -359,6 +369,9 @@ class TestDeviceLoginCliente:
                     "url_activacion": f"https://central.example.org/auth/dispositivo?codigo={codigo}",
                     "expira_en_segundos": 600, "intervalo_polling": intervalo,
                 })
+            if url.endswith("/api/auth/dispositivo/estado"):
+                # CAN-I2: el polling va por POST; cada prueba define las respuestas con requests.get.
+                return device_login_module.requests.get(url, params=(k.get("json") or {}), timeout=k.get("timeout"))
             raise AssertionError(f"POST inesperado a {url}")
         monkeypatch.setattr(device_login_module.requests, "post", _post)
 
@@ -463,6 +476,8 @@ class TestDeviceLoginCliente:
                     "url_activacion": "https://central.example.org/auth/dispositivo?codigo=NEWC-0DE1",
                     "expira_en_segundos": 600, "intervalo_polling": 0.01,
                 })
+            if url.endswith("/api/auth/dispositivo/estado"):   # CAN-I2: polling por POST
+                return device_login_module.requests.get(url)
             raise AssertionError(f"POST inesperado a {url}")
 
         monkeypatch.setattr(device_login_module.requests, "post", _post)

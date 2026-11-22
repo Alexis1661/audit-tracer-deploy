@@ -414,21 +414,18 @@ def _sembrar_evento_con_xss(conectar):
 
 
 # ══════════════════════════════════════════════════════════════
-# 3. RIESGOS ABIERTOS (xfail estricto)
+# 3. MITIGACIONES DEL PLAN (antes riesgos abiertos, cerrados el 21/11/2026)
 # ══════════════════════════════════════════════════════════════
 
-def riesgo_abierto(amenaza):
-    """Marca una prueba que describe la mitigación pendiente de `amenaza`."""
-    return pytest.mark.xfail(
-        strict=True, raises=AssertionError,
-        reason=f"{amenaza}: riesgo abierto documentado en docs/modelo_amenazas_stride.md",
-    )
+class TestMitigacionesDelPlan:
+    """
+    Las nueve pruebas que hasta el 21/11/2026 eran xfail en TestRiesgosAbiertos.
+    Cada una ataca el sistema igual que antes y ahora comprueba que el ataque
+    se bloquea (o queda registrado, cuando bloquearlo no es posible).
+    """
 
-
-class TestRiesgosAbiertos:
-
-    @riesgo_abierto("SRV-S1")
-    def test_riesgo_abierto_evento_a_nombre_de_otro_usuario_es_rechazado(self, servidor):
+    def test_mitigado_evento_a_nombre_de_otro_usuario_es_rechazado(self, servidor):
+        """SRV-S1 / LIB-S1: el usuario del evento debe ser el dueño del token."""
         client, conectar = servidor
         atacante = _usuario(conectar, "atacante@x.co", "CIENTIFICO_DATOS")
         victima = _usuario(conectar, "victima@x.co", "CIENTIFICO_DATOS")
@@ -437,10 +434,27 @@ class TestRiesgosAbiertos:
 
         resp = _sincronizar(client, token, evento)
         assert resp.status_code == 403
+        assert resp.get_json()["motivo"] == "USUARIO_NO_COINCIDE"
         assert _fila(conectar, evento["evento_uuid"]) is None
+        conn = conectar()
+        try:
+            rechazos = get_events(conn, usuario_id=atacante, tipo_accion="SINCRONIZACION_RECHAZADA")
+        finally:
+            conn.close()
+        assert len(rechazos) == 1 and rechazos[0]["nivel_alerta"] == "CRITICO"
+        assert victima in rechazos[0]["motivo_fallo"]
 
-    @riesgo_abierto("SRV-S2")
-    def test_riesgo_abierto_cambio_de_llave_publica_queda_registrado(self, servidor):
+    def test_mitigado_eventos_desconocidos_del_mismo_equipo_se_aceptan(self, servidor):
+        """Los eventos capturados antes del login (DESCONOCIDO) no suplantan a nadie: se aceptan."""
+        client, conectar = servidor
+        uid = _usuario(conectar, "a@x.co", "CIENTIFICO_DATOS")
+        token = _token(conectar, uid)
+        evento = _evento("DESCONOCIDO")
+        assert _sincronizar(client, token, evento).status_code == 201
+        assert _fila(conectar, evento["evento_uuid"])["nivel_alerta"] == "CRITICO"
+
+    def test_mitigado_cambio_de_llave_publica_queda_registrado(self, servidor):
+        """SRV-S2: registrar una segunda llave deja un evento ADVERTENCIA (alerta de equipo nuevo)."""
         client, conectar = servidor
         uid = _usuario(conectar, "a@x.co", "CIENTIFICO_DATOS")
         token = _token(conectar, uid)
@@ -449,62 +463,225 @@ class TestRiesgosAbiertos:
             _, pub = generate_keypair()
             ultima = client.post("/api/usuarios/llave-publica",
                                  json={"llave_publica": public_key_to_pem(pub)}, headers=headers)
+        assert ultima.status_code == 200 and ultima.get_json()["nueva"] is True
         conn = conectar()
         try:
-            rastro = [e for e in get_events(conn, usuario_id=uid) if "LLAVE" in e["tipo_accion"]]
+            rastro = get_events(conn, usuario_id=uid, tipo_accion="REGISTRO_LLAVE_PUBLICA")
         finally:
             conn.close()
-        # Seguro: el reemplazo se rechaza, o al menos queda registrado.
-        assert ultima.status_code >= 400 or rastro
+        assert [e["nivel_alerta"] for e in rastro] == ["NORMAL", "ADVERTENCIA"]
+        assert all("Huella:" in e["contexto_ejecucion"] for e in rastro)
 
-    @riesgo_abierto("SRV-T3")
-    def test_riesgo_abierto_servidor_reclasifica_exportacion_masiva(self, servidor):
+    def test_mitigado_registrar_otra_vez_la_misma_llave_no_genera_ruido(self, servidor):
+        client, conectar = servidor
+        uid = _usuario(conectar, "a@x.co", "CIENTIFICO_DATOS")
+        token = _token(conectar, uid)
+        _, pub = generate_keypair()
+        for _ in range(3):
+            resp = client.post("/api/usuarios/llave-publica", json={"llave_publica": public_key_to_pem(pub)},
+                               headers={"Authorization": f"Bearer {token}"})
+            assert resp.status_code == 200
+        conn = conectar()
+        try:
+            assert len(get_events(conn, usuario_id=uid, tipo_accion="REGISTRO_LLAVE_PUBLICA")) == 1
+        finally:
+            conn.close()
+
+    def test_mitigado_firmas_anteriores_siguen_verificandose_tras_otra_llave(self, servidor):
+        """SRV-R2: una llave nueva ya no invalida las firmas hechas con la anterior."""
+        from audit_tracer.digital_signatures import add_signature_to_event
+        client, conectar = servidor
+        uid = _usuario(conectar, "a@x.co", "CIENTIFICO_DATOS")
+        token = _token(conectar, uid)
+        headers = {"Authorization": f"Bearer {token}"}
+        privada_1, publica_1 = generate_keypair()
+        client.post("/api/usuarios/llave-publica", json={"llave_publica": public_key_to_pem(publica_1)}, headers=headers)
+        evento = add_signature_to_event(_evento(uid), privada_1)
+        assert _sincronizar(client, token, evento).status_code == 201
+        _, publica_2 = generate_keypair()
+        client.post("/api/usuarios/llave-publica", json={"llave_publica": public_key_to_pem(publica_2)}, headers=headers)
+
+        _sesion(client, conectar, "auditor-1", "AUDITOR")
+        event_id = _fila(conectar, evento["evento_uuid"])["event_id"]
+        html = client.get(f"/eventos/{event_id}").get_data(as_text=True)
+        assert "Firma válida y verificada" in html
+
+    def test_mitigado_llave_revocada_no_acepta_eventos_nuevos(self, servidor):
+        from audit_tracer.digital_signatures import add_signature_to_event
+        from audit_tracer.models.llaves import listar_llaves, revocar_llave
+        client, conectar = servidor
+        uid = _usuario(conectar, "a@x.co", "CIENTIFICO_DATOS")
+        token = _token(conectar, uid)
+        privada, publica = generate_keypair()
+        pem = public_key_to_pem(publica)
+        client.post("/api/usuarios/llave-publica", json={"llave_publica": pem},
+                    headers={"Authorization": f"Bearer {token}"})
+        conn = conectar()
+        try:
+            revocar_llave(conn, listar_llaves(conn, uid)[0]["llave_id"], "admin")
+        finally:
+            conn.close()
+        assert _sincronizar(client, token, add_signature_to_event(_evento(uid), privada)).status_code == 422
+        reintento = client.post("/api/usuarios/llave-publica", json={"llave_publica": pem},
+                                headers={"Authorization": f"Bearer {token}"})
+        assert reintento.status_code == 409
+
+    def test_mitigado_servidor_reclasifica_exportacion_masiva(self, servidor):
+        """SRV-T3: el servidor recalcula el nivel y guarda la fecha de recepción."""
         client, conectar = servidor
         uid = _usuario(conectar, "a@x.co", "CIENTIFICO_DATOS")
         token = _token(conectar, uid)
         evento = _evento(uid, tipo_accion="EXPORTACION", filas_exportadas=50_000,
                          ruta_destino="/content/todo.csv", nivel_alerta="NORMAL")
         assert _sincronizar(client, token, evento).status_code == 201
-        assert _fila(conectar, evento["evento_uuid"])["nivel_alerta"] == "CRITICO"
+        fila = _fila(conectar, evento["evento_uuid"])
+        assert fila["nivel_alerta"] == "CRITICO"
+        assert "Exportación masiva" in fila["motivo_alerta"]
+        assert fila["recibido_en"]
+        conn = conectar()
+        try:
+            assert verify_integrity(conn) == []
+        finally:
+            conn.close()
 
-    @riesgo_abierto("SRV-D1")
-    def test_riesgo_abierto_el_servidor_limita_el_tamano_de_la_peticion(self):
-        assert app_module.app.config.get("MAX_CONTENT_LENGTH") is not None
+    def test_mitigado_evento_firmado_subclasificado_genera_reclasificacion(self, servidor):
+        """SRV-T3 con firma: el evento se guarda intacto y el servidor agrega RECLASIFICACION_SERVIDOR."""
+        from audit_tracer.digital_signatures import add_signature_to_event
+        client, conectar = servidor
+        uid = _usuario(conectar, "a@x.co", "CIENTIFICO_DATOS")
+        token = _token(conectar, uid)
+        privada, publica = generate_keypair()
+        client.post("/api/usuarios/llave-publica", json={"llave_publica": public_key_to_pem(publica)},
+                    headers={"Authorization": f"Bearer {token}"})
+        evento = add_signature_to_event(
+            _evento(uid, tipo_accion="EXPORTACION", filas_exportadas=50_000, nivel_alerta="NORMAL"), privada)
+        assert _sincronizar(client, token, evento).status_code == 201
+        assert _fila(conectar, evento["evento_uuid"])["nivel_alerta"] == "NORMAL"   # firmado: no se toca
+        conn = conectar()
+        try:
+            (reclasificacion,) = get_events(conn, usuario_id=uid, tipo_accion="RECLASIFICACION_SERVIDOR")
+        finally:
+            conn.close()
+        assert reclasificacion["nivel_alerta"] == "CRITICO"
+        assert evento["evento_uuid"] in reclasificacion["contexto_ejecucion"]
 
-    @riesgo_abierto("DSH-S3")
-    def test_riesgo_abierto_cookie_de_sesion_es_secure_y_samesite(self):
+    def test_mitigado_timestamp_en_el_futuro_se_marca(self, servidor):
+        from datetime import timedelta
+        client, conectar = servidor
+        uid = _usuario(conectar, "a@x.co", "CIENTIFICO_DATOS")
+        token = _token(conectar, uid)
+        evento = _evento(uid, timestamp=(datetime.utcnow() + timedelta(days=2)).isoformat())
+        assert _sincronizar(client, token, evento).status_code == 201
+        fila = _fila(conectar, evento["evento_uuid"])
+        assert fila["nivel_alerta"] == "CRITICO" and "futuro" in fila["motivo_alerta"]
+
+    def test_mitigado_el_servidor_limita_el_tamano_de_la_peticion(self, servidor):
+        """SRV-D1: MAX_CONTENT_LENGTH rechaza cuerpos enormes antes de leerlos."""
+        client, conectar = servidor
+        assert app_module.app.config.get("MAX_CONTENT_LENGTH") == 2 * 1024 * 1024
+        uid = _usuario(conectar, "a@x.co", "CIENTIFICO_DATOS")
+        token = _token(conectar, uid)
+        resp = client.post("/api/eventos/sincronizar", data="x" * (3 * 1024 * 1024),
+                           content_type="application/json", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 413
+
+    def test_mitigado_cookie_de_sesion_es_secure_y_samesite(self, servidor):
+        """DSH-S3: Secure, HttpOnly y SameSite=Lax."""
         config = app_module.app.config
         assert config.get("SESSION_COOKIE_SECURE") is True
+        assert config.get("SESSION_COOKIE_HTTPONLY") is True
         assert config.get("SESSION_COOKIE_SAMESITE") in ("Lax", "Strict")
+        client, conectar = servidor
+        _usuario(conectar, "analista@x.co", "ANALISTA")
+        resp = _login(client, "analista@x.co")
+        cabecera = resp.headers.get("Set-Cookie", "")
+        assert "Secure" in cabecera and "HttpOnly" in cabecera and "SameSite=Lax" in cabecera
 
-    @riesgo_abierto("DSH-T1")
-    def test_riesgo_abierto_post_sin_token_csrf_es_rechazado(self, servidor):
+    def test_mitigado_sesion_inactiva_se_cierra(self, servidor):
+        """B1: tras el tiempo de inactividad la sesión se cierra y su token queda revocado."""
+        from datetime import timedelta
+        client, conectar = servidor
+        _usuario(conectar, "analista@x.co", "ANALISTA")
+        assert _login(client, "analista@x.co").status_code == 302
+        assert client.get("/eventos").status_code == 200
+        with client.session_transaction() as sess:
+            token_id = sess["token_id"]
+            sess["ultima_actividad"] = (datetime.utcnow() - app_module.INACTIVIDAD_MAXIMA
+                                        - timedelta(minutes=1)).isoformat()
+        resp = client.get("/eventos", follow_redirects=True)
+        assert resp.request.path == "/login"
+        assert "sin actividad" in resp.get_data(as_text=True)
+        conn = conectar()
+        try:
+            estado = conn.execute("SELECT estado FROM tokens_acceso WHERE token_id = ?", (token_id,)).fetchone()[0]
+        finally:
+            conn.close()
+        assert estado == "REVOCADO"
+
+    def test_mitigado_post_sin_token_csrf_es_rechazado(self, servidor):
+        """DSH-T1: un formulario de otro sitio no conoce el token CSRF de la sesión."""
         client, conectar = servidor
         admin = _usuario(conectar, "admin@x.co", "ADMIN")
         analista = _usuario(conectar, "analista@x.co", "ANALISTA")
         _sesion(client, conectar, admin, "ADMIN")
-        # Un formulario de otro sitio no conoce ningún token CSRF.
-        client.post(f"/admin/usuarios/editar/{analista}", data={"rol": "ADMIN"})
+        resp = client.post(f"/admin/usuarios/editar/{analista}", data={"rol": "ADMIN"}, csrf=False)
+        assert resp.status_code == 400
         conn = conectar()
         try:
             rol = conn.execute("SELECT rol FROM usuarios WHERE usuario_id = ?", (analista,)).fetchone()[0]
+            denegados = get_events(conn, usuario_id=admin, tipo_accion="ACCESO_DENEGADO")
         finally:
             conn.close()
         assert rol == "ANALISTA"
+        assert denegados and "CSRF" in denegados[0]["motivo_fallo"]
 
-    @riesgo_abierto("DSH-R1")
-    def test_riesgo_abierto_descarga_de_reporte_queda_registrada(self, servidor):
-        client, conectar = servidor
-        _sesion(client, conectar, "auditor-1", "AUDITOR")
-        assert client.get("/reportes/exportar").status_code == 200
+        # El formulario real del dashboard sí trae el token: el cambio pasa.
+        client.post(f"/admin/usuarios/editar/{analista}", data={"rol": "AUDITOR"})
         conn = conectar()
         try:
-            assert get_events(conn, usuario_id="auditor-1")
+            assert conn.execute("SELECT rol FROM usuarios WHERE usuario_id = ?", (analista,)).fetchone()[0] == "AUDITOR"
         finally:
             conn.close()
 
-    @riesgo_abierto("DSH-I2")
-    def test_riesgo_abierto_csv_neutraliza_formulas(self, servidor):
+    def test_mitigado_las_paginas_traen_cabeceras_de_seguridad(self, servidor):
+        """DSH-E3: CSP sin conexiones ni formularios hacia otros sitios, y sin marcos."""
+        client, _ = servidor
+        resp = client.get("/login")
+        csp = resp.headers["Content-Security-Policy"]
+        assert "connect-src 'self'" in csp and "form-action 'self'" in csp and "frame-ancestors 'none'" in csp
+        assert resp.headers["X-Frame-Options"] == "DENY"
+        assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+    def test_mitigado_descarga_de_reporte_queda_registrada(self, servidor):
+        """DSH-R1 / DSH-T2: quién descargó qué, con el SHA-256 del archivo entregado."""
+        import hashlib
+        client, conectar = servidor
+        _sesion(client, conectar, "auditor-1", "AUDITOR")
+        resp = client.get("/reportes/exportar?reporte_tipo_accion=CARGA")
+        assert resp.status_code == 200
+        huella = hashlib.sha256(resp.get_data()).hexdigest()
+        assert resp.headers["X-Contenido-SHA256"] == huella
+        conn = conectar()
+        try:
+            (descarga,) = get_events(conn, usuario_id="auditor-1", tipo_accion="DESCARGA_REPORTE")
+        finally:
+            conn.close()
+        assert huella in descarga["contexto_ejecucion"] and '"tipo_accion": "CARGA"' in descarga["contexto_ejecucion"]
+
+    def test_mitigado_consulta_de_la_bitacora_queda_registrada_una_vez_por_minuto(self, servidor):
+        client, conectar = servidor
+        _sesion(client, conectar, "auditor-1", "AUDITOR")
+        for _ in range(3):
+            assert client.get("/eventos?tipo_accion=CARGA").status_code == 200
+        conn = conectar()
+        try:
+            consultas = get_events(conn, usuario_id="auditor-1", tipo_accion="CONSULTA_BITACORA")
+        finally:
+            conn.close()
+        assert len(consultas) == 1 and "/eventos" in consultas[0]["contexto_ejecucion"]
+
+    def test_mitigado_csv_neutraliza_formulas(self, servidor):
+        """DSH-I2: una celda que empieza con =, +, -, @ se exporta como texto."""
         client, conectar = servidor
         formula = '=HYPERLINK("http://sitio-falso.example","ver")'
         conn = conectar()
@@ -517,9 +694,10 @@ class TestRiesgosAbiertos:
         filas = list(csv.DictReader(client.get("/reportes/exportar").get_data(as_text=True).splitlines()))
         assert filas
         assert not any(f["dataset_nombre"].startswith(("=", "+", "-", "@")) for f in filas)
+        assert any(f["dataset_nombre"] == "'" + formula for f in filas)
 
-    @riesgo_abierto("DSH-E2")
-    def test_riesgo_abierto_rol_degradado_pierde_privilegios_en_la_sesion_activa(self, servidor):
+    def test_mitigado_rol_degradado_pierde_privilegios_en_la_sesion_activa(self, servidor):
+        """DSH-E2: el rol se relee de la base en cada petición."""
         client, conectar = servidor
         admin = _usuario(conectar, "admin@x.co", "ADMIN")
         analista = _usuario(conectar, "analista@x.co", "ANALISTA")
@@ -532,3 +710,41 @@ class TestRiesgosAbiertos:
         finally:
             conn.close()
         assert client.get("/eventos").status_code == 403
+
+
+# ══════════════════════════════════════════════════════════════
+# 4. RIESGOS ABIERTOS (xfail estricto)
+# ══════════════════════════════════════════════════════════════
+
+def riesgo_abierto(amenaza):
+    """Marca una prueba que describe la mitigación pendiente de `amenaza`."""
+    return pytest.mark.xfail(
+        strict=True, raises=AssertionError,
+        reason=f"{amenaza}: riesgo abierto documentado en docs/modelo_amenazas_stride.md",
+    )
+
+
+class TestRiesgosAbiertos:
+
+    @riesgo_abierto("LIB-T2")
+    def test_riesgo_abierto_evento_alterado_antes_de_sincronizar_es_detectado(self, servidor):
+        """
+        Riesgo residual de la captura en el cliente (B9): quien controla la
+        máquina puede alterar un evento local ANTES de que se sincronice,
+        recalcular su hash y volver a firmarlo con su propia llave. El servidor
+        recibe un evento coherente y no tiene con qué compararlo. Lo mitigan
+        la sincronización inmediata, el anclaje Merkle y el panel de sesiones
+        sin cierre, pero no se puede detectar en el servidor.
+        """
+        from audit_tracer.digital_signatures import add_signature_to_event
+        client, conectar = servidor
+        uid = _usuario(conectar, "a@x.co", "CIENTIFICO_DATOS")
+        token = _token(conectar, uid)
+        privada, publica = generate_keypair()
+        client.post("/api/usuarios/llave-publica", json={"llave_publica": public_key_to_pem(publica)},
+                    headers={"Authorization": f"Bearer {token}"})
+        original = _evento(uid, tipo_accion="EXPORTACION", filas_exportadas=900)
+        alterado = add_signature_to_event({**original, "filas_exportadas": 10}, privada)
+        assert _sincronizar(client, token, alterado).status_code == 201
+        # Seguro sería que el servidor detectara la alteración: no tiene cómo.
+        assert _fila(conectar, original["evento_uuid"])["filas_exportadas"] == 900

@@ -16,14 +16,14 @@ Esta guía parte de `docs/lineamientos_buenas_practicas_seguridad.md` (commit `0
 | 4.2 | Guardar el token en `AUDIT_TRACER_TOKEN` para scripts | Ninguna variable de entorno entrega el token a la librería; el login por dispositivo lo cachea en `~/.audit_tracer/token_cache.json` (o en Google Drive). | Reescrita. |
 | 4.3 | Usar `audit_tracer.device_login()` | La API pública es `audit_tracer.login(api_url=...)` | Corregido. |
 | 4.4 (roles) | El científico genera «reportes propios»; ADMIN audita `CAMBIO_ROL` | `CIENTIFICO_DATOS` no tiene el módulo de reportes (`control_acceso.py`); el evento se llama `MODIFICACION_ROL` | Tabla rehecha desde `PERMISSION_MATRIX`. |
-| 4.5 y diagrama de capas | «5 fallos en 5 minutos bloquean temporalmente»; «rate limiting» | El bloqueo ocurre al 5.º intento fallido acumulado y es permanente hasta que alguien edite la base (brecha B6); más de 3 fallos en 5 min elevan a CRITICO. No hay límite de peticiones (riesgo SRV-D1). | Corregido. |
+| 4.5 y diagrama de capas | «5 fallos en 5 minutos bloquean temporalmente»; «rate limiting» | Primera ronda: el bloqueo era permanente (brecha B6) y no había límite de peticiones (SRV-D1). Segunda ronda (21/11/2026): el 5.º intento fallido bloquea la cuenta 15 minutos, un ADMIN puede desbloquearla antes y el servidor limita las peticiones por IP y por token. | Corregido y vigente. |
 | 3.3 | Exportación masiva → CRITICO «o ANOMALIA» | Una exportación > 1000 filas queda CRITICO; el detector de anomalías no se aplica a eventos firmados ni CRITICO (`app.py:1126`) | Corregido; el escenario 2 se reescribió con lo que se observa hoy. |
 | 5 (diagrama) y 5.4 | La raíz Merkle «se ancla a un proveedor externo (RFC 3161 / ledger)» | El ancla es un archivo JSON firmado en la carpeta `merkle_anchors/` del servidor; publicarlo fuera es un paso manual (plan de mitigación 12 del modelo STRIDE) | Corregido. |
 | 5.1 | El trigger registra «el usuario» que intentó la alteración | Registra el usuario del evento objetivo; SQLite no conoce a quien ejecuta la sentencia | Corregido. |
 | 5.2 | `verify_integrity` «recalcula periódicamente» | Se ejecuta a demanda (botón «Verificar integridad») | Corregido. |
 | 5.3 | Llave privada en `~/.audit_keys/user_ed25519.key` | `~/.audit_tracer/keys/private_key.pem` (`utils/paths.py`, `digital_signatures.py`) | Corregido. |
 | Escenario 3 | CONSULTA → «Ley 1581 Art. 17 lit. a»; EXPORTACION → «§164.312(a)(2)(iv) / Art. 18 lit. b»; el CSV trae «los hashes de cada evento» | CONSULTA → §164.312(b) \| Art. 17 lit. m; EXPORTACION → §164.312(b); §164.308(a)(1)(ii)(D); §164.528 \| Art. 4 lit. f; Art. 17 lit. m. El reporte no trae hashes (el de críticos sí). | Corregido con la tabla real. |
-| Marco normativo | HIPAA, Ley 1581 e ISO/IEC 27001:2022 | El documento final dice ISO/IEC 27701. Ningún archivo del repositorio la mencionaba. | Se agregó la sección 9 con la alineación a ISO/IEC 27701:2019 (solo lo verificado; el resto, [PENDIENTE]). |
+| Marco normativo | HIPAA, Ley 1581 e ISO/IEC 27001:2022 | El documento final dice ISO/IEC 27701. Ningún archivo del repositorio la mencionaba. | Se agregó la sección 9 con la alineación a ISO/IEC 27701:2019; en la segunda ronda se completó con la numeración verificada contra el índice oficial. |
 
 **Verificación de los requisitos de HU-5.2 que pide el documento:**
 
@@ -34,7 +34,7 @@ Esta guía parte de `docs/lineamientos_buenas_practicas_seguridad.md` (commit `0
 | Políticas de credenciales y tokens, incluida la revocación | Sí | Sección 4 |
 | Protocolo ante incidentes: triaje con el explicador, integridad y firma, linaje, acción correctiva, reporte | Sí | Sección 6 |
 | Tres escenarios: Colab con datos oncológicos seudonimizados; exportación masiva fuera de horario; reporte para la SIC | Sí | Sección 8 |
-| Alineación con HIPAA, Ley 1581 e ISO/IEC 27701 | Sí, con límites | HIPAA y Ley 1581 en toda la guía; ISO/IEC 27701:2019 en la sección 9, citando solo los encabezados verificados y marcando el resto como [PENDIENTE] |
+| Alineación con HIPAA, Ley 1581 e ISO/IEC 27701 | Sí, con límites | HIPAA y Ley 1581 en toda la guía; ISO/IEC 27701:2019 en la sección 9, con la numeración verificada contra el índice oficial de la norma (segunda ronda) |
 
 # 1. Propósito y alcance
 
@@ -111,9 +111,16 @@ Matriz real (`audit_tracer/auth/control_acceso.py`, `PERMISSION_MATRIX`):
 
 Todo intento fuera de lo permitido devuelve 403 y queda como `ACCESO_DENEGADO` (ADVERTENCIA) con rol, módulo, ruta y método. Los cambios de rol quedan como `MODIFICACION_ROL` (ADVERTENCIA si involucran ADMIN).
 
-## 4.4 Intentos fallidos
+## 4.4 Contraseñas y sesión del dashboard
 
-* 3 contraseñas erróneas: `ACCESO_FALLIDO` con ADVERTENCIA. Más de 3 en 5 minutos: CRITICO. Al 5.º intento fallido acumulado la cuenta se **bloquea**; hoy no hay desbloqueo desde la aplicación (brecha B6): requiere intervención del administrador sobre la base.
+* **Política (segunda ronda, 21/11/2026).** Toda cuenta, se cree desde el formulario, desde `SEED_USUARIOS` o desde un script, debe tener una contraseña de al menos 8 caracteres (configurable con `AUDIT_PASSWORD_MIN`) que combine tres de estas cuatro clases: minúsculas, mayúsculas, números y símbolos; que no sea una contraseña común (p. ej. `Password123!`) y que no contenga el usuario del correo. No se fuerza el cambio periódico (NIST SP 800-63B lo desaconseja); se cambia ante sospecha de compromiso.
+* La sesión del dashboard vence a la hora y se cierra tras **15 minutos sin actividad** (`AUDIT_SESION_INACTIVIDAD_MIN`). La cookie solo viaja por HTTPS (`Secure`), no la lee JavaScript (`HttpOnly`) y no acompaña formularios de otros sitios (`SameSite=Lax`). Todo formulario lleva un token CSRF; un envío sin él se rechaza y queda como `ACCESO_DENEGADO`.
+* Si un ADMIN cambia el rol de alguien o bloquea su cuenta, el cambio surte efecto en la siguiente petición de esa persona, aunque tenga una sesión abierta.
+* El token personal que genera un ADMIN se muestra **una sola vez**: la base guarda solo su SHA-256. Si se pierde, se revoca y se genera otro.
+
+## 4.5 Intentos fallidos
+
+* 3 contraseñas erróneas: `ACCESO_FALLIDO` con ADVERTENCIA. Más de 3 en 5 minutos: CRITICO. Al 5.º intento fallido acumulado la cuenta se **bloquea durante 15 minutos** (configurable con `AUDIT_BLOQUEO_MINUTOS`) y se desbloquea sola al vencer; un ADMIN puede desbloquearla antes desde la administración de usuarios. Ambos casos quedan como `DESBLOQUEO_CUENTA`. Además, el login admite como máximo 10 intentos por minuto desde una misma IP.
 * 3 o más accesos denegados o fallidos del mismo usuario en 10 minutos generan una notificación (`ACCESOS_DENEGADOS_REPETIDOS`, severidad ALTA), agrupada en un solo correo por ventana.
 * En la librería, más de 3 fallos de acceso a archivos en 5 minutos elevan el evento a CRITICO.
 
@@ -150,13 +157,26 @@ Cadena de integridad, en orden:
 
 **Sin conexión:** la librería guarda cada evento localmente con estado `PENDIENTE` y no interrumpe el análisis; al volver la red, la cola se envía sola (o con `audit_tracer.sync_now()`), sin duplicados (`evento_uuid` único).
 
+## 6.1 Retención y archivado de la bitácora (segunda ronda)
+
+* **Plazo.** Cada evento se conserva en la base central al menos **6 años** (`AUDIT_RETENCION_ANIOS`), el plazo con que HIPAA §164.316(b)(2)(i) exige conservar la documentación. Los disparadores de inmutabilidad impiden borrarlo antes.
+* **Archivo.** Cumplido el plazo, `flask --app app retencion-archivar --destino <carpeta>` escribe los eventos vencidos en un JSONL con su hash y su firma, y un manifiesto con el SHA-256 del archivo, el conteo y las raíces de Merkle de los lotes cubiertos. No borra nada de la base.
+* **Verificación.** `flask --app app retencion-verificar --destino <carpeta>` comprueba, sin la base, que el archivo no cambió y que cada evento conserva su hash. El archivo se copia a un almacenamiento de solo escritura (WORM) o fuera de línea.
+* **Purga.** Retirar eventos de la base exige desactivar los disparadores. Lo hace el DBA solo con autorización escrita del oficial de cumplimiento, después de verificar el archivo, y queda en el acta del comité de seguridad.
+
+## 6.2 Llaves de firma y equipos nuevos (segunda ronda)
+
+* La llave de firma de la librería se guarda cifrada con el llavero del sistema operativo o con la frase de `AUDIT_TRACER_KEY_PASSPHRASE`. En Colab, donde no hay llavero, conviene definir esa frase como secreto del notebook.
+* Cada llave nueva queda registrada (`REGISTRO_LLAVE_PUBLICA`). Si el usuario ya tenía otra activa, el evento es ADVERTENCIA: puede ser un equipo o un runtime nuevo, o un token robado. Ante la duda, el ADMIN revoca la llave desde la administración de usuarios; los eventos que ya llegaron con ella siguen verificándose.
+* La llave que estuvo en el repositorio (`.audit_keys/`) se considera comprometida: ninguna firma hecha con ella prueba autoría.
+
 # 7. Lineamientos por perfil
 
 | Perfil | Debe | No debe |
 |---|---|---|
 | Científico de datos | Hacer `audit_tracer.login(api_url=…)` antes de trabajar; usar solo datos de categoría 2 o 3; cargar y exportar con pandas; justificar exportaciones de más de 1 000 filas | Cargar identificadores directos; escribir credenciales en notebooks; desactivar interceptores (queda `AUDITORIA_DESACTIVADA`, CRITICO) |
 | Analista clínico | Revisar alertas y su estado en `/auditoria/alertas`; usar linaje y explicador | Compartir su cuenta; descargar reportes fuera de su finalidad |
-| Administrador | Mantener `SECRET_KEY` y `FLASK_DEBUG=0`; revocar tokens al terminar vínculos; registrar destinatarios de alertas; copiar las anclas Merkle fuera del servidor | Desactivar disparadores; activar `SEED_DEMO_DATA` en un servidor con datos reales (brecha B10) |
+| Administrador | Mantener `SECRET_KEY` y `FLASK_DEBUG=0` (valor por defecto); servir con Gunicorn; configurar `AUDIT_TSA_URL` para sellar las raíces de Merkle; revocar tokens y llaves al terminar vínculos o perder un equipo; revisar las sesiones sin cierre del panel de sincronización; registrar destinatarios de alertas; archivar con `flask retencion-archivar` lo que cumpla el plazo | Desactivar disparadores; activar `SEED_DEMO_DATA` en un servidor con datos reales; purgar eventos sin la autorización del oficial de cumplimiento |
 | Oficial de cumplimiento | Revisar a diario Solo Críticos y Solo anomalías; verificar integridad y anclas; conservar los reportes exportados | Modificar datos (su rol es solo lectura) |
 
 # 8. Escenarios
@@ -222,16 +242,29 @@ Lo que ocurre hoy (validado con MIMIC-III el 21/11/2026, Anexo 13, caso 2): a la
 
 ISO/IEC 27701:2019 extiende ISO/IEC 27001 y 27002 con un sistema de gestión de privacidad (PIMS). Su Anexo A reúne los objetivos y controles para quien decide el tratamiento de datos personales (responsable) y su Anexo B los del encargado. La institución que use Audit Tracer con datos clínicos suele ser responsable; el equipo que opera el servidor puede actuar como encargado.
 
-**Qué se verificó y cómo.** No se dispone del texto de la norma en el repositorio. El 21/11/2026 se consultó la búsqueda web ([ISO/IEC 27701 en Wikipedia, con enlace a la tabla de contenido oficial de ISO](https://en.wikipedia.com/wiki/ISO/IEC_27701), [guía de controles del Anexo A de NQA](https://www.nqa.com/medialibraries/NQA/NQA-Media-Library/PDFs/NQA-ISO-27701-Annex-A-Controls-Analysis.pdf)), que confirmó los encabezados de tres grupos del Anexo A. No se pudo confirmar el contenido de sus subcontroles ni la numeración de las cláusulas 5 y 6; por eso no se citan.
+**Qué se verificó y cómo.** La numeración y los títulos se verificaron el 21/11/2026 contra el índice oficial de ISO/IEC 27701:2019 publicado por DIN. Los controles del Anexo A (A.7.x, para el responsable) tienen la misma numeración que la cláusula 7; el Anexo B equivale para el encargado. La edición de 2025 reorganizó los controles: para una auditoría contra esa edición hay que traducir la numeración.
 
-| Grupo del Anexo A (responsable; el Anexo B equivale para el encargado) | Qué aporta Audit Tracer / esta guía | Estado |
+| ISO/IEC 27701:2019 | Qué aporta Audit Tracer / esta guía | Estado |
 |---|---|---|
-| **A.7.2 Conditions for collection and processing** (condiciones de recolección y tratamiento) | Clasificación de datos y prohibición de cargar identificadores directos (sección 3.1); mínimo necesario (sección 2); la bitácora registra qué dataset y columnas se tocan (Anexo 10), lo que permite demostrar el tratamiento. | Parcial: la guía no define base legal, consentimiento ni evaluación de impacto de privacidad. [PENDIENTE: subcontroles de A.7.2] |
-| **A.7.3 Obligations to PII principals** (obligaciones frente a los titulares) | Ninguna: Audit Tracer no gestiona solicitudes de acceso, corrección ni supresión de titulares, y la bitácora es inmutable por diseño. | No cubierto. [PENDIENTE: subcontroles de A.7.3 y su tensión con la inmutabilidad] |
-| **A.7.4 Privacy by design and by default** (privacidad desde el diseño y por defecto) | La bitácora guarda solo metadatos y nunca valores de celdas (sección 1); captura sin modificar el código del analista; minimización de columnas registradas. | Parcial. [PENDIENTE: subcontroles de A.7.4] |
-| A.7.5 (compartición, transferencia y divulgación de datos personales) | Los reportes salen del dashboard solo para roles con permiso; no hay controles de transferencia entre países. | [PENDIENTE: no verificado el título ni los subcontroles] |
-| Cláusulas 5 y 6 (requisitos y controles adicionales sobre 27001 y 27002) | La guía ya cubre controles de acceso, registro, criptografía e integridad con HIPAA y ISO/IEC 27001 (secciones 4 y 5). | [PENDIENTE: numeración de cláusulas] |
+| **A.7.2.1** Identificar y documentar la finalidad · **A.7.2.2** Identificar la base legal | La guía exige justificar cada exportación de más de 1 000 filas (sección 7) y la bitácora registra qué dataset y columnas se tocan; la finalidad y la base legal las define la institución. | Fuera del alcance de la herramienta (proceso de la institución) |
+| **A.7.2.3** y **A.7.2.4** Consentimiento | No aplica a la herramienta: el consentimiento se gestiona en el sistema de historia clínica. | Fuera del alcance |
+| **A.7.2.5** Evaluación de impacto en privacidad | El modelo STRIDE (Anexo 15) es un insumo técnico para la evaluación de impacto de la institución. | Apoyo |
+| **A.7.2.8** Registros relacionados con el tratamiento de PII | La bitácora registra cada carga, consulta, transformación, exportación y modelado, con usuario, momento, dataset y columnas (Anexo 10). | Apoyo: no reemplaza el registro de actividades de tratamiento |
+| **A.7.3.1** a **A.7.3.10** Obligaciones con los titulares (acceso, corrección, supresión, decisiones automatizadas) | Ninguna: Audit Tracer no gestiona solicitudes de titulares. La bitácora no contiene datos clínicos de pacientes, así que la inmutabilidad no choca con el derecho de supresión del paciente; sí guarda el usuario del personal que hizo cada operación. | Fuera del alcance |
+| **A.7.4.1** Limitar la recolección · **A.7.4.4** Objetivos de minimización | La bitácora guarda solo metadatos y nunca valores de celdas; la guía exige cargar solo las columnas del estudio (secciones 1 y 3). | Cubierto |
+| **A.7.4.3** Exactitud y calidad | El linaje muestra cómo se transformó cada dataset. | Apoyo |
+| **A.7.4.5** Desidentificación y supresión al final del tratamiento · **A.7.4.6** Archivos temporales | La guía exige seudonimizar antes de cargar (categoría 2) y no dejar exportaciones intermedias en carpetas compartidas. | Apoyo (procedimiento del analista) |
+| **A.7.4.7** Retención · **A.7.4.8** Disposición | Plazo de 6 años, archivo verificable y purga autorizada (sección 6.1). | Cubierto en la herramienta; el plazo lo fija la institución |
+| **A.7.4.9** Controles de transmisión de PII | La bitácora viaja solo por HTTPS con token (salvo localhost para pruebas). | Cubierto para la bitácora |
+| **A.7.5.1** a **A.7.5.3** Transferencias entre jurisdicciones | No hay controles de transferencia internacional; el servidor central se despliega en la infraestructura de la institución. | Fuera del alcance |
+| **A.7.5.4** Registros de divulgación de PII a terceros | Las exportaciones y las descargas de reportes quedan registradas con destino, filas y SHA-256 del archivo. | Apoyo |
+| **6.6** Control de acceso · **6.7** Criptografía | Roles, sesión con cierre por inactividad, CSRF, bloqueo temporal, contraseñas con bcrypt, tokens con SHA-256, firmas Ed25519, llave local cifrada (secciones 4 y 5). | Cubierto |
+| **6.9.4.1** Registro de eventos · **6.9.4.2** Protección de la información de registro · **6.9.4.3** Registros de administrador y operador | Bitácora inmutable con hash, firma, Merkle y sello de tiempo; las acciones de los administradores y las consultas a la bitácora también se registran. | Cubierto |
+| **6.9.4.4** Sincronización de relojes | El servidor guarda su propia hora de recepción (`recibido_en`) y marca los timestamps del cliente en el futuro o muy atrasados. | Parcial: los relojes de los equipos de los analistas no se sincronizan |
+| **6.13** Gestión de incidentes | Alertas en tiempo real y protocolo de la sección 6. | Cubierto |
+| Cláusula 5 (requisitos del sistema de gestión de privacidad) | Contexto, liderazgo, planificación, soporte, operación, evaluación y mejora son responsabilidades de gestión de la institución. | Fuera del alcance de la herramienta |
 
-**Conclusión.** La guía queda alineada con ISO/IEC 27701:2019 en lo que corresponde a minimización y seguridad del tratamiento (que comparte con ISO/IEC 27001, HIPAA y la Ley 1581), pero **no** puede afirmarse una alineación completa: faltan los procesos de privacidad (base legal, derechos de los titulares, evaluaciones de impacto) que la norma exige al responsable y que están fuera del alcance de la herramienta. Para el documento final conviene decir «alineada con los principios de ISO/IEC 27701», no «cumple la norma».
+**Conclusión.** La guía y la herramienta quedan alineadas con ISO/IEC 27701:2019 en el registro y la protección de la evidencia, el control de acceso, la criptografía, la minimización y la retención. **No** puede afirmarse una alineación completa: los procesos de privacidad del responsable (base legal, consentimiento, derechos de los titulares, evaluación de impacto, transferencias) están fuera del alcance de una herramienta técnica. Para el documento final conviene decir «alineada con los controles técnicos de ISO/IEC 27701», no «cumple la norma».
 
-**Matriz de trazabilidad (06).** No se agregó una columna ISO/IEC 27701: no hay cláusulas verificadas con número y título para mapear los 32 controles uno a uno, y una columna con numeración sin verificar sería inventada. [PENDIENTE: mapeo control por control cuando el equipo tenga el texto de la norma]
+**Matriz de trazabilidad (Anexo 15).** La sección 5.1 de la matriz relaciona cada control técnico (CT-01 a CT-46) con estas cláusulas.
+

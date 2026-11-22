@@ -8,7 +8,11 @@ de pandas, generando registros en audit_log con tipo_accion = EXPORTACION
 sin intervención manual del usuario.
 
 Operaciones interceptadas (PDGTRAZDSA-54):
-  EXPORTACION → df.to_csv(), df.to_excel(), df.to_json(), df.to_parquet()
+  EXPORTACION → df.to_csv(), df.to_excel(), df.to_json(), df.to_parquet() y,
+                desde el 21/11/2026 (LIB-R2), to_feather, to_orc, to_pickle,
+                to_xml, to_stata, to_hdf, to_sql (a una base de datos),
+                to_clipboard (portapapeles), to_html/to_markdown/to_latex
+                cuando escriben a un archivo, y np.save/savez/savez_compressed/savetxt
 
 CA4 — métodos alternativos de exportación (ej. escritura con open()):
   No se parchea builtins.open() de forma global: pandas y el resto del
@@ -222,6 +226,89 @@ def _audited_to_parquet(self, path=None, *args, **kwargs):
     return _audited_export(self, _original_to_parquet, path, "PARQUET", "buffer_parquet", args, kwargs)
 
 
+# ── Exportaciones adicionales (LIB-R2, 21/11/2026) ────────────────────────────
+# Cada entrada: método, formato, etiqueta cuando no hay ruta, y si solo se
+# registra cuando hay destino (to_html/to_markdown/to_latex sin archivo solo
+# devuelven texto para mostrar; Jupyter los usa al pintar una tabla).
+_EXPORTADORES_ADICIONALES = (
+    ("to_feather", "FEATHER", "buffer_feather", False),
+    ("to_orc", "ORC", "buffer_orc", False),
+    ("to_pickle", "PICKLE", "buffer_pickle", False),
+    ("to_xml", "XML", "buffer_xml", False),
+    ("to_stata", "STATA", "buffer_stata", False),
+    ("to_hdf", "HDF5", "buffer_hdf", False),
+    ("to_html", "HTML", "buffer_html", True),
+    ("to_markdown", "MARKDOWN", "buffer_markdown", True),
+    ("to_latex", "LATEX", "buffer_latex", True),
+)
+_originales_adicionales: dict = {}
+
+
+def _exportador_factory(metodo: str, formato: str, etiqueta: str, solo_con_destino: bool):
+    def _auditado(self, *args, **kwargs):
+        original = _originales_adicionales[metodo]
+        destino = args[0] if args else next(
+            (kwargs[n] for n in ("path", "path_or_buf", "path_or_buffer", "buf", "excel_writer") if n in kwargs), None)
+        if solo_con_destino and destino is None:
+            # Solo devuelve texto para mostrar (Jupyter lo usa al pintar la tabla):
+            # no es exportación ni debe registrar las lecturas internas del formateador.
+            with audit_scope():
+                return original(self, *args, **kwargs)
+        if args:
+            return _audited_export(self, lambda df, _d, *a, **k: original(df, *args, **kwargs),
+                                   destino, formato, etiqueta, (), {})
+        return _audited_export(self, lambda df, _d, *a, **k: original(df, **kwargs),
+                               destino, formato, etiqueta, (), {})
+    _auditado.__name__ = f"_audited_{metodo}"
+    return _auditado
+
+
+def _audited_to_sql(self, name=None, con=None, *args, **kwargs):
+    """to_sql: los datos salen hacia una tabla de una base de datos; la ruta es sql:<tabla>."""
+    original = _originales_adicionales["to_sql"]
+    destino = f"sql:{name}" if isinstance(name, str) else "sql:tabla"
+    return _audited_export(self, lambda df, _d, *a, **k: original(df, name, con, *args, **kwargs),
+                           destino, "SQL", "sql:tabla", (), {})
+
+
+def _audited_to_clipboard(self, *args, **kwargs):
+    """to_clipboard: copiar al portapapeles también saca los datos del entorno auditado."""
+    original = _originales_adicionales["to_clipboard"]
+    return _audited_export(self, lambda df, _d, *a, **k: original(df, *args, **kwargs),
+                           "portapapeles", "PORTAPAPELES", "portapapeles", (), {})
+
+
+# ── NumPy ─────────────────────────────────────────────────────────────────────
+_ESCRITORES_NUMPY = ("save", "savez", "savez_compressed", "savetxt")
+_originales_numpy: dict = {}
+
+
+def _filas_de(valor) -> Optional[int]:
+    try:
+        return int(len(valor))
+    except Exception:
+        return None
+
+
+def _numpy_factory(nombre: str):
+    def _auditado(*args, **kwargs):
+        original = _originales_numpy[nombre]
+        if in_audit_scope():
+            return original(*args, **kwargs)
+        destino = args[0] if args else kwargs.get("file", kwargs.get("fname"))
+        datos = args[1] if len(args) > 1 else kwargs.get("arr", kwargs.get("X"))
+        ruta = guard(_resolve_export_path, destino, _contexto="Ruta de exportación")
+        existia = guard(_path_exists, ruta, _default=False)
+        with audit_scope():
+            resultado = original(*args, **kwargs)
+        guard(_log_export, dataset_nombre="numpy_array", ruta_destino=ruta or f"buffer_numpy_{nombre}",
+              filas_exportadas=_filas_de(datos), formato=f"NUMPY_{nombre.upper()}", sobrescritura=existia,
+              _contexto=f"Registro de EXPORTACION np.{nombre}")
+        return resultado
+    _auditado.__name__ = f"_audited_np_{nombre}"
+    return _auditado
+
+
 # ──────────────────────────────────────────────────────────────
 # CA4: EXPORTACIÓN POR MÉTODOS ALTERNATIVOS (open())
 # ──────────────────────────────────────────────────────────────
@@ -305,6 +392,28 @@ def activate() -> None:
         g[auditada]._audit_tracer_original = g[original]
         setattr(pd.DataFrame, metodo, g[auditada])
 
+    # LIB-R2: exportadores adicionales de pandas y NumPy.
+    adicionales = [(m, _exportador_factory(m, f, e, d)) for m, f, e, d in _EXPORTADORES_ADICIONALES]
+    adicionales += [("to_sql", _audited_to_sql), ("to_clipboard", _audited_to_clipboard)]
+    for metodo, parche in adicionales:
+        actual = getattr(pd.DataFrame, metodo, None)
+        if actual is None:
+            continue
+        original = getattr(actual, "_audit_tracer_original", actual)
+        _originales_adicionales[metodo] = original
+        parche._audit_tracer_original = original
+        setattr(pd.DataFrame, metodo, parche)
+    import numpy as _np
+    for nombre in _ESCRITORES_NUMPY:
+        actual = getattr(_np, nombre, None)
+        if actual is None:
+            continue
+        original = getattr(actual, "_audit_tracer_original", actual)
+        _originales_numpy[nombre] = original
+        parche = _numpy_factory(nombre)
+        parche._audit_tracer_original = original
+        setattr(_np, nombre, parche)
+
     _export_interceptor_active = True
 
 
@@ -321,6 +430,15 @@ def deactivate() -> None:
     for metodo, _, _ in _PATCHES:
         actual = getattr(pd.DataFrame, metodo)
         setattr(pd.DataFrame, metodo, getattr(actual, "_audit_tracer_original", actual))
+    for metodo in list(_originales_adicionales):
+        actual = getattr(pd.DataFrame, metodo, None)
+        if actual is not None:
+            setattr(pd.DataFrame, metodo, getattr(actual, "_audit_tracer_original", actual))
+    import numpy as _np
+    for nombre in _ESCRITORES_NUMPY:
+        actual = getattr(_np, nombre, None)
+        if actual is not None:
+            setattr(_np, nombre, getattr(actual, "_audit_tracer_original", actual))
 
     _export_interceptor_active = False
     from .data_capture import log_deactivation

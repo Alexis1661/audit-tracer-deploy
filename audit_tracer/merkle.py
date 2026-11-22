@@ -324,10 +324,13 @@ def publish_batch_root(
     batch_hour: str,
     anchors_dir: str = None,
     private_key=None,
+    tsa_url: str = None,
 ) -> Dict:
     """
     PDGTRAZDSA-148 — Construye el árbol del lote ``batch_hour``, firma la raíz
-    y persiste el anclaje en un archivo JSON en ``anchors_dir``.
+    y persiste el anclaje en un archivo JSON en ``anchors_dir``. Con una TSA
+    configurada (``tsa_url`` o AUDIT_TSA_URL) agrega un sello de tiempo
+    RFC 3161 de la raíz (SRV-T2).
 
     El archivo se nombra ``merkle_<batch_hour>.json`` (con ':' reemplazados por
     '-' para compatibilidad con sistemas de archivos Windows). Su contenido
@@ -392,6 +395,25 @@ def publish_batch_root(
     except Exception as exc:
         # La publicación no falla si no hay llave; queda sin firma.
         anchor["signature_error"] = str(exc)
+
+    # SRV-T2 (21/11/2026): sello de tiempo RFC 3161 de una autoridad externa.
+    # Sin AUDIT_TSA_URL no se pide; si la TSA no responde, el ancla se publica
+    # igual y el error queda en el archivo para reintentar después.
+    url_tsa = tsa_url if tsa_url is not None else os.environ.get("AUDIT_TSA_URL")
+    if url_tsa:
+        try:
+            from .sello_tiempo import a_texto, solicitar_sello, verificar_sello
+            token = solicitar_sello(batch_tree["root"], url_tsa)
+            info = verificar_sello(token, batch_tree["root"])
+            anchor["rfc3161"] = {
+                "tsa_url": url_tsa,
+                "token": a_texto(token),
+                "hora_certificada": info["hora_certificada"],
+                "tsa": info["tsa"],
+                "certificado_sha256": info["certificado_sha256"],
+            }
+        except Exception as exc:
+            anchor["rfc3161_error"] = f"{type(exc).__name__}: {exc}"
 
     # Persistir en disco
     Path(anchors_dir).mkdir(parents=True, exist_ok=True)
@@ -512,6 +534,7 @@ def verify_external_anchor(
         "current_leaf_count": current_leaf_count,
         "signature_valid": None,
         "published_at": None,
+        "sello_tiempo": None,
         "details": "",
     }
 
@@ -567,8 +590,23 @@ def verify_external_anchor(
     else:
         result["signature_valid"] = None  # No hay firma en este anclaje
 
+    # SRV-T2: el sello RFC 3161 debe certificar la raíz RECALCULADA. Si alguien
+    # reescribe eventos y el JSON del ancla, el sello de la TSA ya no coincide.
+    sello = anchor.get("rfc3161") or {}
+    if sello.get("token"):
+        try:
+            from .sello_tiempo import de_texto, verificar_sello
+            info = verificar_sello(de_texto(sello["token"]), recalculated_root)
+            result["sello_tiempo"] = {**info, "valido": info["huella_coincide"] and info["firma_valida"]}
+            if not result["sello_tiempo"]["valido"]:
+                result["integrity_ok"] = False
+        except Exception as exc:
+            result["sello_tiempo"] = {"valido": False, "error": f"{type(exc).__name__}: {exc}"}
+            result["integrity_ok"] = False
+    sello_ok = result["sello_tiempo"] is None or bool(result["sello_tiempo"].get("valido"))
+
     # Armar mensaje descriptivo
-    if roots_match and counts_match:
+    if roots_match and counts_match and sello_ok:
         result["details"] = (
             f"✓ Integridad verificada para el lote {batch_hour}. "
             f"Raíz publicada y recalculada coinciden ({current_leaf_count} eventos)."
@@ -585,6 +623,8 @@ def verify_external_anchor(
                 f"número de hojas diferente (publicado={published_leaf_count}, "
                 f"actual={current_leaf_count})"
             )
+        if not sello_ok:
+            discrepancias.append("el sello de tiempo RFC 3161 no certifica la raíz actual")
         result["details"] = (
             f"✗ ALTERACIÓN DETECTADA en el lote {batch_hour}: "
             + "; ".join(discrepancias)

@@ -15,7 +15,7 @@ def db_conn():
 def test_login_success(db_conn):
     """Login exitoso retorna success=True con usuario_id, rol, sesion_id y registra evento."""
     email = "user@test.com"
-    pwd = "secretpassword"
+    pwd = "Secreta-Larga-2026"
     user_id = register_user(db_conn, email, pwd, "CIENTIFICO_DATOS", "admin")
     
     sesion_id = "session123"
@@ -33,7 +33,7 @@ def test_login_success(db_conn):
 def test_login_invalid_credentials(db_conn):
     """Login incorrecto retorna success=False con mensaje genérico y registra evento."""
     email = "user@test.com"
-    register_user(db_conn, email, "real_pwd", "ANALISTA", "admin")
+    register_user(db_conn, email, "Clave-Real-2026", "ANALISTA", "admin")
     
     result = login(db_conn, email, "wrong_pwd", "session_fail")
     assert result['success'] is False
@@ -47,7 +47,7 @@ def test_login_invalid_credentials(db_conn):
 def test_user_blocking(db_conn):
     """5 intentos fallidos -> usuario bloqueado (activo=0)."""
     email = "blocked@test.com"
-    register_user(db_conn, email, "pwd", "ANALISTA", "admin")
+    register_user(db_conn, email, "Clave-Prueba-2026", "ANALISTA", "admin")
     user = get_user_by_email(db_conn, email)
     user_id = user['usuario_id']
 
@@ -78,7 +78,7 @@ def test_user_blocking(db_conn):
 def test_intentos_fallidos_en_ventana_de_tiempo_genera_critico(db_conn):
     """HU-4.4 CA1-a: más de 3 intentos fallidos del mismo usuario en <5 min -> CRITICO."""
     email = "ventana@test.com"
-    register_user(db_conn, email, "pwd", "ANALISTA", "admin")
+    register_user(db_conn, email, "Clave-Prueba-2026", "ANALISTA", "admin")
     user = get_user_by_email(db_conn, email)
     user_id = user['usuario_id']
 

@@ -9,8 +9,16 @@ DataFrames de pandas, generando registros en audit_log sin intervención
 manual del usuario.
 
 Operaciones interceptadas:
-  CARGA          → pd.read_csv(), pd.read_excel()
-  CONSULTA       → df[columna/s], df.query()
+  CARGA          → pd.read_csv(), pd.read_excel(), pd.read_sql*(), y desde el
+                   21/11/2026 también read_table, read_fwf, read_json,
+                   read_parquet, read_feather, read_orc, read_pickle,
+                   read_xml, read_stata, read_sas, read_spss, read_hdf;
+                   np.load/loadtxt/genfromtxt/fromfile; polars.read_* y
+                   scan_* si polars está instalado (LIB-R2)
+  CONSULTA       → df[columna/s], df.query(), df.loc/iloc y, desde el
+                   21/11/2026, head, tail, sample, nlargest, nsmallest,
+                   describe, value_counts, filter, groupby, at, iat, y la
+                   lectura con open() de un archivo ya cargado como dataset
   ACCESO_FALLIDO → FileNotFoundError, PermissionError, OSError, IsADirectoryError
 
 HU-5.1: pd.read_csv()/pd.read_excel() devuelven un AuditedFrame (consulta +
@@ -174,6 +182,15 @@ def _log_event(
 # INTERCEPTORES DE CARGA  (PDGTRAZDSA-50)
 # ──────────────────────────────────────────────────────────────
 
+def _registrar_ruta_dataset(fuente) -> None:
+    """LIB-R2: recuerda la ruta de cada archivo cargado para auditar lecturas directas con open()."""
+    if isinstance(fuente, os.PathLike):
+        fuente = os.fspath(fuente)
+    if isinstance(fuente, str) and fuente and "://" not in fuente:
+        _rutas_datasets.add(os.path.normcase(os.path.abspath(fuente)))
+        _nombres_datasets.add(os.path.basename(fuente).lower())
+
+
 def _registrar_carga(resultado, dataset_nombre: str):
     """
     Registra CARGA y devuelve el resultado envuelto en AuditedFrame
@@ -226,8 +243,170 @@ def _audited_read(original, fuente, default_nombre: str, args, kwargs):
               _contexto="Registro de ACCESO_FALLIDO")
         raise
 
+    guard(_registrar_ruta_dataset, fuente, _contexto="Ruta del dataset")
     return guard(_registrar_carga, resultado, dataset_nombre,
                  _contexto="Registro de CARGA", _default=resultado)
+
+
+# ── Lectores adicionales de pandas (LIB-R2, 21/11/2026) ──────────────────────
+# Antes, read_parquet, read_json o read_feather leían un dataset sin dejar
+# rastro. Todos comparten el mismo núcleo que read_csv: CARGA con el nombre
+# del archivo y sus columnas, y ACCESO_FALLIDO si el archivo no se puede abrir.
+_LECTORES_ADICIONALES = (
+    "read_table", "read_fwf", "read_json", "read_parquet", "read_feather", "read_orc",
+    "read_pickle", "read_xml", "read_stata", "read_sas", "read_spss", "read_hdf",
+)
+_PARAMETROS_FUENTE = ("filepath_or_buffer", "path_or_buf", "path", "io", "filepath")
+_originales_lectores: dict = {}
+
+
+def _fuente_de(args, kwargs):
+    if args:
+        return args[0]
+    for nombre in _PARAMETROS_FUENTE:
+        if nombre in kwargs:
+            return kwargs[nombre]
+    return None
+
+
+def _audited_reader_factory(nombre_original: str):
+    def _audited(*args, **kwargs):
+        original = _originales_lectores[nombre_original]
+        if in_audit_scope():
+            return original(*args, **kwargs)
+        fuente = _fuente_de(args, kwargs)
+        default = f"buffer_{nombre_original.replace('read_', '')}"
+        dataset_nombre = guard(_resolve_dataset_nombre, fuente, default=default, _default=default)
+        try:
+            with audit_scope():
+                resultado = original(*args, **kwargs)
+        except ACCESS_FAILURE_EXCEPTIONS as exc:
+            guard(log_failed_access, dataset_nombre=dataset_nombre, exc=exc, _contexto="Registro de ACCESO_FALLIDO")
+            raise
+        guard(_registrar_ruta_dataset, fuente, _contexto="Ruta del dataset")
+        return guard(_registrar_carga, resultado, dataset_nombre,
+                     _contexto=f"Registro de CARGA ({nombre_original})", _default=resultado)
+    _audited.__name__ = f"_audited_{nombre_original}"
+    return _audited
+
+
+# ── NumPy (LIB-R2) ────────────────────────────────────────────────────────────
+_LECTORES_NUMPY = ("load", "loadtxt", "genfromtxt", "fromfile")
+_originales_numpy: dict = {}
+
+
+def _audited_numpy_factory(nombre_original: str):
+    def _audited(*args, **kwargs):
+        original = _originales_numpy[nombre_original]
+        if in_audit_scope():
+            return original(*args, **kwargs)
+        fuente = args[0] if args else kwargs.get("file", kwargs.get("fname"))
+        defecto = f"numpy_{nombre_original}"
+        dataset_nombre = guard(_resolve_dataset_nombre, fuente, default=defecto, _default=defecto)
+        try:
+            with audit_scope():
+                resultado = original(*args, **kwargs)
+        except ACCESS_FAILURE_EXCEPTIONS as exc:
+            guard(log_failed_access, dataset_nombre=dataset_nombre, exc=exc, _contexto="Registro de ACCESO_FALLIDO")
+            raise
+        guard(_registrar_ruta_dataset, fuente, _contexto="Ruta del dataset")
+        guard(_log_event, tipo_accion="CARGA", dataset_nombre=dataset_nombre,
+              _contexto=f"Registro de CARGA (np.{nombre_original})")
+        return resultado
+    _audited.__name__ = f"_audited_np_{nombre_original}"
+    return _audited
+
+
+# ── polars, si está instalado (LIB-R2) ────────────────────────────────────────
+_LECTORES_POLARS = ("read_csv", "read_parquet", "read_json", "read_ndjson", "read_excel", "read_ipc",
+                    "read_database", "scan_csv", "scan_parquet", "scan_ndjson", "scan_ipc")
+_originales_polars: dict = {}
+
+
+def _columnas_de(resultado):
+    try:
+        return [str(c) for c in resultado.columns]
+    except Exception:
+        return None
+
+
+def _audited_polars_factory(nombre_original: str):
+    def _audited(*args, **kwargs):
+        original = _originales_polars[nombre_original]
+        if in_audit_scope():
+            return original(*args, **kwargs)
+        fuente = args[0] if args else kwargs.get("source", kwargs.get("query"))
+        if nombre_original == "read_database":
+            dataset_nombre = guard(_nombre_dataset_sql, fuente, "sql:consulta", _default="sql:consulta")
+        else:
+            dataset_nombre = guard(_resolve_dataset_nombre, fuente, default="buffer_polars", _default="buffer_polars")
+        try:
+            with audit_scope():
+                resultado = original(*args, **kwargs)
+        except ACCESS_FAILURE_EXCEPTIONS as exc:
+            guard(log_failed_access, dataset_nombre=dataset_nombre, exc=exc, _contexto="Registro de ACCESO_FALLIDO")
+            raise
+        if nombre_original != "read_database":
+            guard(_registrar_ruta_dataset, fuente, _contexto="Ruta del dataset")
+        columnas = _columnas_de(resultado)
+        guard(_log_event, tipo_accion="CARGA", dataset_nombre=dataset_nombre,
+              columnas_afectadas=json.dumps(columnas) if columnas else None,
+              _contexto=f"Registro de CARGA (polars.{nombre_original})")
+        return resultado
+    _audited.__name__ = f"_audited_polars_{nombre_original}"
+    return _audited
+
+
+def _activar_polars() -> None:
+    import sys
+    polars = sys.modules.get("polars")
+    if polars is None:
+        import importlib.util
+        if importlib.util.find_spec("polars") is None:
+            return
+        import polars
+    for nombre in _LECTORES_POLARS:
+        actual = getattr(polars, nombre, None)
+        if actual is None:
+            continue
+        original = _unwrap(actual)
+        _originales_polars[nombre] = original
+        parche = _audited_polars_factory(nombre)
+        parche._audit_tracer_original = original
+        setattr(polars, nombre, parche)
+
+
+# ── open() sobre archivos ya cargados como dataset (LIB-R2) ───────────────────
+# No se audita todo open() (pandas, el intérprete y las demás librerías abren
+# miles de archivos): solo la lectura directa de un archivo que ya se cargó
+# como dataset, que es la forma de saltarse la captura con el módulo csv o
+# leyendo el archivo a mano.
+_rutas_datasets: set = set()
+_nombres_datasets: set = set()
+_open_original = None
+
+
+def _es_dataset_conocido(file) -> bool:
+    try:
+        ruta = os.fspath(file)
+    except TypeError:
+        return False
+    if not isinstance(ruta, str) or os.path.basename(ruta).lower() not in _nombres_datasets:
+        return False
+    return os.path.normcase(os.path.abspath(ruta)) in _rutas_datasets
+
+
+def _audited_open_builtin(file, mode="r", *args, **kwargs):
+    original = _open_original
+    if (_nombres_datasets and isinstance(file, (str, os.PathLike)) and isinstance(mode, str)
+            and "r" in mode and not in_audit_scope() and _es_dataset_conocido(file)):
+        with audit_scope():
+            manejador = original(file, mode, *args, **kwargs)
+        guard(_log_event, tipo_accion="CONSULTA", dataset_nombre=os.path.basename(os.fspath(file)),
+              columnas_afectadas=json.dumps(["lectura directa con open()"]),
+              _contexto="Registro de lectura directa con open()")
+        return manejador
+    return original(file, mode, *args, **kwargs)
 
 
 def _audited_read_csv(filepath_or_buffer=None, *args, **kwargs) -> pd.DataFrame:
@@ -329,7 +508,7 @@ class _IndexerAuditado:
         cols = []
         if isinstance(key, tuple) and len(key) > 1:
             seleccion = key[1]
-            if self._nombre == "loc":
+            if self._nombre in ("loc", "at"):
                 cols = [c for c in (seleccion if isinstance(seleccion, (list, pd.Index)) else [seleccion])
                         if isinstance(c, str)]
             elif isinstance(seleccion, (int, list, slice)):
@@ -448,6 +627,70 @@ class AuditedDataFrame(pd.DataFrame):
         guard(self._registrar_query, expr, _contexto="Registro de CONSULTA df.query()")
         return result
 
+    # ── head, tail, sample, describe, groupby, filter, at, iat (LIB-R2) ──
+    def _registrar_consulta_metodo(self, metodo: str, resultado=None, columnas=None) -> None:
+        nombre = getattr(self, "_dataset_nombre", "dataset_desconocido")
+        if columnas is None:
+            fuente = resultado if isinstance(resultado, pd.DataFrame) else self
+            columnas = [str(c) for c in getattr(fuente, "columns", [])]
+        firma = (nombre, metodo, tuple(columnas))
+        ahora = time.monotonic()
+        if ahora - _ultimos_loc.get(firma, -1e9) < _VENTANA_REPETIDOS_S:
+            return
+        _ultimos_loc[firma] = ahora
+        if len(_ultimos_loc) > 1000:
+            _ultimos_loc.clear()
+        _log_event(tipo_accion="CONSULTA", dataset_nombre=nombre,
+                   columnas_afectadas=json.dumps(columnas) if columnas else json.dumps([f"df.{metodo}()"]))
+
+    def _consulta(self, metodo: str, args, kwargs, columnas_de=None):
+        funcion = getattr(pd.DataFrame, metodo)
+        if in_audit_scope():
+            return funcion(self, *args, **kwargs)
+        with audit_scope():
+            resultado = funcion(self, *args, **kwargs)
+        columnas = guard(columnas_de, args, kwargs, _default=None) if columnas_de else None
+        guard(self._registrar_consulta_metodo, metodo, resultado, columnas,
+              _contexto=f"Registro de CONSULTA df.{metodo}()")
+        return resultado
+
+    def head(self, *args, **kwargs):
+        return self._consulta("head", args, kwargs)
+
+    def tail(self, *args, **kwargs):
+        return self._consulta("tail", args, kwargs)
+
+    def sample(self, *args, **kwargs):
+        return self._consulta("sample", args, kwargs)
+
+    def nlargest(self, *args, **kwargs):
+        return self._consulta("nlargest", args, kwargs)
+
+    def nsmallest(self, *args, **kwargs):
+        return self._consulta("nsmallest", args, kwargs)
+
+    def describe(self, *args, **kwargs):
+        return self._consulta("describe", args, kwargs)
+
+    def value_counts(self, *args, **kwargs):
+        return self._consulta("value_counts", args, kwargs,
+                              columnas_de=lambda a, k: _como_columnas(a[0] if a else k.get("subset")) or None)
+
+    def filter(self, *args, **kwargs):
+        return self._consulta("filter", args, kwargs)
+
+    def groupby(self, *args, **kwargs):
+        return self._consulta("groupby", args, kwargs,
+                              columnas_de=lambda a, k: _como_columnas(a[0] if a else k.get("by")))
+
+    @property
+    def at(self):
+        return _IndexerAuditado(self, pd.DataFrame.at.fget(self), "at")
+
+    @property
+    def iat(self):
+        return _IndexerAuditado(self, pd.DataFrame.iat.fget(self), "iat")
+
     def _registrar_query(self, expr) -> None:
         dataset_nombre = getattr(self, "_dataset_nombre", "dataset_desconocido")
 
@@ -481,6 +724,15 @@ def wrap_audited(df: pd.DataFrame, dataset_nombre: str) -> AuditedFrame:
     audited = AuditedFrame(df)
     audited._dataset_nombre = dataset_nombre
     return audited
+
+
+def _como_columnas(valor) -> list:
+    """Nombres de columna de un argumento by/subset (str, lista o Index); [] si no son nombres."""
+    if isinstance(valor, str):
+        return [valor]
+    if isinstance(valor, (list, tuple, pd.Index)):
+        return [str(c) for c in valor if isinstance(c, str)]
+    return []
 
 
 def _extract_columns_from_expr(expr: str, df_columns) -> list:
@@ -570,6 +822,35 @@ def activate() -> None:
     import pandas.io.parsers as _parsers          # noqa: F401
     pd.io.parsers.readers.read_csv = _audited_read_csv
 
+    # LIB-R2 (21/11/2026): lectores adicionales de pandas, NumPy y polars.
+    for nombre in _LECTORES_ADICIONALES:
+        actual = getattr(pd, nombre, None)
+        if actual is None:
+            continue
+        original = _unwrap(actual)
+        _originales_lectores[nombre] = original
+        parche = _audited_reader_factory(nombre)
+        parche._audit_tracer_original = original
+        setattr(pd, nombre, parche)
+    import numpy as _np
+    for nombre in _LECTORES_NUMPY:
+        actual = getattr(_np, nombre, None)
+        if actual is None:
+            continue
+        original = _unwrap(actual)
+        _originales_numpy[nombre] = original
+        parche = _audited_numpy_factory(nombre)
+        parche._audit_tracer_original = original
+        setattr(_np, nombre, parche)
+    guard(_activar_polars, _contexto="Captura de lecturas con polars")
+
+    # LIB-R2: lecturas directas con open() de archivos ya cargados.
+    import builtins
+    global _open_original
+    _open_original = _unwrap(builtins.open)
+    _audited_open_builtin._audit_tracer_original = _open_original
+    builtins.open = _audited_open_builtin
+
     _interceptor_active = True
 
 
@@ -591,6 +872,21 @@ def deactivate() -> None:
     for nombre in _FUNCIONES_SQL:
         setattr(pd, nombre, _unwrap(getattr(pd, nombre)))
     pd.io.parsers.readers.read_csv = _unwrap(pd.io.parsers.readers.read_csv)
+    for nombre in _LECTORES_ADICIONALES:
+        if hasattr(pd, nombre):
+            setattr(pd, nombre, _unwrap(getattr(pd, nombre)))
+    import numpy as _np
+    for nombre in _LECTORES_NUMPY:
+        if hasattr(_np, nombre):
+            setattr(_np, nombre, _unwrap(getattr(_np, nombre)))
+    import sys
+    polars = sys.modules.get("polars")
+    if polars is not None:
+        for nombre in _LECTORES_POLARS:
+            if hasattr(polars, nombre):
+                setattr(polars, nombre, _unwrap(getattr(polars, nombre)))
+    import builtins
+    builtins.open = _unwrap(builtins.open)
 
     _interceptor_active = False
     log_deactivation("data_capture (read_csv, read_excel)", get_connection)

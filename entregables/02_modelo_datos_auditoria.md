@@ -22,7 +22,8 @@ Motor: SQLite en modo **WAL** (`PRAGMA journal_mode = WAL`, verificado: ambas ba
 | `audit_intentos_bloqueados` | Sí | Sí | Constancia de los UPDATE/DELETE bloqueados por los disparadores. | `schema/*.sql; db._IMMUTABILITY_DDL` |
 | `audit_log` | Sí | Sí | Bitácora de auditoría: un registro inmutable por evento. | `schema/audit_log.sql (local) y schema/audit_log_central.sql (central)` |
 | `audit_sync_queue` | Sí | — | Cola de sincronización de la librería (solo base local). | `schema/audit_log.sql; db._migrate_sync_queue` |
-| `tokens_acceso` | Sí | Sí | Tokens personales de la librería y del dashboard. | `schema/tokens.sql` |
+| `llaves_publicas` | Sí | Sí | Historial de llaves Ed25519 por usuario, con su vigencia. | `schema/usuarios.sql; db._migrate_usuarios` |
+| `tokens_acceso` | Sí | Sí | Tokens personales de la librería y del dashboard (solo su SHA-256). | `schema/tokens.sql` |
 | `usuarios` | Sí | Sí | Cuentas, roles y llave pública de firma. | `schema/usuarios.sql` |
 | `alertas_destinatarios` | — | Sí | Quién recibe las alertas por correo. | `models/alertas.py (al arrancar el despachador)` |
 | `alertas_notificaciones` | — | Sí | Resultado de cada notificación de evento crítico. | `models/alertas.py` |
@@ -115,6 +116,7 @@ erDiagram
         TEXT motivo_alerta
         TEXT hash_integridad
         TEXT firma_digital
+        TEXT recibido_en
     }
     audit_notification_settings {
         TEXT usuario_id PK
@@ -139,11 +141,26 @@ erDiagram
         TEXT token
         TEXT fecha_creacion
         TEXT fecha_expiracion
+        TEXT ip_origen
+        TEXT agente_origen
+        TEXT host_origen
+        TEXT sesion_confirmacion
+    }
+    llaves_publicas {
+        INTEGER llave_id PK
+        TEXT usuario_id
+        TEXT llave_publica
+        TEXT huella
+        TEXT token_id
+        TEXT registrada_en
+        TEXT revocada_en
+        TEXT revocada_por
     }
     tokens_acceso {
         TEXT token_id PK
         TEXT usuario_id
         TEXT token
+        TEXT token_sufijo
         TEXT fecha_creacion
         TEXT fecha_expiracion
         TEXT estado
@@ -157,9 +174,11 @@ erDiagram
         INTEGER activo
         INTEGER intentos_fallidos
         TEXT llave_publica
+        TEXT bloqueado_hasta
     }
     audit_log }o--|| usuarios : "usuario_id"
     tokens_acceso }o--|| usuarios : "usuario_id"
+    llaves_publicas }o--|| usuarios : "usuario_id"
     audit_intentos_bloqueados }o--|| audit_log : "event_id_objetivo"
     codigos_dispositivo }o--|| usuarios : "usuario_id"
     alertas_notificaciones |o--|| audit_log : "event_id"
@@ -202,6 +221,7 @@ erDiagram
         TEXT motivo_alerta
         TEXT hash_integridad
         TEXT firma_digital
+        TEXT recibido_en
     }
     audit_sync_queue {
         INTEGER event_id PK
@@ -212,10 +232,21 @@ erDiagram
         TEXT ultimo_error
         TEXT sincronizado_en
     }
+    llaves_publicas {
+        INTEGER llave_id PK
+        TEXT usuario_id
+        TEXT llave_publica
+        TEXT huella
+        TEXT token_id
+        TEXT registrada_en
+        TEXT revocada_en
+        TEXT revocada_por
+    }
     tokens_acceso {
         TEXT token_id PK
         TEXT usuario_id
         TEXT token
+        TEXT token_sufijo
         TEXT fecha_creacion
         TEXT fecha_expiracion
         TEXT estado
@@ -229,9 +260,11 @@ erDiagram
         INTEGER activo
         INTEGER intentos_fallidos
         TEXT llave_publica
+        TEXT bloqueado_hasta
     }
     audit_log }o--|| usuarios : "usuario_id"
     tokens_acceso }o--|| usuarios : "usuario_id"
+    llaves_publicas }o--|| usuarios : "usuario_id"
     audit_sync_queue |o--|| audit_log : "event_id"
     audit_intentos_bloqueados }o--|| audit_log : "event_id_objetivo"
 ```
@@ -355,9 +388,15 @@ CREATE TABLE audit_log (
     -- Permite detectar alteraciones posteriores al registro.
     -- Exigido por HIPAA §164.312(c)(1)
 
-    firma_digital     TEXT
+    firma_digital     TEXT,
     -- HU-6.1 CA4: Firma digital Ed25519 generada por la llave privada del usuario.
     -- Base64url sin padding, ~86 caracteres. Almacenada para verificación forense.
+
+    recibido_en       TEXT
+    -- SRV-T3: fecha UTC (ISO 8601) en que el servidor central recibió el
+    -- evento, tomada de su propio reloj. NULL en la base local y en los
+    -- eventos que el servidor genera. No participa del hash ni de la firma:
+    -- el cliente no la controla.
 );
 
 CREATE INDEX idx_audit_evento_uuid
@@ -444,6 +483,26 @@ CREATE INDEX idx_sync_queue_estado
     ON audit_sync_queue(estado);
 ```
 
+**llaves_publicas**
+
+```sql
+CREATE TABLE llaves_publicas (
+    llave_id          INTEGER  PRIMARY KEY AUTOINCREMENT,
+    usuario_id        TEXT     NOT NULL REFERENCES usuarios(usuario_id),
+    llave_publica     TEXT     NOT NULL,
+    huella            TEXT     NOT NULL,
+    -- SHA-256 de la llave (primeros 16 hex) para mostrarla en el dashboard.
+    token_id          TEXT,
+    -- Token con el que se registró (sin el valor del token).
+    registrada_en     TEXT     NOT NULL,
+    revocada_en       TEXT,
+    revocada_por      TEXT,
+    UNIQUE (usuario_id, huella)
+);
+
+CREATE INDEX idx_llaves_usuario ON llaves_publicas(usuario_id);
+```
+
 **tokens_acceso**
 
 ```sql
@@ -456,7 +515,11 @@ CREATE TABLE tokens_acceso (
     -- ID del usuario propietario del token.
     
     token             TEXT     NOT NULL UNIQUE,
-    -- Token criptográficamente seguro (ej. tk_...).
+    -- B3 / SRV-I1: SHA-256 del token ('sha256:<hex>'), nunca el valor en
+    -- claro (tk_...). El valor solo se entrega una vez al generarlo.
+
+    token_sufijo      TEXT,
+    -- Últimos 4 caracteres del token, para identificarlo en la interfaz.
 
     fecha_creacion    TEXT     NOT NULL,
     -- Fecha y hora de creación en formato ISO 8601 UTC.
@@ -502,11 +565,17 @@ CREATE TABLE usuarios (
 
     intentos_fallidos INTEGER  NOT NULL DEFAULT 0,
     -- Contador de intentos fallidos consecutivos.
-    -- Al llegar a 5 se bloquea la cuenta 15 minutos.
+    -- Al llegar a 5 se bloquea la cuenta 15 minutos (bloqueado_hasta).
 
-    llave_publica     TEXT
-    -- HU-6.1 CA1/CA3: PEM Ed25519 SubjectPublicKeyInfo del usuario.
-    -- Null hasta que el usuario se autentique con la libreria actualizada.
+    llave_publica     TEXT,
+    -- HU-6.1 CA1/CA3: PEM Ed25519 SubjectPublicKeyInfo de la última llave
+    -- registrada. El historial completo, con su vigencia, vive en
+    -- llaves_publicas (SRV-R2).
+
+    bloqueado_hasta   TEXT
+    -- B6 / DSH-D1: fin (UTC ISO 8601) del bloqueo temporal por intentos
+    -- fallidos. NULL con activo = 0 significa cuenta deshabilitada por un
+    -- ADMIN (no se reactiva sola).
 
 );
 ```
@@ -667,9 +736,15 @@ CREATE TABLE audit_log (
     -- igual que en el audit_log local — así el hash de un evento es
     -- idéntico sin importar en qué base se calculó o insertó.
 
-    firma_digital     TEXT
+    firma_digital     TEXT,
     -- HU-6.1 CA4: Firma digital Ed25519 generada por la llave privada del usuario.
     -- Base64url sin padding, ~86 caracteres. Almacenada para verificación forense.
+
+    recibido_en       TEXT
+    -- SRV-T3: fecha UTC (ISO 8601) en que el servidor central recibió el
+    -- evento, tomada de su propio reloj. NULL en la base local y en los
+    -- eventos que el servidor genera. No participa del hash ni de la firma:
+    -- el cliente no la controla.
 );
 
 CREATE INDEX idx_audit_evento_uuid
@@ -760,11 +835,31 @@ CREATE TABLE codigos_dispositivo (
             token             TEXT,
             fecha_creacion    TEXT     NOT NULL,
             fecha_expiracion  TEXT     NOT NULL
-        );
+        , ip_origen TEXT, agente_origen TEXT, host_origen TEXT, sesion_confirmacion TEXT);
 
 CREATE INDEX idx_codigos_device_code ON codigos_dispositivo(device_code);
 
 CREATE INDEX idx_codigos_estado ON codigos_dispositivo(estado);
+```
+
+**llaves_publicas**
+
+```sql
+CREATE TABLE llaves_publicas (
+    llave_id          INTEGER  PRIMARY KEY AUTOINCREMENT,
+    usuario_id        TEXT     NOT NULL REFERENCES usuarios(usuario_id),
+    llave_publica     TEXT     NOT NULL,
+    huella            TEXT     NOT NULL,
+    -- SHA-256 de la llave (primeros 16 hex) para mostrarla en el dashboard.
+    token_id          TEXT,
+    -- Token con el que se registró (sin el valor del token).
+    registrada_en     TEXT     NOT NULL,
+    revocada_en       TEXT,
+    revocada_por      TEXT,
+    UNIQUE (usuario_id, huella)
+);
+
+CREATE INDEX idx_llaves_usuario ON llaves_publicas(usuario_id);
 ```
 
 **tokens_acceso**
@@ -779,7 +874,11 @@ CREATE TABLE tokens_acceso (
     -- ID del usuario propietario del token.
     
     token             TEXT     NOT NULL UNIQUE,
-    -- Token criptográficamente seguro (ej. tk_...).
+    -- B3 / SRV-I1: SHA-256 del token ('sha256:<hex>'), nunca el valor en
+    -- claro (tk_...). El valor solo se entrega una vez al generarlo.
+
+    token_sufijo      TEXT,
+    -- Últimos 4 caracteres del token, para identificarlo en la interfaz.
 
     fecha_creacion    TEXT     NOT NULL,
     -- Fecha y hora de creación en formato ISO 8601 UTC.
@@ -825,11 +924,17 @@ CREATE TABLE usuarios (
 
     intentos_fallidos INTEGER  NOT NULL DEFAULT 0,
     -- Contador de intentos fallidos consecutivos.
-    -- Al llegar a 5 se bloquea la cuenta 15 minutos.
+    -- Al llegar a 5 se bloquea la cuenta 15 minutos (bloqueado_hasta).
 
-    llave_publica     TEXT
-    -- HU-6.1 CA1/CA3: PEM Ed25519 SubjectPublicKeyInfo del usuario.
-    -- Null hasta que el usuario se autentique con la libreria actualizada.
+    llave_publica     TEXT,
+    -- HU-6.1 CA1/CA3: PEM Ed25519 SubjectPublicKeyInfo de la última llave
+    -- registrada. El historial completo, con su vigencia, vive en
+    -- llaves_publicas (SRV-R2).
+
+    bloqueado_hasta   TEXT
+    -- B6 / DSH-D1: fin (UTC ISO 8601) del bloqueo temporal por intentos
+    -- fallidos. NULL con activo = 0 significa cuenta deshabilitada por un
+    -- ADMIN (no se reactiva sola).
 
 );
 ```
@@ -877,6 +982,7 @@ Bitácora de auditoría: un registro inmutable por evento.
 | audit_log | `motivo_alerta` | TEXT | Sí | — | Explicación del nivel de alerta. | `Exportación masiva: 76074 filas (> 1000)` |
 | audit_log | `hash_integridad` | TEXT | No | — | SHA-256 (hex) sobre los 13 campos funcionales del evento, con claves ordenadas. | `1dc8b6815cbffa7b5824639090ae01f9334ed79e6e35acc4b58b2948828289f8` |
 | audit_log | `firma_digital` | TEXT | Sí | — | Firma Ed25519 (base64url) del evento con la llave del usuario. Nula en eventos generados por el servidor. | `ZCOr-NyZfOJ0… (86 caracteres, enmascarado)` |
+| audit_log | `recibido_en` | TEXT | Sí | — | Fecha UTC en que el servidor central recibió el evento, con su propio reloj (SRV-T3). Nula en la base local y en los eventos del servidor. No entra en el hash ni en la firma. | — |
 
 ## 4.3 audit_sync_queue
 
@@ -892,21 +998,37 @@ Cola de sincronización de la librería (solo base local).
 | audit_sync_queue | `ultimo_error` | TEXT | Sí | — | Mensaje del último error de envío. | — |
 | audit_sync_queue | `sincronizado_en` | TEXT | Sí | — | Fecha UTC en que el servidor confirmó el evento. | `2026-11-21T15:00:00.329000` |
 
-## 4.4 tokens_acceso
+## 4.4 llaves_publicas
 
-Tokens personales de la librería y del dashboard.
+Historial de llaves Ed25519 por usuario, con su vigencia.
+
+| Tabla | Campo | Tipo | Nulo | Restricción | Descripción | Ejemplo |
+|---|---|---|---|---|---|---|
+| llaves_publicas | `llave_id` | INTEGER | No | PK AUTOINCREMENT | Identificador de la llave. | — |
+| llaves_publicas | `usuario_id` | TEXT | No | FK → usuarios.usuario_id | Dueño de la llave (FK a usuarios). | — |
+| llaves_publicas | `llave_publica` | TEXT | No | — | Llave pública Ed25519 (PEM SubjectPublicKeyInfo). | — |
+| llaves_publicas | `huella` | TEXT | No | — | Primeros 16 hex del SHA-256 del PEM; identifica la llave en el dashboard. | — |
+| llaves_publicas | `token_id` | TEXT | Sí | — | Token con el que se registró (sin el valor del token). | — |
+| llaves_publicas | `registrada_en` | TEXT | No | — | Fecha UTC de registro. | — |
+| llaves_publicas | `revocada_en` | TEXT | Sí | — | Fecha UTC de revocación; nula si está activa. Una llave revocada sigue verificando los eventos anteriores. | — |
+| llaves_publicas | `revocada_por` | TEXT | Sí | — | ADMIN que la revocó. | — |
+
+## 4.5 tokens_acceso
+
+Tokens personales de la librería y del dashboard (solo su SHA-256).
 
 | Tabla | Campo | Tipo | Nulo | Restricción | Descripción | Ejemplo |
 |---|---|---|---|---|---|---|
 | tokens_acceso | `token_id` | TEXT | No | PK | Identificador del token. | `84f08f3c-cd30-403c-9056-463741f6aa61` |
 | tokens_acceso | `usuario_id` | TEXT | No | FK → usuarios.usuario_id | Dueño del token (FK a usuarios). | `d6e3a74b-a010-4feb-a4f3-ec8b1a5d4523` |
-| tokens_acceso | `token` | TEXT | No | UNIQUE | Token personal de 256 bits (se guarda en claro: brecha B3 de la matriz). | `tk_IuXMM5yE7… (46 caracteres, enmascarado)` |
+| tokens_acceso | `token` | TEXT | No | UNIQUE | SHA-256 del token personal ('sha256:<hex>'); el valor en claro solo se entrega una vez (B3 cerrada el 21/11/2026). | `sha256:9c1e… (71 caracteres, enmascarado)` |
+| tokens_acceso | `token_sufijo` | TEXT | Sí | — | Últimos 4 caracteres del token, para distinguirlo en la interfaz. | — |
 | tokens_acceso | `fecha_creacion` | TEXT | No | — | Fecha UTC de emisión. | `2026-11-21T18:23:30.289738` |
 | tokens_acceso | `fecha_expiracion` | TEXT | No | — | Fecha UTC de vencimiento (30 días por defecto). | `2026-11-21T19:23:30.288373` |
 | tokens_acceso | `estado` | TEXT | No | DEFAULT 'ACTIVO' | ACTIVO, REVOCADO o EXPIRADO. | `ACTIVO` |
 | tokens_acceso | `creado_por` | TEXT | No | DEFAULT 'LOGIN' | Origen: LOGIN, DEVICE_LOGIN o el usuario administrador que lo emitió. | `LOGIN` |
 
-## 4.5 usuarios
+## 4.6 usuarios
 
 Cuentas, roles y llave pública de firma.
 
@@ -916,11 +1038,12 @@ Cuentas, roles y llave pública de firma.
 | usuarios | `email` | TEXT | No | UNIQUE | Correo institucional; único. | `admin@mimic.validacion` |
 | usuarios | `password_hash` | TEXT | No | — | Contraseña con bcrypt y sal propia; nunca en claro. | `$2b$12$hl1j8… (60 caracteres, enmascarado)` |
 | usuarios | `rol` | TEXT | No | — | ADMIN, ANALISTA, AUDITOR o CIENTIFICO_DATOS. | `ADMIN` |
-| usuarios | `activo` | INTEGER | No | DEFAULT 1 | 1 activo; 0 bloqueado (5 intentos fallidos). | `1` |
+| usuarios | `activo` | INTEGER | No | DEFAULT 1 | 1 activo; 0 bloqueado (bloqueo temporal por 5 intentos fallidos, o deshabilitada por un ADMIN). | `1` |
 | usuarios | `intentos_fallidos` | INTEGER | No | DEFAULT 0 | Intentos fallidos acumulados desde el último acceso exitoso. | `0` |
-| usuarios | `llave_publica` | TEXT | Sí | — | Llave pública Ed25519 (PEM) para verificar las firmas del usuario. | — |
+| usuarios | `llave_publica` | TEXT | Sí | — | Última llave pública Ed25519 (PEM) registrada; el historial completo está en llaves_publicas. | — |
+| usuarios | `bloqueado_hasta` | TEXT | Sí | — | Fin UTC del bloqueo temporal (15 min). Nulo con activo = 0: cuenta deshabilitada por un ADMIN. | — |
 
-## 4.6 alertas_destinatarios
+## 4.7 alertas_destinatarios
 
 Quién recibe las alertas por correo.
 
@@ -936,7 +1059,7 @@ Quién recibe las alertas por correo.
 | alertas_destinatarios | `creado_en` | TEXT | No | — | Fecha UTC de creación. | `2026-11-21T18:23:30.364172` |
 | alertas_destinatarios | `actualizado_en` | TEXT | Sí | — | Fecha UTC del último cambio. | — |
 
-## 4.7 alertas_notificaciones
+## 4.8 alertas_notificaciones
 
 Resultado de cada notificación de evento crítico.
 
@@ -956,7 +1079,7 @@ Resultado de cada notificación de evento crítico.
 | alertas_notificaciones | `creado_en` | TEXT | No | — | Fecha UTC de creación. | `2026-11-21T18:23:45.555350` |
 | alertas_notificaciones | `enviado_en` | TEXT | Sí | — | Fecha UTC de envío exitoso. | `2026-11-21T18:23:45.601643` |
 
-## 4.8 audit_alert_history
+## 4.9 audit_alert_history
 
 Historial de cambios de estado de las alertas.
 
@@ -970,7 +1093,7 @@ Historial de cambios de estado de las alertas.
 | audit_alert_history | `responsable_id` | TEXT | Sí | FK → usuarios.usuario_id | Responsable asignado. | — |
 | audit_alert_history | `comentario` | TEXT | No | DEFAULT '' | Comentario del revisor. | — |
 
-## 4.9 audit_alert_reviews
+## 4.10 audit_alert_reviews
 
 Estado de revisión de cada alerta (espacio de auditoría).
 
@@ -981,7 +1104,7 @@ Estado de revisión de cada alerta (espacio de auditoría).
 | audit_alert_reviews | `responsable_id` | TEXT | Sí | FK → usuarios.usuario_id | Usuario responsable de la revisión. | — |
 | audit_alert_reviews | `version` | INTEGER | No | DEFAULT 0 | Versión para control de concurrencia optimista. | — |
 
-## 4.10 audit_notification_settings
+## 4.11 audit_notification_settings
 
 Preferencias de aviso por usuario.
 
@@ -995,7 +1118,7 @@ Preferencias de aviso por usuario.
 | audit_notification_settings | `correo_reserva` | TEXT | Sí | — | Identificador de la reserva del envío en curso. | — |
 | audit_notification_settings | `correo_reserva_hasta` | INTEGER | No | DEFAULT 0 | Vencimiento de la reserva (marca de tiempo Unix). | — |
 
-## 4.11 audit_saved_filters
+## 4.12 audit_saved_filters
 
 Filtros guardados por usuario en el espacio de auditoría.
 
@@ -1006,19 +1129,23 @@ Filtros guardados por usuario en el espacio de auditoría.
 | audit_saved_filters | `nombre` | TEXT | No | — | Nombre del filtro (único por usuario, sin distinguir mayúsculas). | — |
 | audit_saved_filters | `filtros` | TEXT | No | — | Parámetros del filtro en JSON. | — |
 
-## 4.12 codigos_dispositivo
+## 4.13 codigos_dispositivo
 
 Login por código de dispositivo (RFC 8628).
 
 | Tabla | Campo | Tipo | Nulo | Restricción | Descripción | Ejemplo |
 |---|---|---|---|---|---|---|
 | codigos_dispositivo | `codigo` | TEXT | No | PK | Código corto que ve el usuario (formato XXXX-XXXX). | `CTE5-HDNZ` |
-| codigos_dispositivo | `device_code` | TEXT | No | UNIQUE | Secreto largo que solo conoce el proceso de la librería; sirve para consultar el estado. | `59s8HMP8C0q9… (43 caracteres, enmascarado)` |
+| codigos_dispositivo | `device_code` | TEXT | No | UNIQUE | SHA-256 del secreto largo que solo conoce el proceso de la librería (con él consulta el estado). | `sha256:4b7d… (71 caracteres, enmascarado)` |
 | codigos_dispositivo | `estado` | TEXT | No | DEFAULT 'PENDIENTE' | PENDIENTE, CONFIRMADO, CONSUMIDO o EXPIRADO. | `CONSUMIDO` |
 | codigos_dispositivo | `usuario_id` | TEXT | Sí | — | Usuario que confirmó el código en el dashboard. | `2ef29d4b-40d6-49a0-a9d2-84a0b4253f78` |
-| codigos_dispositivo | `token` | TEXT | Sí | — | Token emitido al confirmar (se entrega una sola vez a la librería). | — |
+| codigos_dispositivo | `token` | TEXT | Sí | — | Ya no se usa: el token se genera en el polling que lo entrega y nunca se guarda aquí (columna conservada por compatibilidad). | — |
 | codigos_dispositivo | `fecha_creacion` | TEXT | No | — | Fecha UTC de creación. | `2026-11-21T18:23:34.979387` |
 | codigos_dispositivo | `fecha_expiracion` | TEXT | No | — | Fecha UTC de vencimiento del código. | `2026-11-21T18:33:34.960217` |
+| codigos_dispositivo | `ip_origen` | TEXT | Sí | — | IP de quien pidió el código; se muestra en la página de confirmación (CAN-S2). | — |
+| codigos_dispositivo | `agente_origen` | TEXT | Sí | — | User-Agent de quien pidió el código. | — |
+| codigos_dispositivo | `host_origen` | TEXT | Sí | — | Nombre del equipo que pidió el código (lo envía la librería). | — |
+| codigos_dispositivo | `sesion_confirmacion` | TEXT | Sí | — | Sesión del dashboard que confirmó el código. | — |
 
 
 # 5. Correspondencia con las entidades del documento

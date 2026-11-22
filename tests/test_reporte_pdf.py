@@ -30,6 +30,16 @@ def _evento(conn, tipo_accion, **extra):
     return insert_event(conn, datos)
 
 
+@pytest.fixture(autouse=True)
+def _sin_registro_de_descargas(monkeypatch):
+    """
+    DSH-R1 registra cada descarga en la bitácora; aquí se apaga para que el CSV
+    y el PDF muestren exactamente las mismas filas (el registro de descargas se
+    prueba en test_modelo_amenazas.py).
+    """
+    monkeypatch.setattr(app_module, "_auditar_acceso_bitacora", lambda *a, **k: None)
+
+
 @pytest.fixture
 def central_db(tmp_path, monkeypatch):
     db_file = str(tmp_path / "audit_central.db")
@@ -39,7 +49,8 @@ def central_db(tmp_path, monkeypatch):
     _evento(conn, "TRANSFORMACION", timestamp="2026-11-10T15:05:00")
     _evento(conn, "EXPORTACION", timestamp="2026-11-10T15:10:00", filas_exportadas=2174,
             nivel_alerta="CRITICO", ruta_destino="anexo.csv")
-    _evento(conn, "MODELADO", timestamp="2026-11-11T15:00:00")
+    # Un tipo sin referencia normativa (MODELADO ya tiene: CT-39, 21/11/2026).
+    _evento(conn, "ANOMALIA_DETECTADA", timestamp="2026-11-11T15:00:00")
     _evento(conn, "CARGA", usuario_id="otro_usuario", timestamp="2026-11-11T16:00:00")
     conn.close()
 
@@ -85,7 +96,7 @@ class TestDescargaPDF:
             assert _sin_espacios(fila["referencia_normativa"]) in texto
             assert _sin_espacios(fila["usuario_id"]) in texto
             assert _sin_espacios(fila["timestamp"]) in texto  # mismo formato (hora Colombia)
-        assert _sin_espacios(SIN_REFERENCIA_NORMATIVA) in texto  # MODELADO, igual que en el CSV
+        assert _sin_espacios(SIN_REFERENCIA_NORMATIVA) in texto  # ANOMALIA_DETECTADA, igual que en el CSV
 
     def test_incluye_sesion_origen_y_hash_como_el_csv(self, central_db):
         client = _cliente()

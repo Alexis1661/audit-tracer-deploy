@@ -13,7 +13,47 @@ _AUDIT_LOG_MIGRATIONS = [
     ("evento_uuid", "ALTER TABLE audit_log ADD COLUMN evento_uuid TEXT"),
     # HU-6.1 CA4 — Firma digital Ed25519 del usuario que generó el evento.
     ("firma_digital", "ALTER TABLE audit_log ADD COLUMN firma_digital TEXT"),
+    # SRV-T3 — Fecha en que el servidor central recibió el evento (su reloj).
+    ("recibido_en", "ALTER TABLE audit_log ADD COLUMN recibido_en TEXT"),
 ]
+
+# B6 / SRV-R2 — Bloqueo temporal de cuentas e historial de llaves públicas.
+_LLAVES_DDL = """
+CREATE TABLE IF NOT EXISTS llaves_publicas (
+    llave_id          INTEGER  PRIMARY KEY AUTOINCREMENT,
+    usuario_id        TEXT     NOT NULL REFERENCES usuarios(usuario_id),
+    llave_publica     TEXT     NOT NULL,
+    huella            TEXT     NOT NULL,
+    token_id          TEXT,
+    registrada_en     TEXT     NOT NULL,
+    revocada_en       TEXT,
+    revocada_por      TEXT,
+    UNIQUE (usuario_id, huella)
+);
+CREATE INDEX IF NOT EXISTS idx_llaves_usuario ON llaves_publicas(usuario_id);
+"""
+
+
+def _migrate_usuarios(conn: sqlite3.Connection) -> None:
+    """Agrega bloqueado_hasta y llaves_publicas a bases anteriores; copia la llave vigente al historial."""
+    columnas = {row[1] for row in conn.execute("PRAGMA table_info(usuarios)")}
+    if not columnas:
+        return
+    if "bloqueado_hasta" not in columnas:
+        conn.execute("ALTER TABLE usuarios ADD COLUMN bloqueado_hasta TEXT")
+    existia = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'llaves_publicas'").fetchone()
+    conn.executescript(_LLAVES_DDL)
+    if not existia and "llave_publica" in columnas:
+        import hashlib
+        from datetime import datetime
+        for usuario_id, pem in conn.execute(
+                "SELECT usuario_id, llave_publica FROM usuarios WHERE llave_publica IS NOT NULL").fetchall():
+            huella = hashlib.sha256(pem.strip().encode("utf-8")).hexdigest()[:16]
+            conn.execute(
+                "INSERT OR IGNORE INTO llaves_publicas (usuario_id, llave_publica, huella, registrada_en) "
+                "VALUES (?, ?, ?, ?)", (usuario_id, pem, huella, datetime.utcnow().isoformat()))
+    conn.commit()
 
 # HU-5.4 CA3 — Infraestructura de inmutabilidad: bloquea UPDATE/DELETE sobre
 # audit_log y deja constancia del intento. Idéntica en la base local y en la
@@ -170,6 +210,9 @@ def _migrate_tokens(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_usuario ON tokens_acceso(usuario_id);")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_tokens_estado ON tokens_acceso(estado);")
     conn.commit()
+    # B3: los tokens que quedaran en claro de versiones anteriores pasan a SHA-256.
+    from .models.tokens import _ensure_tokens_table
+    _ensure_tokens_table(conn)
 
 
 class _ConexionLocalReutilizable(sqlite3.Connection):
@@ -235,13 +278,20 @@ def _abrir(db_path: str, factory=sqlite3.Connection) -> sqlite3.Connection:
         _init_from_schema(conn, ["usuarios.sql", "audit_log.sql", "tokens.sql"])
         if key:
             _migrated_local_dbs.add(key)
+            _restringir_permisos(db_path)  # LIB-I1: solo el dueño lee la base local
     elif key not in _migrated_local_dbs:
         _migrate_audit_log(conn)
         _migrate_tokens(conn)
+        _migrate_usuarios(conn)
         _migrate_sync_queue(conn)  # HU-5.8 — solo bases locales
         _migrated_local_dbs.add(key)
 
     return conn
+
+
+def _restringir_permisos(db_path: str) -> None:
+    from .utils.permisos import restringir_a_dueno
+    restringir_a_dueno(db_path)
 
 
 def get_central_connection(db_path: str = "audit_central.db") -> sqlite3.Connection:
@@ -278,8 +328,10 @@ def get_central_connection(db_path: str = "audit_central.db") -> sqlite3.Connect
 
     if not db_exists:
         _init_from_schema(conn, ["usuarios.sql", "audit_log_central.sql", "tokens.sql"])
+        _restringir_permisos(db_path)  # B2: base central legible solo por el usuario del servicio
     else:
         _migrate_audit_log(conn)
         _migrate_tokens(conn)
+        _migrate_usuarios(conn)
 
     return conn
